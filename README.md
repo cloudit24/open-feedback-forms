@@ -9,6 +9,28 @@ No external services required. The app itself is pure Python (standard
 library only, aside from the MariaDB driver); submissions and question
 definitions are stored in a MariaDB/MySQL database you point it at.
 
+## Screenshots
+
+| | |
+|---|---|
+| **Public form — bilingual, RTL-aware**<br>Every form supports English and Arabic (plus any languages you add) out of the box — direction, fonts and layout all flip automatically. | ![Arabic public form](docs/screenshots/public-form-ar.png) |
+| **Dashboard**<br>Submissions over time, by form, by language — filterable by date range and form. | ![Admin dashboard](docs/screenshots/admin-dashboard.png) |
+| **Submissions**<br>Filter by form, date range, language, status and free text; download exactly what's filtered as CSV. | ![Submissions tab](docs/screenshots/admin-submissions.png) |
+| **Custom roles & users**<br>Build a role from a permission checklist — full access, one form only, read-only, whatever you need — and assign it to any number of users. | ![Roles tab](docs/screenshots/admin-roles.png) |
+
+<details>
+<summary>More screenshots</summary>
+
+| English public form | Admin sign-in |
+|---|---|
+| ![English public form](docs/screenshots/public-form-en.png) | ![Admin login](docs/screenshots/admin-login.png) |
+
+| Forms list | Users |
+|---|---|
+| ![Forms tab](docs/screenshots/admin-forms.png) | ![Users tab](docs/screenshots/admin-users.png) |
+
+</details>
+
 ```
 public/index.html    the public form page — fetches its questions and
                       branding from the server, renders them dynamically
@@ -153,3 +175,13 @@ Produces `packaging\out\OpenFeedbackForms.msi` — a per-user install (no
 admin rights needed) that bundles its own Python runtime via PyInstaller,
 compiled into a real MSI with WiX v5 (`dotnet tool install --global wix`,
 version 5.x — avoid v6+, which requires accepting a paid EULA).
+
+## About us
+
+Cloud IT 24 is IT Services — developing and delivering solutions for all
+types of infrastructure.
+
+Open Feedback Forms is developed by the Cloud IT 24 team.
+
+- [github.com/cloudit24](https://github.com/cloudit24/)
+- [github.com/shatheitguy](https://github.com/shatheitguy)
