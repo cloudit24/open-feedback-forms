@@ -794,6 +794,13 @@ function applyPermissionVisibility(){
   $("tab-btn-admin").classList.toggle("hidden", !hasPermission("manage_users"));
   var anyConfig = hasAnyPermission(["manage_app_settings", "manage_field_keys", "manage_global_alerts"]) || STATE.isBootstrap;
   document.querySelector('.tab[data-tab="config"]').classList.toggle("hidden", !anyConfig);
+  document.querySelector('.tab[data-tab="dashboard"]').classList.toggle("hidden", !hasPermission("view_dashboard"));
+  document.querySelector('.tab[data-tab="subs"]').classList.toggle("hidden", !hasPermission("view_submissions"));
+  var activeTab = document.querySelector(".tab.active");
+  if (activeTab && activeTab.classList.contains("hidden")){
+    var firstVisible = Array.from(document.querySelectorAll(".tab")).find(function(b){ return !b.classList.contains("hidden"); });
+    if (firstVisible) firstVisible.click();
+  }
   document.querySelector('.subtab[data-subtab="cfgdb"]').classList.toggle("hidden", !STATE.isBootstrap);
   ["cfglang", "cfgtheme", "cfgtime"].forEach(function(t){
     var btn = document.querySelector('.subtab[data-subtab="' + t + '"]');
