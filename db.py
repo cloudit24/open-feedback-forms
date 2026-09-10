@@ -94,6 +94,34 @@ SCHEMA_SQL = [
         INDEX idx_form_created (form_id, created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    """
+    CREATE TABLE IF NOT EXISTS admin_roles (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        name          VARCHAR(60)  NOT NULL UNIQUE,
+        permissions_json LONGTEXT NOT NULL,
+        applies_to_all_forms TINYINT(1) NOT NULL DEFAULT 0,
+        created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS admin_users (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        username      VARCHAR(60)  NOT NULL UNIQUE,
+        password_hash VARCHAR(128) NOT NULL,
+        salt          VARCHAR(64)  NOT NULL,
+        role_id       INT          NOT NULL,
+        active        TINYINT(1) NOT NULL DEFAULT 1,
+        created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (role_id) REFERENCES admin_roles(id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS admin_user_forms (
+        user_id       INT NOT NULL,
+        form_id       INT NOT NULL,
+        PRIMARY KEY (user_id, form_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
 # Best-effort migration for a database that already has the pre-multi-form
@@ -683,6 +711,24 @@ def update_field(field_id, data):
         conn.close()
 
 
+def get_field(field_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM form_fields WHERE id=%s", (field_id,))
+        row = cur.fetchone()
+        cur.close()
+        if row:
+            row["options"] = json.loads(row["options_json"]) if row["options_json"] else None
+            row["labels_extra"] = json.loads(row["labels_extra_json"]) if row["labels_extra_json"] else {}
+            row["required"] = bool(row["required"])
+            row["active"] = bool(row["active"])
+            del row["labels_extra_json"]
+        return row
+    finally:
+        conn.close()
+
+
 def set_field_active(field_id, active):
     conn = _conn()
     try:
@@ -747,6 +793,17 @@ def _submission_filter_sql(filters, prefix=""):
     conditions, params = [], []
     if filters.get("form_id"):
         conditions.append(prefix + "form_id = %s"); params.append(filters["form_id"])
+    elif filters.get("form_ids") is not None:
+        # A role-scoped user with more than one assigned form and no single
+        # form_id chosen — restrict to exactly their assigned set. An empty
+        # list (assigned to no forms) must still exclude every row, not be
+        # treated as "no filter" the way form_id's falsy check above is.
+        ids = list(filters["form_ids"])
+        if ids:
+            conditions.append(prefix + "form_id IN (%s)" % ",".join(["%s"] * len(ids)))
+            params += ids
+        else:
+            conditions.append("1=0")
     if filters.get("date_from"):
         conditions.append(prefix + "created_at >= %s"); params.append(filters["date_from"])
     if filters.get("date_to"):
@@ -833,3 +890,230 @@ def export_rows(filters=None):
         row["Status"] = r["status"]
         out.append(row)
     return out
+
+
+# -------------------------------------------------------- roles & users
+#
+# The one bootstrap admin account (config.json, see config_store.py) still
+# exists outside of all this and is untouched — it's the only thing that
+# has to be reachable before a database connection is. Everything below is
+# for *additional* accounts an admin can hand out once the database is up,
+# each restricted to a custom role's permission checklist and (unless the
+# role applies to every form) a specific set of forms. See
+# docs/ROLES_AND_PERMISSIONS.md for the general pattern this implements.
+
+def list_roles():
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM admin_roles ORDER BY name")
+        rows = cur.fetchall()
+        cur.close()
+        for r in rows:
+            r["permissions"] = json.loads(r["permissions_json"])
+            r["applies_to_all_forms"] = bool(r["applies_to_all_forms"])
+            del r["permissions_json"]
+        return rows
+    finally:
+        conn.close()
+
+
+def get_role(role_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM admin_roles WHERE id=%s", (role_id,))
+        row = cur.fetchone()
+        cur.close()
+        if row:
+            row["permissions"] = json.loads(row["permissions_json"])
+            row["applies_to_all_forms"] = bool(row["applies_to_all_forms"])
+            del row["permissions_json"]
+        return row
+    finally:
+        conn.close()
+
+
+def create_role(name, permissions, applies_to_all_forms):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO admin_roles (name, permissions_json, applies_to_all_forms) VALUES (%s,%s,%s)",
+            (name, json.dumps(permissions), 1 if applies_to_all_forms else 0))
+        new_id = cur.lastrowid
+        conn.commit()
+        cur.close()
+        return new_id
+    finally:
+        conn.close()
+
+
+def update_role(role_id, name, permissions, applies_to_all_forms):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE admin_roles SET name=%s, permissions_json=%s, applies_to_all_forms=%s WHERE id=%s",
+            (name, json.dumps(permissions), 1 if applies_to_all_forms else 0, role_id))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def delete_role(role_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM admin_roles WHERE id=%s", (role_id,))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def role_in_use(role_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM admin_users WHERE role_id=%s", (role_id,))
+        (count,) = cur.fetchone()
+        cur.close()
+        return count > 0
+    finally:
+        conn.close()
+
+
+def _attach_user_forms(cur, users):
+    if not users:
+        return
+    ids = [u["id"] for u in users]
+    placeholders = ",".join(["%s"] * len(ids))
+    cur.execute("SELECT user_id, form_id FROM admin_user_forms WHERE user_id IN (%s)" % placeholders, ids)
+    by_user = {}
+    for row in cur.fetchall():
+        by_user.setdefault(row["user_id"], []).append(row["form_id"])
+    for u in users:
+        u["form_ids"] = by_user.get(u["id"], [])
+
+
+def list_admin_users():
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT admin_users.*, admin_roles.name AS role_name, "
+            "admin_roles.applies_to_all_forms AS role_applies_to_all_forms "
+            "FROM admin_users JOIN admin_roles ON admin_roles.id = admin_users.role_id "
+            "ORDER BY admin_users.username")
+        rows = cur.fetchall()
+        for r in rows:
+            r["active"] = bool(r["active"])
+            r["role_applies_to_all_forms"] = bool(r["role_applies_to_all_forms"])
+            del r["password_hash"]; del r["salt"]
+        _attach_user_forms(cur, rows)
+        cur.close()
+        return rows
+    finally:
+        conn.close()
+
+
+def get_admin_user_by_username(username):
+    """Includes password_hash/salt — for login verification only."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT admin_users.*, admin_roles.permissions_json, "
+            "admin_roles.applies_to_all_forms AS role_applies_to_all_forms "
+            "FROM admin_users JOIN admin_roles ON admin_roles.id = admin_users.role_id "
+            "WHERE admin_users.username=%s AND admin_users.active=1", (username,))
+        row = cur.fetchone()
+        if row:
+            row["active"] = bool(row["active"])
+            row["role_applies_to_all_forms"] = bool(row["role_applies_to_all_forms"])
+            row["permissions"] = json.loads(row["permissions_json"])
+            del row["permissions_json"]
+            _attach_user_forms(cur, [row])
+        cur.close()
+        return row
+    finally:
+        conn.close()
+
+
+def get_admin_user(user_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT admin_users.*, admin_roles.name AS role_name, "
+            "admin_roles.applies_to_all_forms AS role_applies_to_all_forms "
+            "FROM admin_users JOIN admin_roles ON admin_roles.id = admin_users.role_id "
+            "WHERE admin_users.id=%s", (user_id,))
+        row = cur.fetchone()
+        if row:
+            row["active"] = bool(row["active"])
+            row["role_applies_to_all_forms"] = bool(row["role_applies_to_all_forms"])
+            del row["password_hash"]; del row["salt"]
+            _attach_user_forms(cur, [row])
+        cur.close()
+        return row
+    finally:
+        conn.close()
+
+
+def create_admin_user(username, password_hash, salt, role_id, form_ids):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO admin_users (username, password_hash, salt, role_id) VALUES (%s,%s,%s,%s)",
+            (username, password_hash, salt, role_id))
+        new_id = cur.lastrowid
+        for form_id in (form_ids or []):
+            cur.execute("INSERT INTO admin_user_forms (user_id, form_id) VALUES (%s,%s)", (new_id, form_id))
+        conn.commit()
+        cur.close()
+        return new_id
+    finally:
+        conn.close()
+
+
+def update_admin_user(user_id, role_id=None, active=None, form_ids=None,
+                       password_hash=None, salt=None):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        sets, params = [], []
+        if role_id is not None:
+            sets.append("role_id=%s"); params.append(role_id)
+        if active is not None:
+            sets.append("active=%s"); params.append(1 if active else 0)
+        if password_hash is not None:
+            sets.append("password_hash=%s"); params.append(password_hash)
+        if salt is not None:
+            sets.append("salt=%s"); params.append(salt)
+        if sets:
+            params.append(user_id)
+            cur.execute("UPDATE admin_users SET " + ", ".join(sets) + " WHERE id=%s", params)
+        if form_ids is not None:
+            cur.execute("DELETE FROM admin_user_forms WHERE user_id=%s", (user_id,))
+            for form_id in form_ids:
+                cur.execute("INSERT INTO admin_user_forms (user_id, form_id) VALUES (%s,%s)", (user_id, form_id))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def delete_admin_user(user_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM admin_user_forms WHERE user_id=%s", (user_id,))
+        cur.execute("DELETE FROM admin_users WHERE id=%s", (user_id,))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()

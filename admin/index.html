@@ -197,6 +197,7 @@ table.subs tr:last-child td{border-bottom:none}
       <button class="tab" data-tab="forms">Forms</button>
       <button class="tab" data-tab="subs">Submissions</button>
       <button class="tab" data-tab="config">Configuration</button>
+      <button class="tab hidden" id="tab-btn-admin" data-tab="administration">Administration</button>
     </div>
 
     <!-- ---- dashboard tab ---- -->
@@ -495,6 +496,77 @@ table.subs tr:last-child td{border-bottom:none}
         </div>
       </div>
     </div>
+
+    <!-- ---- administration tab (custom roles + users) ---- -->
+    <div id="tab-administration" class="hidden">
+      <div class="card">
+        <div class="subtabs">
+          <button class="subtab active" data-subtab="adminroles">Roles</button>
+          <button class="subtab" data-subtab="adminusers">Users</button>
+        </div>
+
+        <!-- roles -->
+        <div id="sub-adminroles">
+          <p class="hint">A role is a name plus a checklist of permissions. "Applies to all forms" makes every per-form permission apply everywhere; leave it off and assign specific forms per user instead. See <code>docs/ROLES_AND_PERMISSIONS.md</code> for the full model.</p>
+          <div id="roles-list" style="margin-top:8px"></div>
+          <button class="btn" id="add-role-btn" style="margin-top:14px">+ Add a role</button>
+        </div>
+
+        <!-- users -->
+        <div id="sub-adminusers" class="hidden">
+          <p class="hint">Each user signs in separately from the primary admin account and only ever sees what their role and assigned forms allow.</p>
+          <div id="admin-users-list" style="margin-top:8px"></div>
+          <button class="btn" id="add-admin-user-btn" style="margin-top:14px">+ Add a user</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ role editor (simple inline panel) ============ -->
+  <div id="role-editor-view" class="hidden">
+    <div class="card" style="max-width:520px;margin:0 auto">
+      <h2 id="role-editor-title">Add a role</h2>
+      <label for="role-name">Name</label>
+      <input type="text" id="role-name" placeholder="e.g. Department Head">
+
+      <div class="check-row"><input type="checkbox" id="role-all-forms"><label for="role-all-forms" style="margin:0">Applies to all forms</label></div>
+      <p class="hint" style="margin-top:0">Off: this role's per-form permissions only apply to whichever forms each user is individually assigned.</p>
+
+      <label style="margin-top:14px">Permissions</label>
+      <div class="key-editor-list" id="role-permissions-list"></div>
+
+      <div class="msg bad" id="role-editor-msg"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-outline" id="role-cancel">Cancel</button>
+        <button class="btn" id="role-save">Save role</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ admin user editor (simple inline panel) ============ -->
+  <div id="admin-user-editor-view" class="hidden">
+    <div class="card" style="max-width:480px;margin:0 auto">
+      <h2 id="admin-user-editor-title">Add a user</h2>
+      <label for="au-username">Username</label>
+      <input type="text" id="au-username">
+      <label for="au-password" id="au-password-label">Password</label>
+      <input type="password" id="au-password" placeholder="at least 8 characters">
+      <label for="au-role">Role</label>
+      <select id="au-role"></select>
+
+      <div id="au-forms-wrap">
+        <label style="margin-top:14px">Assigned forms</label>
+        <div class="key-editor-list" id="au-forms-list"></div>
+      </div>
+
+      <div class="check-row" id="au-active-row"><input type="checkbox" id="au-active" checked><label for="au-active" style="margin:0">Active</label></div>
+
+      <div class="msg bad" id="admin-user-editor-msg"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-outline" id="au-cancel">Cancel</button>
+        <button class="btn" id="au-save">Save user</button>
+      </div>
+    </div>
   </div>
 
   <!-- ============ form editor (simple inline panel, not a real dialog) ============ -->
@@ -620,7 +692,8 @@ function api(method, url, body){
 }
 
 function show(id){
-  ["setup-view","login-view","dash-view","editor-view","form-editor-view","key-editor-view"].forEach(function(v){
+  ["setup-view","login-view","dash-view","editor-view","form-editor-view","key-editor-view",
+   "role-editor-view","admin-user-editor-view"].forEach(function(v){
     $(v).classList.toggle("hidden", v !== id);
   });
 }
@@ -635,7 +708,21 @@ var STATE = { fields: [], editingId: null, forms: [], currentFormId: null,
               editingFormId: null, subsPage: 1, library: [], editingKeyId: null,
               timezone: "UTC",
               languageLabels: { en: { name: "English", dir: "ltr" }, ar: { name: "Arabic", dir: "rtl" } },
-              adminTheme: { primary: "#FFEC01", text: "#0B0B0B" }, translateApiKey: "" };
+              adminTheme: { primary: "#FFEC01", text: "#0B0B0B" }, translateApiKey: "",
+              isBootstrap: true, permissions: "all", allowedForms: "all",
+              roles: [], adminUsers: [], permissionKeys: [], editingRoleId: null, editingAdminUserId: null };
+
+/* Server-enforced either way — this is only about which controls we show,
+   never the actual access boundary (see server.py's require_permission). */
+function hasPermission(key, formId){
+  if (STATE.isBootstrap || STATE.permissions === "all") return true;
+  if (STATE.permissions.indexOf(key) === -1) return false;
+  if (formId == null) return true;
+  return STATE.allowedForms === "all" || STATE.allowedForms.indexOf(formId) !== -1;
+}
+function hasAnyPermission(keys, formId){
+  return keys.some(function(k){ return hasPermission(k, formId); });
+}
 
 /* ------------------------------------------------------- bootstrap ---- */
 function boot(){
@@ -645,11 +732,29 @@ function boot(){
     applyAdminTheme(STATE.adminTheme);   // needed pre-login too — the setup/login screens use it
     if (!s.adminConfigured){ show("setup-view"); return; }
     if (!s.authenticated){ show("login-view"); return; }
+    STATE.isBootstrap = (s.permissions === "all");
+    STATE.permissions = s.permissions;
+    STATE.allowedForms = s.allowedForms;
+    applyPermissionVisibility();
     show("dash-view");
     renderStatus(s);
-    loadDbSettings();
+    if (STATE.isBootstrap) loadDbSettings();
     if (s.dbConnected){ loadForms(); loadFieldLibrary(); loadDashboard(); loadAppSettings(true); }
   });
+}
+
+function applyPermissionVisibility(){
+  $("tab-btn-admin").classList.toggle("hidden", !hasPermission("manage_users"));
+  var anyConfig = hasAnyPermission(["manage_app_settings", "manage_field_keys", "manage_global_alerts"]) || STATE.isBootstrap;
+  document.querySelector('.tab[data-tab="config"]').classList.toggle("hidden", !anyConfig);
+  document.querySelector('.subtab[data-subtab="cfgdb"]').classList.toggle("hidden", !STATE.isBootstrap);
+  ["cfglang", "cfgtheme", "cfgtime"].forEach(function(t){
+    var btn = document.querySelector('.subtab[data-subtab="' + t + '"]');
+    if (btn) btn.classList.toggle("hidden", !hasPermission("manage_app_settings"));
+  });
+  document.querySelector('.subtab[data-subtab="cfgkeys"]').classList.toggle(
+    "hidden", !hasAnyPermission(["manage_field_keys", "manage_app_settings"]));
+  $("add-form-btn").classList.toggle("hidden", !hasPermission("manage_forms"));
 }
 
 function renderStatus(s){
@@ -693,13 +798,14 @@ document.querySelectorAll(".tab").forEach(function(btn){
   btn.addEventListener("click", function(){
     document.querySelectorAll(".tab").forEach(function(b){ b.classList.remove("active"); });
     btn.classList.add("active");
-    ["dashboard","forms","subs","config"].forEach(function(t){
+    ["dashboard","forms","subs","config","administration"].forEach(function(t){
       $("tab-" + t).classList.toggle("hidden", btn.dataset.tab !== t);
     });
     if (btn.dataset.tab === "subs") loadSubmissions();
     if (btn.dataset.tab === "dashboard") loadDashboard();
     if (btn.dataset.tab === "forms"){ closeFormDetail(); loadForms(); }
     if (btn.dataset.tab === "config") loadFieldLibrary();
+    if (btn.dataset.tab === "administration") loadRoles();
   });
 });
 
@@ -720,6 +826,8 @@ document.querySelectorAll(".subtabs").forEach(function(group){
       if (btn.dataset.subtab === "cfgtime") loadAppSettings();
       if (btn.dataset.subtab === "cfglang") loadLanguageLabels();
       if (btn.dataset.subtab === "cfgtheme") loadAdminTheme();
+      if (btn.dataset.subtab === "adminroles") loadRoles();
+      if (btn.dataset.subtab === "adminusers") loadAdminUsers();
     });
   });
 });
@@ -794,10 +902,17 @@ function renderForms(){
     var actions = document.createElement("div");
     actions.className = "actions";
     var view = mkBtn("View", function(){ window.open(f.url, "_blank", "noopener"); });
-    var openDetail = mkBtn("Edit", function(){ openFormDetail(f); });         // questions & branding
-    var openSettings = mkBtn("Manage", function(){ openFormEditor(f); });    // name, port, languages
-    var toggle = mkBtn(f.active ? "Disable" : "Enable", function(){ toggleFormActive(f); });
-    [view, openDetail, openSettings, toggle].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    var buttons = [view];
+    if (hasAnyPermission(["edit_fields", "edit_branding"], f.id)){
+      buttons.push(mkBtn("Edit", function(){ openFormDetail(f); }));         // questions & branding
+    }
+    if (hasAnyPermission(["manage_forms", "manage_form_settings"], f.id)){
+      buttons.push(mkBtn("Manage", function(){ openFormEditor(f); }));       // name, port, languages
+    }
+    if (hasPermission("manage_forms")){
+      buttons.push(mkBtn(f.active ? "Disable" : "Enable", function(){ toggleFormActive(f); }));
+    }
+    buttons.forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
     row.appendChild(actions);
     box.appendChild(row);
   });
@@ -828,10 +943,15 @@ function openFormDetail(f){
   $("forms-list-view").classList.add("hidden");
   $("form-detail-view").classList.remove("hidden");
   refreshFormDetailHeader(f);
+  var fieldsBtn = document.querySelector('.subtab[data-subtab="fdfields"]');
+  var brandingBtn = document.querySelector('.subtab[data-subtab="fdbranding"]');
+  fieldsBtn.classList.toggle("hidden", !hasPermission("edit_fields", f.id));
+  brandingBtn.classList.toggle("hidden", !hasPermission("edit_branding", f.id));
   document.querySelectorAll(".subtab").forEach(function(b){ b.classList.remove("active"); });
-  document.querySelector('.subtab[data-subtab="fdfields"]').classList.add("active");
-  $("sub-fdfields").classList.remove("hidden");
-  $("sub-fdbranding").classList.add("hidden");
+  var defaultBtn = !fieldsBtn.classList.contains("hidden") ? fieldsBtn : brandingBtn;
+  defaultBtn.classList.add("active");
+  $("sub-fdfields").classList.toggle("hidden", defaultBtn !== fieldsBtn);
+  $("sub-fdbranding").classList.toggle("hidden", defaultBtn !== brandingBtn);
   loadFields();
 }
 function refreshFormDetailHeader(f){
@@ -1762,6 +1882,200 @@ $("theme-save-btn").addEventListener("click", function(){
       return;
     }
     flash("theme-msg", res.body.error || "Could not save these colors.");
+  });
+});
+
+/* -------------------------------------------------- roles & users ---- */
+var PERMISSION_LABELS = {
+  manage_users: "Manage users & roles",
+  manage_forms: "Create/delete forms, edit any form's name/port/languages",
+  manage_field_keys: "Manage the Field keys catalog",
+  manage_app_settings: "Language Labels, Appearance, Time settings",
+  manage_global_alerts: "SMTP/Telegram alert settings",
+  view_dashboard: "View dashboard (assigned forms)",
+  view_submissions: "View submissions (assigned forms)",
+  export_submissions: "Export submissions as CSV (assigned forms)",
+  edit_fields: "Edit questions (assigned forms)",
+  edit_branding: "Edit branding (assigned forms)",
+  manage_form_settings: "Edit form name/port/languages/expiry (assigned forms)",
+  manage_form_alerts: "Manage alert settings (assigned forms)",
+};
+
+function loadRoles(){
+  api("GET", "/admin/roles").then(function(res){
+    if (res.status !== 200) return;
+    STATE.roles = res.body.roles;
+    STATE.permissionKeys = res.body.permissionKeys;
+    renderRoles();
+  });
+}
+function renderRoles(){
+  var box = $("roles-list");
+  box.innerHTML = "";
+  STATE.roles.forEach(function(r){
+    var row = document.createElement("div");
+    row.className = "form-row";
+    row.innerHTML = '<div class="info"><b>' + escapeHtml(r.name) + '</b>' +
+      '<div class="meta">' + (r.applies_to_all_forms ? "all forms" : "per-assigned-form") +
+      ' &middot; ' + r.permissions.length + ' permission' + (r.permissions.length === 1 ? "" : "s") + '</div></div>';
+    var actions = document.createElement("div");
+    actions.className = "actions";
+    var edit = mkBtn("Edit", function(){ openRoleEditor(r); });
+    var del = mkBtn("Delete", function(){ deleteRole(r); });
+    [edit, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+  if (!STATE.roles.length){
+    box.innerHTML = '<p class="hint">No custom roles yet — add one below.</p>';
+  }
+}
+function deleteRole(r){
+  if (!confirm('Delete the role "' + r.name + '"? Only possible while no user has it assigned.')) return;
+  api("POST", "/admin/roles/" + r.id + "/delete").then(function(res){
+    if (!res.body.ok){ alert(res.body.error || "Could not delete this role."); return; }
+    loadRoles();
+  });
+}
+$("add-role-btn").addEventListener("click", function(){ openRoleEditor(null); });
+$("role-cancel").addEventListener("click", function(){ show("dash-view"); });
+function openRoleEditor(role){
+  STATE.editingRoleId = role ? role.id : null;
+  $("role-editor-title").textContent = role ? "Edit role" : "Add a role";
+  $("role-name").value = role ? role.name : "";
+  $("role-all-forms").checked = role ? role.applies_to_all_forms : false;
+  var box = $("role-permissions-list");
+  box.innerHTML = "";
+  (STATE.permissionKeys || []).forEach(function(key){
+    var row = document.createElement("div");
+    row.className = "check-row";
+    var id = "role-perm-" + key;
+    row.innerHTML = '<input type="checkbox" id="' + id + '" class="role-perm" value="' + key + '">' +
+      '<label for="' + id + '" style="margin:0">' + escapeHtml(PERMISSION_LABELS[key] || key) + '</label>';
+    row.querySelector("input").checked = !!(role && role.permissions.indexOf(key) !== -1);
+    box.appendChild(row);
+  });
+  clearFlash("role-editor-msg");
+  show("role-editor-view");
+}
+$("role-save").addEventListener("click", function(){
+  clearFlash("role-editor-msg");
+  var permissions = Array.from($("role-permissions-list").querySelectorAll(".role-perm"))
+    .filter(function(c){ return c.checked; }).map(function(c){ return c.value; });
+  var payload = {
+    name: $("role-name").value.trim(),
+    permissions: permissions,
+    applies_to_all_forms: $("role-all-forms").checked,
+  };
+  var url = STATE.editingRoleId ? "/admin/roles/" + STATE.editingRoleId + "/update" : "/admin/roles";
+  api("POST", url, payload).then(function(res){
+    if (res.body.ok){ show("dash-view"); document.querySelector('.tab[data-tab="administration"]').click(); return; }
+    flash("role-editor-msg", res.body.error || "Could not save this role.");
+  });
+});
+
+function loadAdminUsers(){
+  api("GET", "/admin/users").then(function(res){
+    if (res.status !== 200) return;
+    STATE.adminUsers = res.body.users;
+    renderAdminUsers();
+  });
+}
+function renderAdminUsers(){
+  var box = $("admin-users-list");
+  box.innerHTML = "";
+  STATE.adminUsers.forEach(function(u){
+    var row = document.createElement("div");
+    row.className = "form-row";
+    var formNames = (u.role_applies_to_all_forms ? ["all forms"] : u.form_ids.map(function(id){
+      var f = STATE.forms.find(function(x){ return x.id === id; });
+      return f ? f.name : ("#" + id);
+    }));
+    row.innerHTML = '<div class="info"><b>' + escapeHtml(u.username) + '</b>' +
+      (u.active ? "" : ' <span class="badge off">inactive</span>') +
+      '<div class="meta">' + escapeHtml(u.role_name) + ' &middot; ' + escapeHtml(formNames.join(", ") || "no forms assigned") + '</div></div>';
+    var actions = document.createElement("div");
+    actions.className = "actions";
+    var edit = mkBtn("Edit", function(){ openAdminUserEditor(u); });
+    var del = mkBtn("Delete", function(){ deleteAdminUser(u); });
+    [edit, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+  if (!STATE.adminUsers.length){
+    box.innerHTML = '<p class="hint">No users yet — add one below.</p>';
+  }
+}
+function deleteAdminUser(u){
+  if (!confirm('Delete the user "' + u.username + '"? This cannot be undone.')) return;
+  api("POST", "/admin/users/" + u.id + "/delete").then(function(res){
+    if (!res.body.ok){ alert(res.body.error || "Could not delete this user."); return; }
+    loadAdminUsers();
+  });
+}
+$("add-admin-user-btn").addEventListener("click", function(){ openAdminUserEditor(null); });
+$("au-cancel").addEventListener("click", function(){ show("dash-view"); });
+function renderAuRoleSelect(selectedRoleId){
+  var sel = $("au-role");
+  sel.innerHTML = "";
+  STATE.roles.forEach(function(r){
+    var opt = new Option(r.name, r.id);
+    sel.appendChild(opt);
+  });
+  if (selectedRoleId) sel.value = selectedRoleId;
+  toggleAuFormsWrap();
+}
+function toggleAuFormsWrap(){
+  var role = STATE.roles.find(function(r){ return String(r.id) === String($("au-role").value); });
+  $("au-forms-wrap").classList.toggle("hidden", !!(role && role.applies_to_all_forms));
+}
+$("au-role").addEventListener("change", toggleAuFormsWrap);
+function openAdminUserEditor(user){
+  STATE.editingAdminUserId = user ? user.id : null;
+  $("admin-user-editor-title").textContent = user ? "Edit user" : "Add a user";
+  $("au-username").value = user ? user.username : "";
+  $("au-username").disabled = !!user;
+  $("au-password").value = "";
+  $("au-password").placeholder = user ? "leave blank to keep the current password" : "at least 8 characters";
+  $("au-password-label").textContent = user ? "New password (optional)" : "Password";
+  $("au-active-row").classList.toggle("hidden", !user);
+  $("au-active").checked = user ? user.active : true;
+  renderAuRoleSelect(user ? user.role_id : (STATE.roles[0] && STATE.roles[0].id));
+  var formsBox = $("au-forms-list");
+  formsBox.innerHTML = "";
+  STATE.forms.forEach(function(f){
+    var row = document.createElement("div");
+    row.className = "check-row";
+    var id = "au-form-" + f.id;
+    row.innerHTML = '<input type="checkbox" id="' + id + '" class="au-form" value="' + f.id + '">' +
+      '<label for="' + id + '" style="margin:0">' + escapeHtml(f.name) + '</label>';
+    row.querySelector("input").checked = !!(user && user.form_ids.indexOf(f.id) !== -1);
+    formsBox.appendChild(row);
+  });
+  toggleAuFormsWrap();
+  clearFlash("admin-user-editor-msg");
+  show("admin-user-editor-view");
+}
+$("au-save").addEventListener("click", function(){
+  clearFlash("admin-user-editor-msg");
+  var formIds = Array.from($("au-forms-list").querySelectorAll(".au-form"))
+    .filter(function(c){ return c.checked; }).map(function(c){ return parseInt(c.value, 10); });
+  var payload = {
+    role_id: parseInt($("au-role").value, 10),
+    form_ids: formIds,
+  };
+  if (!STATE.editingAdminUserId){
+    payload.username = $("au-username").value.trim();
+    payload.password = $("au-password").value;
+  } else {
+    payload.active = $("au-active").checked;
+    if ($("au-password").value) payload.password = $("au-password").value;
+  }
+  var url = STATE.editingAdminUserId ? "/admin/users/" + STATE.editingAdminUserId + "/update" : "/admin/users";
+  api("POST", url, payload).then(function(res){
+    if (res.body.ok){ show("dash-view"); document.querySelector('.tab[data-tab="administration"]').click();
+      document.querySelector('.subtab[data-subtab="adminusers"]').click(); return; }
+    flash("admin-user-editor-msg", res.body.error || "Could not save this user.");
   });
 });
 

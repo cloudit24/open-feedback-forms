@@ -96,6 +96,20 @@ PHONE_RE = re.compile(r"^\+[1-9][0-9]{6,17}$")
 FIELD_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
 CORE_KEYS = {"firstName", "lastName", "email", "consent", "language", "website", "turnstile"}
 
+# The permission "checklist" a custom role is built from — see
+# docs/ROLES_AND_PERMISSIONS.md. GLOBAL_PERMISSIONS only do anything for a
+# role with applies_to_all_forms=True; FORM_PERMISSIONS apply to whichever
+# forms a user is assigned (or every form, again under applies_to_all_forms).
+GLOBAL_PERMISSIONS = {
+    "manage_users", "manage_forms", "manage_field_keys",
+    "manage_app_settings", "manage_global_alerts",
+}
+FORM_PERMISSIONS = {
+    "view_dashboard", "view_submissions", "export_submissions",
+    "edit_fields", "edit_branding", "manage_form_settings", "manage_form_alerts",
+}
+ALL_PERMISSIONS = GLOBAL_PERMISSIONS | FORM_PERMISSIONS
+
 
 # --------------------------------------------------------------- rate limit
 
@@ -142,18 +156,26 @@ def turnstile_ok(token, ip):
 
 # ------------------------------------------------------------- admin login
 
-_sessions = {}                  # token -> {"username": ..., "expires": epoch}
+# token -> {"identity": {...}, "expires": epoch}. An identity is either
+#   {"kind": "bootstrap", "username": ...}                          — the
+#     config.json account: always full access, exactly as before roles
+#     existed.
+#   {"kind": "db", "user_id", "username", "permissions": set(...),
+#    "form_ids": set(...) | "all"}                                  — an
+#     admin_users row, resolved once at login (see db.get_admin_user_by_username)
+#     so every later request is an in-memory check, never a DB round-trip.
+_sessions = {}
 _sessions_lock = threading.Lock()
 
 
-def create_session(username):
+def create_session(identity):
     token = secrets.token_hex(32)
     with _sessions_lock:
-        _sessions[token] = {"username": username, "expires": time.time() + SESSION_TTL}
+        _sessions[token] = {"identity": identity, "expires": time.time() + SESSION_TTL}
     return token
 
 
-def session_username(token):
+def session_identity(token):
     if not token:
         return None
     with _sessions_lock:
@@ -161,7 +183,7 @@ def session_username(token):
         if not s or s["expires"] < time.time():
             _sessions.pop(token, None)
             return None
-        return s["username"]
+        return s["identity"]
 
 
 def drop_session(token):
@@ -353,18 +375,84 @@ class BaseHandler(BaseHTTPRequestHandler):
         c.load(self.headers.get("Cookie", ""))
         return c
 
-    def admin_user(self):
+    def admin_identity(self):
         c = self.cookies()
         if SESSION_COOKIE not in c:
             return None
-        return session_username(c[SESSION_COOKIE].value)
+        return session_identity(c[SESSION_COOKIE].value)
+
+    def admin_user(self):
+        identity = self.admin_identity()
+        return identity["username"] if identity else None
 
     def require_admin(self):
-        user = self.admin_user()
-        if not user:
+        """Any valid session, bootstrap or a custom-role user — no specific
+        permission required. Use require_permission() instead wherever an
+        action should actually be restricted by role."""
+        identity = self.admin_identity()
+        if not identity:
             self.send_json(401, {"ok": False, "error": "not authenticated"})
             return None
-        return user
+        return identity["username"]
+
+    def has_permission(self, identity, key, form_id=None):
+        """Non-response-writing check, so callers can combine several
+        acceptable permissions (see require_any_permission)."""
+        if identity["kind"] == "bootstrap":
+            return True
+        if key not in identity["permissions"]:
+            return False
+        if form_id is not None and identity["form_ids"] != "all" and int(form_id) not in identity["form_ids"]:
+            return False
+        return True
+
+    def require_permission(self, key, form_id=None):
+        """Returns the caller's identity dict on success. Sends 401/403 and
+        returns None on failure — callers should `return` immediately on
+        None, same as require_admin(). The bootstrap account always passes;
+        a custom-role user needs `key` in their role's permissions and,
+        when form_id is given, access to that specific form (either
+        applies_to_all_forms, or that id in their assigned set)."""
+        identity = self.admin_identity()
+        if not identity:
+            self.send_json(401, {"ok": False, "error": "not authenticated"})
+            return None
+        if not self.has_permission(identity, key, form_id):
+            self.send_json(403, {"ok": False, "error": "you don't have permission to do that"})
+            return None
+        return identity
+
+    def require_any_permission(self, options):
+        """options: [(key, form_id), ...] — passes if any one matches.
+        For actions two different permissions can each justify, e.g.
+        editing a form's settings via either the global manage_forms or
+        a per-form manage_form_settings grant."""
+        identity = self.admin_identity()
+        if not identity:
+            self.send_json(401, {"ok": False, "error": "not authenticated"})
+            return None
+        if any(self.has_permission(identity, key, form_id) for key, form_id in options):
+            return identity
+        self.send_json(403, {"ok": False, "error": "you don't have permission to do that"})
+        return None
+
+    def require_form_access(self, form_id):
+        """Any per-form permission at all on this form — for read views
+        several different roles might legitimately need (e.g. the fields
+        list, which a viewer, an editor, and an alert manager all see)."""
+        return self.require_any_permission([(k, form_id) for k in FORM_PERMISSIONS])
+
+    def require_bootstrap(self):
+        """The config.json account specifically — for the Database tab,
+        which has to stay reachable before any DB-backed role can exist."""
+        identity = self.admin_identity()
+        if not identity:
+            self.send_json(401, {"ok": False, "error": "not authenticated"})
+            return None
+        if identity["kind"] != "bootstrap":
+            self.send_json(403, {"ok": False, "error": "only the primary admin account can do that"})
+            return None
+        return identity
 
     def send_json(self, code, payload, cookie_header=None):
         body = json.dumps(payload, default=str).encode("utf-8")
@@ -690,13 +778,17 @@ class AdminHandler(BaseHandler):
             return self.get_admin_dashboard()
         if path == "/admin/translate/languages":
             return self.get_translate_languages()
+        if path == "/admin/roles":
+            return self.get_roles()
+        if path == "/admin/users":
+            return self.get_admin_users()
 
         m = re.match(r"^/admin/forms/(\d+)/branding$", path)
         if m:
             return self.get_admin_branding(int(m.group(1)))
         m = re.match(r"^/admin/forms/(\d+)/logo$", path)
         if m:
-            if not self.require_admin():
+            if not self.require_form_access(int(m.group(1))):
                 return
             return self.serve_logo(int(m.group(1)))
 
@@ -719,9 +811,25 @@ class AdminHandler(BaseHandler):
             "/admin/fields": self.post_field_create,
             "/admin/fields/reorder": self.post_field_reorder,
             "/admin/field-keys": self.post_field_key_create,
+            "/admin/roles": self.post_role_create,
+            "/admin/users": self.post_admin_user_create,
         }
         if path in routes:
             return routes[path]()
+
+        m = re.match(r"^/admin/roles/(\d+)/(update|delete)$", path)
+        if m:
+            role_id, action = int(m.group(1)), m.group(2)
+            if action == "update":
+                return self.post_role_update(role_id)
+            return self.post_role_delete(role_id)
+
+        m = re.match(r"^/admin/users/(\d+)/(update|delete)$", path)
+        if m:
+            user_id, action = int(m.group(1)), m.group(2)
+            if action == "update":
+                return self.post_admin_user_update(user_id)
+            return self.post_admin_user_delete(user_id)
 
         m = re.match(r"^/admin/forms/(\d+)/(update|delete|restore)$", path)
         if m:
@@ -758,13 +866,24 @@ class AdminHandler(BaseHandler):
 
     def get_admin_status(self):
         cfg = config_store.load()
+        identity = self.admin_identity()
+        if identity and identity["kind"] == "bootstrap":
+            permissions, allowed_forms = "all", "all"
+        elif identity:
+            permissions, allowed_forms = sorted(identity["permissions"]), (
+                "all" if identity["form_ids"] == "all" else sorted(identity["form_ids"]))
+        else:
+            permissions, allowed_forms = [], []
         return self.send_json(200, {
             "ok": True,
             "adminConfigured": config_store.admin_configured(cfg),
             "dbConfigured": config_store.db_configured(cfg),
             "dbConnected": db.is_connected(),
             "dbError": db.last_error(),
-            "authenticated": bool(self.admin_user()),
+            "authenticated": bool(identity),
+            "username": identity["username"] if identity else None,
+            "permissions": permissions,
+            "allowedForms": allowed_forms,
             # Safe to expose pre-login (just colors) — the login/setup
             # screens need it too, not only the dashboard behind auth.
             "adminTheme": cfg["settings"].get("admin_theme", {"primary": "#FFEC01", "text": "#0B0B0B"}),
@@ -772,7 +891,7 @@ class AdminHandler(BaseHandler):
         })
 
     def get_db_settings(self):
-        if not self.require_admin():
+        if not self.require_bootstrap():
             return
         cfg = config_store.load()
         d = dict(cfg["db"])
@@ -782,7 +901,7 @@ class AdminHandler(BaseHandler):
                                     "error": db.last_error()})
 
     def get_app_settings(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_app_settings"):
             return
         cfg = config_store.load()
         s = cfg.get("settings", {"timezone": "UTC", "ntp_server": "pool.ntp.org"})
@@ -790,7 +909,7 @@ class AdminHandler(BaseHandler):
                                     "timezones": sorted(zoneinfo.available_timezones())})
 
     def post_app_settings(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_app_settings"):
             return
         body = self.read_json_body() or {}
         cfg = config_store.load()
@@ -820,7 +939,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True})
 
     def post_language_labels(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_app_settings"):
             return
         body = self.read_json_body() or {}
         labels = body.get("language_labels")
@@ -846,7 +965,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True})
 
     def get_translate_languages(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_app_settings"):
             return
         cfg = config_store.load()
         endpoint = cfg["settings"].get("translate_endpoint")
@@ -857,7 +976,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True, "languages": langs})
 
     def post_language_labels_add(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_app_settings"):
             return
         body = self.read_json_body() or {}
         code = clean(body.get("code"), 10).lower()
@@ -943,7 +1062,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True, "code": code, "translated": translated, "failed": failed})
 
     def post_language_labels_remove(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_app_settings"):
             return
         body = self.read_json_body() or {}
         code = clean(body.get("code"), 10).lower()
@@ -969,7 +1088,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True})
 
     def post_db_test(self):
-        if not self.require_admin():
+        if not self.require_bootstrap():
             return
         body = self.read_json_body() or {}
         db_cfg = self._db_cfg_from_body(body)
@@ -980,7 +1099,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True})
 
     def post_db_settings(self):
-        if not self.require_admin():
+        if not self.require_bootstrap():
             return
         body = self.read_json_body() or {}
         db_cfg = self._db_cfg_from_body(body)
@@ -1019,7 +1138,7 @@ class AdminHandler(BaseHandler):
             return
         if not db.is_connected():
             return self.send_json(503, {"ok": False, "error": "database not connected"})
-        forms = db.list_forms(active_only=False)
+        forms = self._forms_visible_to(self.admin_identity())
         running = FORMS.status()
         out = [{
             "id": f["id"], "name": f["name"], "slug": f["slug"], "port": f["port"],
@@ -1031,7 +1150,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True, "forms": out, "adminPort": ADMIN_PORT})
 
     def post_form_create(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_forms"):
             return
         if not db.is_connected():
             return self.send_json(503, {"ok": False, "error": "database not connected"})
@@ -1063,6 +1182,14 @@ class AdminHandler(BaseHandler):
         log("form created: %s (port %d)" % (name, port))
         return self.send_json(200, {"ok": True, "id": new_id, "port": port})
 
+    def _forms_visible_to(self, identity, forms=None):
+        """The bootstrap account and any applies_to_all_forms role see
+        every form; anyone else only sees the ones they're assigned."""
+        forms = db.list_forms(active_only=False) if forms is None else forms
+        if identity["kind"] == "bootstrap" or identity["form_ids"] == "all":
+            return forms
+        return [f for f in forms if f["id"] in identity["form_ids"]]
+
     def _resolve_new_port(self, requested, exclude_form_id=None):
         used = db.used_ports(exclude_form_id=exclude_form_id)
         if requested:
@@ -1083,7 +1210,7 @@ class AdminHandler(BaseHandler):
         return None, port
 
     def post_form_update(self, form_id):
-        if not self.require_admin():
+        if not self.require_any_permission([("manage_forms", None), ("manage_form_settings", form_id)]):
             return
         form = db.get_form(form_id)
         if not form:
@@ -1114,14 +1241,14 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True})
 
     def post_form_delete(self, form_id):
-        if not self.require_admin():
+        if not self.require_permission("manage_forms"):
             return
         db.set_form_active(form_id, False)
         FORMS.sync()
         return self.send_json(200, {"ok": True})
 
     def post_form_restore(self, form_id):
-        if not self.require_admin():
+        if not self.require_permission("manage_forms"):
             return
         form = db.get_form(form_id)
         if not form:
@@ -1139,7 +1266,7 @@ class AdminHandler(BaseHandler):
     # ---- branding ---------------------------------------------------------
 
     def get_admin_branding(self, form_id):
-        if not self.require_admin():
+        if not self.require_permission("edit_branding", form_id):
             return
         form = db.get_form(form_id)
         if not form:
@@ -1154,7 +1281,7 @@ class AdminHandler(BaseHandler):
         }})
 
     def post_form_branding(self, form_id):
-        if not self.require_admin():
+        if not self.require_permission("edit_branding", form_id):
             return
         form = db.get_form(form_id)
         if not form:
@@ -1226,18 +1353,20 @@ class AdminHandler(BaseHandler):
             form_id = 0
         if not form_id:
             return self.send_json(400, {"ok": False, "error": "form_id is required"})
+        if not self.require_form_access(form_id):
+            return
         fields = db.list_fields(form_id, active_only=False)
         return self.send_json(200, {"ok": True, "fields": fields})
 
     def get_field_library(self):
-        if not self.require_admin():
+        if not self.require_any_permission([("manage_field_keys", None), ("edit_fields", None)]):
             return
         if not db.is_connected():
             return self.send_json(503, {"ok": False, "error": "database not connected"})
         return self.send_json(200, {"ok": True, "fields": db.list_field_keys()})
 
     def post_field_key_create(self):
-        if not self.require_admin():
+        if not self.require_permission("manage_field_keys"):
             return
         body = self.read_json_body() or {}
         err = self._validate_field_key_payload(body, is_new=True)
@@ -1251,7 +1380,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True, "id": new_id})
 
     def post_field_key_update(self, key_id):
-        if not self.require_admin():
+        if not self.require_permission("manage_field_keys"):
             return
         body = self.read_json_body() or {}
         err = self._validate_field_key_payload(body, is_new=False)
@@ -1265,7 +1394,7 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True})
 
     def post_field_key_delete(self, key_id):
-        if not self.require_admin():
+        if not self.require_permission("manage_field_keys"):
             return
         db.delete_field_key(key_id)
         return self.send_json(200, {"ok": True})
@@ -1304,6 +1433,8 @@ class AdminHandler(BaseHandler):
             form_id = 0
         if not form_id:
             return self.send_json(400, {"ok": False, "error": "form_id is required"})
+        if not self.require_permission("edit_fields", form_id):
+            return
         # A new form field must reference an existing field-key definition —
         # the key, its labels, type and options are owned by the Field keys
         # tab, not typed in here, so pull the canonical copy server-side and
@@ -1325,7 +1456,10 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True, "id": new_id})
 
     def post_field_update(self, field_id):
-        if not self.require_admin():
+        existing = db.get_field(field_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "field not found"})
+        if not self.require_permission("edit_fields", existing["form_id"]):
             return
         body = self.read_json_body() or {}
         err = self._validate_field_payload(body, is_new=False)
@@ -1339,24 +1473,36 @@ class AdminHandler(BaseHandler):
         return self.send_json(200, {"ok": True})
 
     def post_field_delete(self, field_id):
-        if not self.require_admin():
+        existing = db.get_field(field_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "field not found"})
+        if not self.require_permission("edit_fields", existing["form_id"]):
             return
         db.set_field_active(field_id, False)
         return self.send_json(200, {"ok": True})
 
     def post_field_restore(self, field_id):
-        if not self.require_admin():
+        existing = db.get_field(field_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "field not found"})
+        if not self.require_permission("edit_fields", existing["form_id"]):
             return
         db.set_field_active(field_id, True)
         return self.send_json(200, {"ok": True})
 
     def post_field_reorder(self):
-        if not self.require_admin():
-            return
         body = self.read_json_body() or {}
         order = body.get("order")
         if not isinstance(order, list) or not all(isinstance(i, int) for i in order):
             return self.send_json(400, {"ok": False, "error": "order must be a list of ids"})
+        # Every id in one reorder call belongs to the same form (the admin
+        # UI only ever reorders within a single form's Questions list) —
+        # checking the first one covers the whole batch.
+        first = db.get_field(order[0]) if order else None
+        if not first:
+            return self.send_json(400, {"ok": False, "error": "no fields to reorder"})
+        if not self.require_permission("edit_fields", first["form_id"]):
+            return
         db.reorder_fields(order)
         return self.send_json(200, {"ok": True})
 
@@ -1382,6 +1528,132 @@ class AdminHandler(BaseHandler):
                     return "every option needs a value and an English or Arabic label"
         return None
 
+    # ---- roles & users ----------------------------------------------------
+    #
+    # Custom roles built from the permission checklist at the top of this
+    # file — see docs/ROLES_AND_PERMISSIONS.md. The bootstrap account
+    # (config.json) is untouched by any of this and isn't listed here.
+
+    def get_roles(self):
+        if not self.require_permission("manage_users"):
+            return
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        return self.send_json(200, {"ok": True, "roles": db.list_roles(),
+                                    "permissionKeys": sorted(ALL_PERMISSIONS)})
+
+    def _validate_role_payload(self, body):
+        name = clean(body.get("name"), 60)
+        if not name:
+            return "role name is required", None
+        perms = body.get("permissions")
+        if not isinstance(perms, list) or not all(isinstance(p, str) for p in perms):
+            return "permissions must be a list", None
+        perms = sorted(set(p for p in perms if p in ALL_PERMISSIONS))
+        applies_to_all_forms = bool(body.get("applies_to_all_forms"))
+        return None, (name, perms, applies_to_all_forms)
+
+    def post_role_create(self):
+        if not self.require_permission("manage_users"):
+            return
+        body = self.read_json_body() or {}
+        err, parsed = self._validate_role_payload(body)
+        if err:
+            return self.send_json(400, {"ok": False, "error": err})
+        try:
+            new_id = db.create_role(*parsed)
+        except Exception as e:
+            return self.send_json(400, {"ok": False, "error": str(e)})
+        return self.send_json(200, {"ok": True, "id": new_id})
+
+    def post_role_update(self, role_id):
+        if not self.require_permission("manage_users"):
+            return
+        body = self.read_json_body() or {}
+        err, parsed = self._validate_role_payload(body)
+        if err:
+            return self.send_json(400, {"ok": False, "error": err})
+        try:
+            db.update_role(role_id, *parsed)
+        except Exception as e:
+            return self.send_json(400, {"ok": False, "error": str(e)})
+        return self.send_json(200, {"ok": True})
+
+    def post_role_delete(self, role_id):
+        if not self.require_permission("manage_users"):
+            return
+        if db.role_in_use(role_id):
+            return self.send_json(400, {"ok": False,
+                "error": "this role is still assigned to a user — reassign or remove them first"})
+        db.delete_role(role_id)
+        return self.send_json(200, {"ok": True})
+
+    def get_admin_users(self):
+        if not self.require_permission("manage_users"):
+            return
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        return self.send_json(200, {"ok": True, "users": db.list_admin_users()})
+
+    def post_admin_user_create(self):
+        if not self.require_permission("manage_users"):
+            return
+        body = self.read_json_body() or {}
+        username = clean(body.get("username"), 60)
+        password = body.get("password") or ""
+        role_id = body.get("role_id")
+        form_ids = body.get("form_ids")
+        if len(username) < 3:
+            return self.send_json(400, {"ok": False, "error": "username too short"})
+        if len(password) < 8:
+            return self.send_json(400, {"ok": False, "error": "password must be at least 8 characters"})
+        role = db.get_role(role_id) if role_id else None
+        if not role:
+            return self.send_json(400, {"ok": False, "error": "choose a role"})
+        if not isinstance(form_ids, list) or not all(isinstance(i, int) for i in form_ids):
+            form_ids = []
+        pw_hash, salt = config_store.hash_password(password)
+        try:
+            new_id = db.create_admin_user(username, pw_hash, salt, role["id"], form_ids)
+        except Exception as e:
+            return self.send_json(400, {"ok": False, "error": str(e)})
+        log("admin user created: %s (role: %s)" % (username, role["name"]))
+        return self.send_json(200, {"ok": True, "id": new_id})
+
+    def post_admin_user_update(self, user_id):
+        if not self.require_permission("manage_users"):
+            return
+        existing = db.get_admin_user(user_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "user not found"})
+        body = self.read_json_body() or {}
+        role_id, active, form_ids = None, None, None
+        if "role_id" in body:
+            role = db.get_role(body.get("role_id"))
+            if not role:
+                return self.send_json(400, {"ok": False, "error": "unknown role"})
+            role_id = role["id"]
+        if "active" in body:
+            active = bool(body.get("active"))
+        if "form_ids" in body:
+            form_ids = body.get("form_ids")
+            if not isinstance(form_ids, list) or not all(isinstance(i, int) for i in form_ids):
+                return self.send_json(400, {"ok": False, "error": "form_ids must be a list of ids"})
+        password_hash = salt = None
+        if body.get("password"):
+            if len(body["password"]) < 8:
+                return self.send_json(400, {"ok": False, "error": "password must be at least 8 characters"})
+            password_hash, salt = config_store.hash_password(body["password"])
+        db.update_admin_user(user_id, role_id=role_id, active=active, form_ids=form_ids,
+                             password_hash=password_hash, salt=salt)
+        return self.send_json(200, {"ok": True})
+
+    def post_admin_user_delete(self, user_id):
+        if not self.require_permission("manage_users"):
+            return
+        db.delete_admin_user(user_id)
+        return self.send_json(200, {"ok": True})
+
     # ---- dashboard / export ---------------------------------------------
 
     def _filters_from_query(self):
@@ -1401,12 +1673,35 @@ class AdminHandler(BaseHandler):
             filters["q"] = clean(self.query_one("q"), 120)
         return filters
 
+    def _restrict_filters_to_identity(self, identity, filters, permission_key):
+        """Enforces form access on top of whatever the query string already
+        asked for. Returns (filters, error) — error is a ready-to-send
+        (code, message) tuple on a 403, otherwise None. A request naming
+        one form_id must have permission_key on that form; a request for
+        "all forms" instead gets narrowed to the caller's whole allowed set
+        (never silently shown everyone's data)."""
+        if identity["kind"] == "bootstrap" or identity["form_ids"] == "all":
+            return filters, None
+        if not self.has_permission(identity, permission_key):
+            return filters, (403, "you don't have permission to do that")
+        if filters.get("form_id") is not None:
+            if filters["form_id"] not in identity["form_ids"]:
+                return filters, (403, "you don't have access to that form")
+            return filters, None
+        filters = dict(filters)
+        filters["form_ids"] = sorted(identity["form_ids"])
+        return filters, None
+
     def get_admin_submissions(self):
         if not self.require_admin():
             return
+        identity = self.admin_identity()
         if not db.is_connected():
             return self.send_json(503, {"ok": False, "error": "database not connected"})
         filters = self._filters_from_query()
+        filters, err = self._restrict_filters_to_identity(identity, filters, "view_submissions")
+        if err:
+            return self.send_json(err[0], {"ok": False, "error": err[1]})
         try:
             page = max(1, int(self.query_one("page") or "1"))
         except ValueError:
@@ -1423,9 +1718,13 @@ class AdminHandler(BaseHandler):
     def get_admin_dashboard(self):
         if not self.require_admin():
             return
+        identity = self.admin_identity()
         if not db.is_connected():
             return self.send_json(503, {"ok": False, "error": "database not connected"})
         filters = self._filters_from_query()
+        filters, err = self._restrict_filters_to_identity(identity, filters, "view_dashboard")
+        if err:
+            return self.send_json(err[0], {"ok": False, "error": err[1]})
         try:
             summary = db.dashboard_summary(filters)
         except Exception as e:
@@ -1436,9 +1735,13 @@ class AdminHandler(BaseHandler):
     def export_csv(self):
         if not self.admin_user():
             return self.fail(403, "Forbidden")
+        identity = self.admin_identity()
         if not db.is_connected():
             return self.fail(503, "Database not connected")
         filters = self._filters_from_query()
+        filters, err = self._restrict_filters_to_identity(identity, filters, "export_submissions")
+        if err:
+            return self.fail(err[0], err[1])
         try:
             rows = db.export_rows(filters)
         except Exception as e:
@@ -1478,7 +1781,7 @@ class AdminHandler(BaseHandler):
         pw_hash, salt = config_store.hash_password(password)
         cfg["admin"] = {"username": username, "password_hash": pw_hash, "salt": salt}
         config_store.save(cfg)
-        token = create_session(username)
+        token = create_session({"kind": "bootstrap", "username": username})
         cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (SESSION_COOKIE, token, SESSION_TTL)
         log("admin account created: %s" % username)
         return self.send_json(200, {"ok": True}, cookie_header=cookie)
@@ -1492,14 +1795,35 @@ class AdminHandler(BaseHandler):
         ip = self.client_ip()
         if not rate_ok(ip, "login", 20):
             return self.send_json(429, {"ok": False, "error": "too many attempts, try later"})
-        if (not admin["username"] or username != admin["username"] or
-                not config_store.verify_password(password, admin["password_hash"], admin["salt"])):
-            log("failed admin login for %r from %s" % (username, ip))
-            return self.send_json(401, {"ok": False, "error": "invalid username or password"})
-        token = create_session(username)
-        cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (SESSION_COOKIE, token, SESSION_TTL)
-        log("admin login: %s" % username)
-        return self.send_json(200, {"ok": True}, cookie_header=cookie)
+
+        if (admin["username"] and username == admin["username"] and
+                config_store.verify_password(password, admin["password_hash"], admin["salt"])):
+            token = create_session({"kind": "bootstrap", "username": username})
+            cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (SESSION_COOKIE, token, SESSION_TTL)
+            log("admin login: %s" % username)
+            return self.send_json(200, {"ok": True}, cookie_header=cookie)
+
+        # Not the bootstrap account — try a custom-role user (only possible
+        # once the database is up, since that's where these live).
+        db_user = None
+        if db.is_connected():
+            try:
+                db_user = db.get_admin_user_by_username(username)
+            except Exception as e:
+                log("login: could not check admin_users: %s" % e)
+        if db_user and config_store.verify_password(password, db_user["password_hash"], db_user["salt"]):
+            identity = {
+                "kind": "db", "user_id": db_user["id"], "username": db_user["username"],
+                "permissions": set(db_user["permissions"]),
+                "form_ids": "all" if db_user["role_applies_to_all_forms"] else set(db_user["form_ids"]),
+            }
+            token = create_session(identity)
+            cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (SESSION_COOKIE, token, SESSION_TTL)
+            log("admin login: %s" % username)
+            return self.send_json(200, {"ok": True}, cookie_header=cookie)
+
+        log("failed admin login for %r from %s" % (username, ip))
+        return self.send_json(401, {"ok": False, "error": "invalid username or password"})
 
     def post_admin_logout(self):
         c = self.cookies()
