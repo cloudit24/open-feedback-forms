@@ -178,10 +178,16 @@ version 5.x — avoid v6+, which requires accepting a paid EULA).
 
 ## About us
 
-Cloud IT 24 is IT Services — developing and delivering solutions for all
-types of infrastructure.
+**Cloud IT 24** is an IT services company that designs, builds and supports
+technology solutions across every kind of infrastructure — on-premises,
+cloud and hybrid. From custom software development and systems integration
+to networking, security and day-to-day operations, we help organizations
+run reliably today and grow with confidence tomorrow.
 
-Open Feedback Forms is developed by the Cloud IT 24 team.
+We favour practical, well-engineered solutions over complexity: tools that
+are simple to deploy, straightforward to maintain, and built to keep working
+long after the project ends. Open Feedback Forms is one of them — developed,
+maintained and released as open source by the Cloud IT 24 team.
 
 - [github.com/cloudit24](https://github.com/cloudit24/)
 - [github.com/shatheitguy](https://github.com/shatheitguy)
