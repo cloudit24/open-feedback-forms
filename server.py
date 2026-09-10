@@ -1969,8 +1969,15 @@ class AdminHandler(BaseHandler):
                     granularity = "hour"
             except ValueError:
                 pass
+        tz_offset_minutes = 0
         try:
-            summary = db.dashboard_summary(filters, granularity=granularity)
+            tz_name = config_store.load()["settings"].get("timezone") or "UTC"
+            now = datetime.now(zoneinfo.ZoneInfo(tz_name))
+            tz_offset_minutes = int(now.utcoffset().total_seconds() // 60)
+        except Exception:
+            pass   # unknown/misconfigured timezone — fall back to UTC bucketing (offset 0)
+        try:
+            summary = db.dashboard_summary(filters, granularity=granularity, tz_offset_minutes=tz_offset_minutes)
         except Exception as e:
             log("dashboard query failed: %s" % e)
             return self.send_json(500, {"ok": False})
