@@ -122,6 +122,18 @@ SCHEMA_SQL = [
         PRIMARY KEY (user_id, form_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    """
+    CREATE TABLE IF NOT EXISTS alert_rules (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        form_id       INT NOT NULL,
+        trigger_type  ENUM('new_submission','daily_digest','form_expiry') NOT NULL,
+        channel       ENUM('email','telegram') NOT NULL,
+        destination   VARCHAR(200) NOT NULL,
+        enabled       TINYINT(1) NOT NULL DEFAULT 1,
+        created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_form_trigger (form_id, trigger_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
 # Best-effort migration for a database that already has the pre-multi-form
@@ -488,6 +500,24 @@ def _conn():
     if _pool is None:
         raise DBError("database is not connected")
     return _pool.get_connection()
+
+
+def ping():
+    """Cheapest possible round-trip, for the background health-check loop
+    (see server.py) that decides whether to fire a db_disconnected alert —
+    is_connected() alone only says a pool object exists, not that the
+    server behind it is actually still reachable."""
+    if _pool is None:
+        return False
+    try:
+        conn = _pool.get_connection()
+        try:
+            conn.ping(reconnect=False, attempts=1, delay=0)
+            return True
+        finally:
+            conn.close()
+    except mysql.connector.Error:
+        return False
 
 
 # ------------------------------------------------------------------ forms
@@ -1115,5 +1145,95 @@ def delete_admin_user(user_id):
         cur.execute("DELETE FROM admin_users WHERE id=%s", (user_id,))
         conn.commit()
         cur.close()
+    finally:
+        conn.close()
+
+
+# ------------------------------------------------------------- alerts
+#
+# scope='global' rows (form_id NULL) are for db_disconnected — the whole
+# app losing its database, not any one form's business. Every other
+# trigger type is scope='form', tied to one form_id. See notifier.py for
+# what actually fires these.
+
+def list_alert_rules(form_id=None, trigger_type=None, enabled_only=False):
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        conditions, params = [], []
+        if form_id is not None:
+            conditions.append("form_id=%s"); params.append(form_id)
+        if trigger_type is not None:
+            conditions.append("trigger_type=%s"); params.append(trigger_type)
+        if enabled_only:
+            conditions.append("enabled=1")
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+        cur.execute("SELECT * FROM alert_rules " + where + " ORDER BY id", params)
+        rows = cur.fetchall()
+        cur.close()
+        for r in rows:
+            r["enabled"] = bool(r["enabled"])
+        return rows
+    finally:
+        conn.close()
+
+
+def create_alert_rule(form_id, trigger_type, channel, destination, enabled=True):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO alert_rules (form_id, trigger_type, channel, destination, enabled) "
+            "VALUES (%s,%s,%s,%s,%s)",
+            (form_id, trigger_type, channel, destination, 1 if enabled else 0))
+        new_id = cur.lastrowid
+        conn.commit()
+        cur.close()
+        return new_id
+    finally:
+        conn.close()
+
+
+def update_alert_rule(rule_id, channel=None, destination=None, enabled=None):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        sets, params = [], []
+        if channel is not None:
+            sets.append("channel=%s"); params.append(channel)
+        if destination is not None:
+            sets.append("destination=%s"); params.append(destination)
+        if enabled is not None:
+            sets.append("enabled=%s"); params.append(1 if enabled else 0)
+        if sets:
+            params.append(rule_id)
+            cur.execute("UPDATE alert_rules SET " + ", ".join(sets) + " WHERE id=%s", params)
+            conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def delete_alert_rule(rule_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM alert_rules WHERE id=%s", (rule_id,))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def get_alert_rule(rule_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM alert_rules WHERE id=%s", (rule_id,))
+        row = cur.fetchone()
+        cur.close()
+        if row:
+            row["enabled"] = bool(row["enabled"])
+        return row
     finally:
         conn.close()

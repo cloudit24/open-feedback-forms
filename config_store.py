@@ -78,6 +78,16 @@ _DEFAULT = {
         # without one, "Add a language" still works, just with nothing
         # auto-translated.
         "translate_api_key": "",
+        # Shared infra credentials for alert_rules (see db.py) — one SMTP
+        # server and one Telegram bot for the whole app; each alert rule
+        # only needs to say *where* to send, not *how*.
+        "smtp": {"host": "", "port": 587, "user": "", "password": "", "from": "", "use_tls": True},
+        "telegram": {"bot_token": ""},
+        # Unlike form-scoped alert rules (in MariaDB — see db.py's
+        # alert_rules table), this list has to live here: it's the alert
+        # for when that same database becomes unreachable, so it can't
+        # depend on the database being reachable to know who to notify.
+        "db_disconnected_alerts": [],
     },
 }
 

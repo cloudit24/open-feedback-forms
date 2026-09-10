@@ -20,6 +20,12 @@ config_store.py       local config.json — DB creds, admin account, session
                       secret (must exist before the app can reach a database)
 translate_client.py   LibreTranslate API client, used only by "Add a
                       language" in Configuration → Language Labels
+notifier.py            SMTP/Telegram alert delivery — new submissions, a
+                      form's daily digest, database-disconnected, expiry
+docs/ROLES_AND_PERMISSIONS.md
+                      the custom-roles/permission-checklist pattern behind
+                      Configuration → Administration, written to be
+                      reusable outside this project too
 packaging/            MSI installer build (PyInstaller + WiX), Windows only
 Dockerfile, docker-compose.yml, install.sh, docker/
                       container image, compose services, and the one-line

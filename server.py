@@ -43,13 +43,14 @@ import time
 import urllib.parse
 import urllib.request
 import zoneinfo
-from datetime import datetime
+from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import db
 import config_store
 import translate_client
 import ui_strings
+import notifier
 
 # Bundled read-only assets: sys._MEIPASS when frozen by PyInstaller (onedir's
 # _internal folder), the script's own folder otherwise. Never the same
@@ -665,7 +666,24 @@ class PublicHandler(BaseHandler):
             return self.send_json(500, {"ok": False})
 
         log("saved %s from %s (form %s)" % (ref, ip, self.FORM_ID))
+        _fire_new_submission_alert(self.FORM_ID, rec, ref)
         return self.send_json(200, {"ok": True, "reference": ref})
+
+
+def _fire_new_submission_alert(form_id, rec, ref):
+    """Spawned as a daemon thread so a slow SMTP/Telegram call never delays
+    the visitor's own response."""
+    def run():
+        try:
+            form = db.get_form(form_id)
+            cfg = config_store.load()
+            subject = "New submission: %s" % (form["name"] if form else ("form #%d" % form_id))
+            body = "%s %s <%s>\nReference: %s" % (rec.get("firstName", ""), rec.get("lastName", ""),
+                                                    rec.get("email", ""), ref)
+            notifier.fire("new_submission", cfg, log=log, form_id=form_id, subject=subject, body=body)
+        except Exception as e:
+            log("new-submission alert failed: %s" % e)
+    threading.Thread(target=run, daemon=True).start()
 
 
 def make_public_handler(form_id):
@@ -782,6 +800,10 @@ class AdminHandler(BaseHandler):
             return self.get_roles()
         if path == "/admin/users":
             return self.get_admin_users()
+        if path == "/admin/alert-settings":
+            return self.get_alert_settings()
+        if path == "/admin/alert-rules":
+            return self.get_alert_rules()
 
         m = re.match(r"^/admin/forms/(\d+)/branding$", path)
         if m:
@@ -813,6 +835,8 @@ class AdminHandler(BaseHandler):
             "/admin/field-keys": self.post_field_key_create,
             "/admin/roles": self.post_role_create,
             "/admin/users": self.post_admin_user_create,
+            "/admin/alert-settings": self.post_alert_settings,
+            "/admin/alert-rules": self.post_alert_rule_create,
         }
         if path in routes:
             return routes[path]()
@@ -823,6 +847,13 @@ class AdminHandler(BaseHandler):
             if action == "update":
                 return self.post_role_update(role_id)
             return self.post_role_delete(role_id)
+
+        m = re.match(r"^/admin/alert-rules/(\d+)/(update|delete)$", path)
+        if m:
+            rule_id, action = int(m.group(1)), m.group(2)
+            if action == "update":
+                return self.post_alert_rule_update(rule_id)
+            return self.post_alert_rule_delete(rule_id)
 
         m = re.match(r"^/admin/users/(\d+)/(update|delete)$", path)
         if m:
@@ -1085,6 +1116,133 @@ class AdminHandler(BaseHandler):
                         db.update_form(f["id"], enabled_extra_langs=[c for c in extras if c != code])
             except Exception as e:
                 log("language remove: form cleanup failed: %s" % e)
+        return self.send_json(200, {"ok": True})
+
+    # ---- global alert settings (SMTP/Telegram infra + db_disconnected) ----
+
+    def get_alert_settings(self):
+        if not self.require_permission("manage_global_alerts"):
+            return
+        cfg = config_store.load()
+        smtp = dict(cfg["settings"].get("smtp", {}))
+        smtp["password"] = ""                              # never echo it back
+        smtp["hasPassword"] = bool(cfg["settings"].get("smtp", {}).get("password"))
+        telegram = dict(cfg["settings"].get("telegram", {}))
+        telegram["hasBotToken"] = bool(telegram.get("bot_token"))
+        telegram["bot_token"] = ""
+        return self.send_json(200, {"ok": True, "smtp": smtp, "telegram": telegram,
+                                    "dbDisconnectedAlerts": cfg["settings"].get("db_disconnected_alerts", [])})
+
+    def post_alert_settings(self):
+        if not self.require_permission("manage_global_alerts"):
+            return
+        body = self.read_json_body() or {}
+        cfg = config_store.load()
+        if "smtp" in body:
+            s = body["smtp"] or {}
+            if not isinstance(s, dict):
+                return self.send_json(400, {"ok": False, "error": "invalid smtp settings"})
+            existing = cfg["settings"].get("smtp", {})
+            cfg["settings"]["smtp"] = {
+                "host": clean(s.get("host"), 200), "port": int(s.get("port") or 587),
+                "user": clean(s.get("user"), 200),
+                "password": s.get("password") or existing.get("password", ""),   # blank = keep saved
+                "from": clean(s.get("from"), 200), "use_tls": bool(s.get("use_tls", True)),
+            }
+        if "telegram" in body:
+            t = body["telegram"] or {}
+            if not isinstance(t, dict):
+                return self.send_json(400, {"ok": False, "error": "invalid telegram settings"})
+            existing = cfg["settings"].get("telegram", {})
+            cfg["settings"]["telegram"] = {
+                "bot_token": clean(t.get("bot_token"), 200) or existing.get("bot_token", ""),
+            }
+        if "dbDisconnectedAlerts" in body:
+            alerts = body["dbDisconnectedAlerts"]
+            if not isinstance(alerts, list):
+                return self.send_json(400, {"ok": False, "error": "dbDisconnectedAlerts must be a list"})
+            cleaned = []
+            for a in alerts:
+                if not isinstance(a, dict) or a.get("channel") not in ("email", "telegram"):
+                    continue
+                dest = clean(a.get("destination"), 200)
+                if not dest:
+                    continue
+                cleaned.append({"channel": a["channel"], "destination": dest,
+                                "enabled": bool(a.get("enabled", True))})
+            cfg["settings"]["db_disconnected_alerts"] = cleaned
+        config_store.save(cfg)
+        return self.send_json(200, {"ok": True})
+
+    # ---- per-form alert rules ---------------------------------------------
+
+    def get_alert_rules(self):
+        try:
+            form_id = int(self.query_one("form_id") or 0)
+        except ValueError:
+            form_id = 0
+        if not form_id:
+            return self.send_json(400, {"ok": False, "error": "form_id is required"})
+        if not self.require_permission("manage_form_alerts", form_id):
+            return
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        return self.send_json(200, {"ok": True, "rules": db.list_alert_rules(form_id=form_id)})
+
+    def _validate_alert_rule_payload(self, body):
+        trigger = body.get("trigger_type")
+        if trigger not in ("new_submission", "daily_digest", "form_expiry"):
+            return "invalid trigger type", None
+        channel = body.get("channel")
+        if channel not in ("email", "telegram"):
+            return "invalid channel", None
+        # Deliberately not required here — the admin UI creates a blank
+        # rule row and lets the admin fill in the destination inline
+        # afterward (see openFormDetail/add-form-alert-btn). An empty
+        # destination just means notifier.send() no-ops on that rule.
+        destination = clean(body.get("destination"), 200)
+        enabled = bool(body.get("enabled", True))
+        return None, (trigger, channel, destination, enabled)
+
+    def post_alert_rule_create(self):
+        body = self.read_json_body() or {}
+        try:
+            form_id = int(body.get("form_id") or 0)
+        except (TypeError, ValueError):
+            form_id = 0
+        if not form_id:
+            return self.send_json(400, {"ok": False, "error": "form_id is required"})
+        if not self.require_permission("manage_form_alerts", form_id):
+            return
+        err, parsed = self._validate_alert_rule_payload(body)
+        if err:
+            return self.send_json(400, {"ok": False, "error": err})
+        trigger, channel, destination, enabled = parsed
+        new_id = db.create_alert_rule(form_id, trigger, channel, destination, enabled)
+        return self.send_json(200, {"ok": True, "id": new_id})
+
+    def post_alert_rule_update(self, rule_id):
+        existing = db.get_alert_rule(rule_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "alert rule not found"})
+        if not self.require_permission("manage_form_alerts", existing["form_id"]):
+            return
+        body = self.read_json_body() or {}
+        channel = body.get("channel") if body.get("channel") in ("email", "telegram") else None
+        # Empty destination is allowed (see _validate_alert_rule_payload) —
+        # the rule just does nothing until filled in.
+        destination = clean(body.get("destination"), 200) if "destination" in body else None
+        enabled = bool(body.get("enabled")) if "enabled" in body else None
+        db.update_alert_rule(rule_id, channel=channel, destination=destination, enabled=enabled)
+        return self.send_json(200, {"ok": True})
+
+    def post_alert_rule_delete(self, rule_id):
+        existing = db.get_alert_rule(rule_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "alert rule not found"})
+        if not self.require_permission("manage_form_alerts", existing["form_id"]):
+            return
+        db.delete_alert_rule(rule_id)
         return self.send_json(200, {"ok": True})
 
     def post_db_test(self):
@@ -1835,6 +1993,65 @@ class AdminHandler(BaseHandler):
 
 # --------------------------------------------------------------------- main
 
+def _db_health_check_loop():
+    """Runs for the lifetime of the process, independent of any one
+    request. Fires db_disconnected once per outage (not once per failed
+    check) by tracking whether we already alerted on the current outage,
+    and clears that flag as soon as the database is reachable again."""
+    already_alerted = False
+    while True:
+        time.sleep(60)
+        if not db.is_connected():
+            continue
+        if db.ping():
+            already_alerted = False
+            continue
+        if already_alerted:
+            continue
+        already_alerted = True
+        log("database health check failed — connection appears to be down")
+        try:
+            cfg = config_store.load()
+            notifier.fire("db_disconnected", cfg, log=log,
+                          subject="Database disconnected",
+                          body="Open Feedback Forms lost its database connection. "
+                               "Forms will stop accepting submissions until it's restored.")
+        except Exception as e:
+            log("db_disconnected alert failed: %s" % e)
+
+
+def _daily_digest_loop():
+    """Sleeps to the next local midnight, sends each digest-enabled form's
+    submission count since the last run, repeats. A day this thread is
+    asleep for (process restarted, machine was off) is simply skipped —
+    not worth the complexity of catching up on a missed digest."""
+    last_run = datetime.now()
+    while True:
+        now = datetime.now()
+        tomorrow_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
+        time.sleep(max(60, (tomorrow_midnight - now).total_seconds()))
+        if not db.is_connected():
+            last_run = datetime.now()
+            continue
+        cfg = config_store.load()
+        try:
+            for form in db.list_forms(active_only=True):
+                rules = db.list_alert_rules(form_id=form["id"], trigger_type="daily_digest", enabled_only=True)
+                if not rules:
+                    continue
+                filters = {"form_id": form["id"], "date_from": last_run.strftime("%Y-%m-%d %H:%M:%S")}
+                _, total = db.list_submissions(filters, page=1, page_size=1)
+                if total == 0:
+                    continue
+                subject = "Daily digest: %s" % form["name"]
+                body = "%d new submission%s since the last digest." % (total, "" if total == 1 else "s")
+                for rule in rules:
+                    notifier.send(rule, subject, body, cfg, log)
+        except Exception as e:
+            log("daily digest failed: %s" % e)
+        last_run = datetime.now()
+
+
 def main():
     if not os.path.isdir(PUBLIC):
         sys.exit("public/ folder is missing next to server.py")
@@ -1859,6 +2076,9 @@ def main():
 
     if db.is_connected():
         FORMS.sync()
+
+    threading.Thread(target=_db_health_check_loop, daemon=True).start()
+    threading.Thread(target=_daily_digest_loop, daemon=True).start()
 
     srv = ThreadingHTTPServer((HOST, ADMIN_PORT), AdminHandler)
     srv.daemon_threads = True

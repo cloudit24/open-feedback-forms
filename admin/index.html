@@ -268,6 +268,7 @@ table.subs tr:last-child td{border-bottom:none}
           <div class="subtabs">
             <button class="subtab active" data-subtab="fdfields">Questions</button>
             <button class="subtab" data-subtab="fdbranding">Branding</button>
+            <button class="subtab" data-subtab="fdalerts">Alerts</button>
           </div>
 
           <!-- questions sub-panel -->
@@ -319,6 +320,14 @@ table.subs tr:last-child td{border-bottom:none}
             <div class="msg" id="branding-msg"></div>
             <button class="btn" id="branding-save-btn" style="margin-top:14px">Save branding</button>
           </div>
+
+          <!-- alerts sub-panel -->
+          <div id="sub-fdalerts" class="hidden">
+            <p class="hint">Each rule sends this form's alerts to one destination. SMTP server and Telegram bot are configured once for the whole app in Configuration &rarr; Alerts &mdash; a rule here only picks where to send.</p>
+            <div id="form-alerts-list"></div>
+            <div class="msg bad" id="form-alerts-msg" style="margin-top:10px"></div>
+            <button class="btn" id="add-form-alert-btn" style="margin-top:14px">+ Add an alert</button>
+          </div>
         </div>
       </div>
     </div>
@@ -361,6 +370,7 @@ table.subs tr:last-child td{border-bottom:none}
           <button class="subtab" data-subtab="cfglang">Language Labels</button>
           <button class="subtab" data-subtab="cfgtheme">Appearance</button>
           <button class="subtab" data-subtab="cfgtime">Time</button>
+          <button class="subtab" data-subtab="cfgalerts">Alerts</button>
           <button class="subtab" data-subtab="cfghelp">Help</button>
         </div>
 
@@ -484,6 +494,39 @@ table.subs tr:last-child td{border-bottom:none}
 
           <div class="msg" id="time-msg"></div>
           <button class="btn" id="time-save-btn" style="margin-top:14px">Save</button>
+        </div>
+
+        <!-- alerts -->
+        <div id="sub-cfgalerts" class="hidden">
+          <h2>SMTP</h2>
+          <p class="hint">Shared mail server used to send every email alert — each form's own alert rules only pick a destination address, not a mail server.</p>
+          <div class="row">
+            <div><label for="smtp-host">Host</label><input type="text" id="smtp-host" placeholder="smtp.example.com"></div>
+            <div style="max-width:110px"><label for="smtp-port">Port</label><input type="number" id="smtp-port" placeholder="587"></div>
+          </div>
+          <div class="row">
+            <div><label for="smtp-user">Username</label><input type="text" id="smtp-user"></div>
+            <div><label for="smtp-pass">Password</label><input type="password" id="smtp-pass" placeholder="(leave blank to keep the saved one)"></div>
+          </div>
+          <label for="smtp-from">From address</label>
+          <input type="text" id="smtp-from" placeholder="alerts@example.com">
+          <div class="check-row"><input type="checkbox" id="smtp-tls" checked><label for="smtp-tls" style="margin:0">Use STARTTLS</label></div>
+          <div class="msg" id="smtp-msg" style="margin-top:10px"></div>
+          <button class="btn" id="smtp-save-btn">Save SMTP settings</button>
+
+          <h2 style="margin-top:26px">Telegram</h2>
+          <p class="hint">Create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> and paste its token here — each alert rule then only needs the destination chat id.</p>
+          <label for="telegram-token">Bot token</label>
+          <input type="text" id="telegram-token" placeholder="leave blank to keep the saved one">
+          <div class="msg" id="telegram-msg" style="margin-top:10px"></div>
+          <button class="btn" id="telegram-save-btn">Save Telegram bot token</button>
+
+          <h2 style="margin-top:26px;font-size:14px">Database disconnected alert</h2>
+          <p class="hint">Fires once per outage if this app loses its database connection — kept separate from per-form alert rules since it has to work even when the database (where those rules live) is unreachable.</p>
+          <div id="db-alert-list"></div>
+          <button class="btn-outline btn-sm" id="db-alert-add-btn" type="button" style="margin-top:8px">+ Add a destination</button>
+          <div class="msg" id="db-alert-msg" style="margin-top:10px"></div>
+          <button class="btn" id="db-alert-save-btn" style="margin-top:6px">Save</button>
         </div>
 
         <!-- help -->
@@ -754,6 +797,8 @@ function applyPermissionVisibility(){
   });
   document.querySelector('.subtab[data-subtab="cfgkeys"]').classList.toggle(
     "hidden", !hasAnyPermission(["manage_field_keys", "manage_app_settings"]));
+  document.querySelector('.subtab[data-subtab="cfgalerts"]').classList.toggle(
+    "hidden", !hasPermission("manage_global_alerts"));
   $("add-form-btn").classList.toggle("hidden", !hasPermission("manage_forms"));
 }
 
@@ -828,6 +873,8 @@ document.querySelectorAll(".subtabs").forEach(function(group){
       if (btn.dataset.subtab === "cfgtheme") loadAdminTheme();
       if (btn.dataset.subtab === "adminroles") loadRoles();
       if (btn.dataset.subtab === "adminusers") loadAdminUsers();
+      if (btn.dataset.subtab === "cfgalerts") loadAlertSettings();
+      if (btn.dataset.subtab === "fdalerts") loadFormAlertRules();
     });
   });
 });
@@ -945,13 +992,17 @@ function openFormDetail(f){
   refreshFormDetailHeader(f);
   var fieldsBtn = document.querySelector('.subtab[data-subtab="fdfields"]');
   var brandingBtn = document.querySelector('.subtab[data-subtab="fdbranding"]');
+  var alertsBtn = document.querySelector('.subtab[data-subtab="fdalerts"]');
   fieldsBtn.classList.toggle("hidden", !hasPermission("edit_fields", f.id));
   brandingBtn.classList.toggle("hidden", !hasPermission("edit_branding", f.id));
+  alertsBtn.classList.toggle("hidden", !hasPermission("manage_form_alerts", f.id));
   document.querySelectorAll(".subtab").forEach(function(b){ b.classList.remove("active"); });
-  var defaultBtn = !fieldsBtn.classList.contains("hidden") ? fieldsBtn : brandingBtn;
+  var candidates = [fieldsBtn, brandingBtn, alertsBtn].filter(function(b){ return !b.classList.contains("hidden"); });
+  var defaultBtn = candidates[0] || fieldsBtn;
   defaultBtn.classList.add("active");
   $("sub-fdfields").classList.toggle("hidden", defaultBtn !== fieldsBtn);
   $("sub-fdbranding").classList.toggle("hidden", defaultBtn !== brandingBtn);
+  $("sub-fdalerts").classList.toggle("hidden", defaultBtn !== alertsBtn);
   loadFields();
 }
 function refreshFormDetailHeader(f){
@@ -2076,6 +2127,153 @@ $("au-save").addEventListener("click", function(){
     if (res.body.ok){ show("dash-view"); document.querySelector('.tab[data-tab="administration"]').click();
       document.querySelector('.subtab[data-subtab="adminusers"]').click(); return; }
     flash("admin-user-editor-msg", res.body.error || "Could not save this user.");
+  });
+});
+
+/* -------------------------------------------------- alert settings --- */
+function loadAlertSettings(){
+  api("GET", "/admin/alert-settings").then(function(res){
+    if (res.status !== 200) return;
+    $("smtp-host").value = res.body.smtp.host || "";
+    $("smtp-port").value = res.body.smtp.port || 587;
+    $("smtp-user").value = res.body.smtp.user || "";
+    $("smtp-pass").value = "";
+    $("smtp-pass").placeholder = res.body.smtp.hasPassword ? "(leave blank to keep the saved one)" : "";
+    $("smtp-from").value = res.body.smtp.from || "";
+    $("smtp-tls").checked = !!res.body.smtp.use_tls;
+    $("telegram-token").value = "";
+    $("telegram-token").placeholder = res.body.telegram.hasBotToken ? "(leave blank to keep the saved one)" : "leave blank for none";
+    STATE.dbDisconnectedAlerts = res.body.dbDisconnectedAlerts || [];
+    renderDbAlertList();
+    clearFlash("smtp-msg"); clearFlash("telegram-msg"); clearFlash("db-alert-msg");
+  });
+}
+$("smtp-save-btn").addEventListener("click", function(){
+  clearFlash("smtp-msg");
+  var payload = { smtp: {
+    host: $("smtp-host").value.trim(), port: parseInt($("smtp-port").value, 10) || 587,
+    user: $("smtp-user").value.trim(), password: $("smtp-pass").value,
+    from: $("smtp-from").value.trim(), use_tls: $("smtp-tls").checked,
+  }};
+  api("POST", "/admin/alert-settings", payload).then(function(res){
+    if (res.body.ok){ flash("smtp-msg", "Saved.", true); loadAlertSettings(); return; }
+    flash("smtp-msg", res.body.error || "Could not save SMTP settings.");
+  });
+});
+$("telegram-save-btn").addEventListener("click", function(){
+  clearFlash("telegram-msg");
+  api("POST", "/admin/alert-settings", { telegram: { bot_token: $("telegram-token").value.trim() } }).then(function(res){
+    if (res.body.ok){ flash("telegram-msg", "Saved.", true); loadAlertSettings(); return; }
+    flash("telegram-msg", res.body.error || "Could not save the bot token.");
+  });
+});
+function renderDbAlertList(){
+  var box = $("db-alert-list");
+  box.innerHTML = "";
+  (STATE.dbDisconnectedAlerts || []).forEach(function(a, i){
+    var row = document.createElement("div");
+    row.className = "row";
+    row.style.alignItems = "flex-end";
+    row.innerHTML =
+      '<div><label>Channel</label><select class="dba-channel">' +
+      '<option value="email"' + (a.channel === "email" ? " selected" : "") + '>Email</option>' +
+      '<option value="telegram"' + (a.channel === "telegram" ? " selected" : "") + '>Telegram</option>' +
+      '</select></div>' +
+      '<div><label>Destination</label><input type="text" class="dba-dest" value="' + escapeHtml(a.destination || "") + '" placeholder="email or chat id"></div>' +
+      '<div class="check-row" style="flex:0 0 auto"><input type="checkbox" class="dba-enabled"' + (a.enabled !== false ? " checked" : "") + '><label style="margin:0">On</label></div>' +
+      '<div style="flex:0 0 auto"><button class="btn-outline btn-sm dba-remove" type="button">Remove</button></div>';
+    row.querySelector(".dba-remove").addEventListener("click", function(){
+      STATE.dbDisconnectedAlerts.splice(i, 1);
+      renderDbAlertList();
+    });
+    box.appendChild(row);
+  });
+}
+$("db-alert-add-btn").addEventListener("click", function(){
+  STATE.dbDisconnectedAlerts = STATE.dbDisconnectedAlerts || [];
+  STATE.dbDisconnectedAlerts.push({ channel: "email", destination: "", enabled: true });
+  renderDbAlertList();
+});
+$("db-alert-save-btn").addEventListener("click", function(){
+  clearFlash("db-alert-msg");
+  var rows = Array.from($("db-alert-list").children).map(function(row){
+    return {
+      channel: row.querySelector(".dba-channel").value,
+      destination: row.querySelector(".dba-dest").value.trim(),
+      enabled: row.querySelector(".dba-enabled").checked,
+    };
+  }).filter(function(a){ return a.destination; });
+  api("POST", "/admin/alert-settings", { dbDisconnectedAlerts: rows }).then(function(res){
+    if (res.body.ok){ flash("db-alert-msg", "Saved.", true); loadAlertSettings(); return; }
+    flash("db-alert-msg", res.body.error || "Could not save.");
+  });
+});
+
+/* ---------------------------------------------- per-form alert rules --- */
+var ALERT_TRIGGER_LABELS = {
+  new_submission: "New submission", daily_digest: "Daily digest", form_expiry: "Form expiry",
+};
+function loadFormAlertRules(){
+  if (!STATE.currentFormId) return;
+  api("GET", "/admin/alert-rules?form_id=" + STATE.currentFormId).then(function(res){
+    if (res.status !== 200) return;
+    STATE.formAlertRules = res.body.rules;
+    renderFormAlertRules();
+  });
+}
+function renderFormAlertRules(){
+  var box = $("form-alerts-list");
+  box.innerHTML = "";
+  (STATE.formAlertRules || []).forEach(function(rule){
+    var row = document.createElement("div");
+    row.className = "row";
+    row.style.alignItems = "flex-end";
+    row.innerHTML =
+      '<div><label>Trigger</label><select class="fa-trigger" disabled>' +
+      Object.keys(ALERT_TRIGGER_LABELS).map(function(k){
+        return '<option value="' + k + '"' + (rule.trigger_type === k ? " selected" : "") + '>' + ALERT_TRIGGER_LABELS[k] + '</option>';
+      }).join("") + '</select></div>' +
+      '<div><label>Channel</label><select class="fa-channel">' +
+      '<option value="email"' + (rule.channel === "email" ? " selected" : "") + '>Email</option>' +
+      '<option value="telegram"' + (rule.channel === "telegram" ? " selected" : "") + '>Telegram</option>' +
+      '</select></div>' +
+      '<div><label>Destination</label><input type="text" class="fa-dest" value="' + escapeHtml(rule.destination) + '"></div>' +
+      '<div class="check-row" style="flex:0 0 auto"><input type="checkbox" class="fa-enabled"' + (rule.enabled ? " checked" : "") + '><label style="margin:0">On</label></div>' +
+      '<div style="flex:0 0 auto"><button class="btn-outline btn-sm fa-save" type="button">Save</button></div>' +
+      '<div style="flex:0 0 auto"><button class="btn-outline btn-sm fa-remove" type="button">Remove</button></div>';
+    row.querySelector(".fa-save").addEventListener("click", function(){
+      clearFlash("form-alerts-msg");
+      var payload = {
+        channel: row.querySelector(".fa-channel").value,
+        destination: row.querySelector(".fa-dest").value.trim(),
+        enabled: row.querySelector(".fa-enabled").checked,
+      };
+      api("POST", "/admin/alert-rules/" + rule.id + "/update", payload).then(function(res){
+        if (!res.body.ok){ flash("form-alerts-msg", res.body.error || "Could not save."); return; }
+        loadFormAlertRules();
+      });
+    });
+    row.querySelector(".fa-remove").addEventListener("click", function(){
+      if (!confirm("Remove this alert?")) return;
+      api("POST", "/admin/alert-rules/" + rule.id + "/delete").then(function(res){
+        if (!res.body.ok){ flash("form-alerts-msg", res.body.error || "Could not remove this alert."); return; }
+        loadFormAlertRules();
+      });
+    });
+    box.appendChild(row);
+  });
+  if (!(STATE.formAlertRules || []).length){
+    box.innerHTML = '<p class="hint">No alerts set up for this form yet.</p>';
+  }
+}
+$("add-form-alert-btn").addEventListener("click", function(){
+  clearFlash("form-alerts-msg");
+  api("POST", "/admin/alert-rules", {
+    form_id: STATE.currentFormId, trigger_type: "new_submission",
+    channel: "email", destination: "", enabled: true,
+  }).then(function(res){
+    if (!res.body.ok){ flash("form-alerts-msg", res.body.error || "Could not add an alert."); return; }
+    loadFormAlertRules();
   });
 });
 
