@@ -847,6 +847,8 @@ def _submission_filter_sql(filters, prefix=""):
         conditions.append(prefix + "created_at <= %s"); params.append(filters["date_to"])
     if filters.get("status"):
         conditions.append(prefix + "status = %s"); params.append(filters["status"])
+    if filters.get("language"):
+        conditions.append(prefix + "language = %s"); params.append(filters["language"])
     if filters.get("q"):
         like = "%" + filters["q"] + "%"
         conditions.append("(%(p)sfirst_name LIKE %%s OR %(p)slast_name LIKE %%s OR "

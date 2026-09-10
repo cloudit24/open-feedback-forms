@@ -335,11 +335,16 @@ table.subs tr:last-child td{border-bottom:none}
     <!-- ---- submissions / dashboard tab ---- -->
     <div id="tab-subs" class="hidden">
       <div class="card">
-        <h2>Submissions</h2>
-        <div class="filters">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h2 style="margin:0">Submissions</h2>
+          <a class="csv-link" id="csv-link" href="/admin/export.csv" target="_blank" rel="noopener">Download filtered results as CSV</a>
+        </div>
+        <div class="filters" style="margin-top:14px">
           <div><label for="f-form">Form</label><select id="f-form"><option value="">All forms</option></select></div>
           <div><label for="f-from">From</label><input type="datetime-local" id="f-from"></div>
           <div><label for="f-to">To</label><input type="datetime-local" id="f-to"></div>
+          <div><label for="f-lang">Language</label><select id="f-lang"><option value="">All languages</option></select></div>
+          <div><label for="f-status">Status</label><select id="f-status"><option value="">All statuses</option></select></div>
           <div><label for="f-q">Search</label><input type="text" id="f-q" placeholder="name, email or reference"></div>
           <div style="flex:0 0 auto"><button class="btn-outline" id="f-apply">Apply</button></div>
           <div style="flex:0 0 auto"><button class="btn-outline" id="f-clear">Clear</button></div>
@@ -355,9 +360,6 @@ table.subs tr:last-child td{border-bottom:none}
           <span id="subs-page-info"></span>
           <button class="btn-outline btn-sm" id="subs-next">Next &rarr;</button>
         </div>
-      </div>
-      <div class="card">
-        <a class="csv-link" id="csv-link" href="/admin/export.csv" target="_blank" rel="noopener">Download filtered results as CSV</a>
       </div>
     </div>
 
@@ -1537,8 +1539,22 @@ function subsFilters(){
     form_id: $("f-form").value,
     date_from: $("f-from").value.trim(),
     date_to: $("f-to").value.trim(),
+    language: $("f-lang").value,
+    status: $("f-status").value,
     q: $("f-q").value.trim()
   };
+}
+function populateSubsFilterSelects(){
+  var langSel = $("f-lang");
+  if (langSel.options.length <= 1){
+    Object.keys(STATE.languageLabels).forEach(function(code){
+      langSel.appendChild(new Option(STATE.languageLabels[code].name, code));
+    });
+  }
+  var statusSel = $("f-status");
+  if (statusSel.options.length <= 1){
+    statusSel.appendChild(new Option("New", "new"));
+  }
 }
 function subsQueryString(extra){
   var f = subsFilters();
@@ -1548,6 +1564,7 @@ function subsQueryString(extra){
   return parts.join("&");
 }
 function loadSubmissions(){
+  populateSubsFilterSelects();
   var qs = subsQueryString({ page: STATE.subsPage });
   api("GET", "/admin/submissions" + (qs ? "?" + qs : "")).then(function(res){
     if (res.status !== 200){ return; }
@@ -1581,6 +1598,7 @@ function renderSubmissions(body){
 $("f-apply").addEventListener("click", function(){ STATE.subsPage = 1; loadSubmissions(); });
 $("f-clear").addEventListener("click", function(){
   $("f-form").value = ""; $("f-from").value = ""; $("f-to").value = ""; $("f-q").value = "";
+  $("f-lang").value = ""; $("f-status").value = "";
   STATE.subsPage = 1; loadSubmissions();
 });
 $("subs-prev").addEventListener("click", function(){ if (STATE.subsPage > 1){ STATE.subsPage--; loadSubmissions(); } });
@@ -2065,8 +2083,9 @@ function renderAdminUsers(){
     var actions = document.createElement("div");
     actions.className = "actions";
     var edit = mkBtn("Edit", function(){ openAdminUserEditor(u); });
+    var clone = mkBtn("Clone", function(){ openAdminUserEditor(null, u); });
     var del = mkBtn("Delete", function(){ deleteAdminUser(u); });
-    [edit, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    [edit, clone, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
     row.appendChild(actions);
     box.appendChild(row);
   });
@@ -2098,9 +2117,14 @@ function toggleAuFormsWrap(){
   $("au-forms-wrap").classList.toggle("hidden", !!(role && role.applies_to_all_forms));
 }
 $("au-role").addEventListener("change", toggleAuFormsWrap);
-function openAdminUserEditor(user){
+function openAdminUserEditor(user, cloneSource){
+  // Cloning behaves like "Add a user" (new username + password required)
+  // but pre-fills the role and form assignments from an existing user, so
+  // setting up several similar accounts doesn't mean re-picking the same
+  // role/forms checklist every time.
+  var prefillFrom = user || cloneSource;
   STATE.editingAdminUserId = user ? user.id : null;
-  $("admin-user-editor-title").textContent = user ? "Edit user" : "Add a user";
+  $("admin-user-editor-title").textContent = user ? "Edit user" : (cloneSource ? "Clone \"" + cloneSource.username + "\"" : "Add a user");
   $("au-username").value = user ? user.username : "";
   $("au-username").disabled = !!user;
   $("au-password").value = "";
@@ -2108,7 +2132,7 @@ function openAdminUserEditor(user){
   $("au-password-label").textContent = user ? "New password (optional)" : "Password";
   $("au-active-row").classList.toggle("hidden", !user);
   $("au-active").checked = user ? user.active : true;
-  renderAuRoleSelect(user ? user.role_id : (STATE.roles[0] && STATE.roles[0].id));
+  renderAuRoleSelect(prefillFrom ? prefillFrom.role_id : (STATE.roles[0] && STATE.roles[0].id));
   var formsBox = $("au-forms-list");
   formsBox.innerHTML = "";
   STATE.forms.forEach(function(f){
@@ -2117,12 +2141,13 @@ function openAdminUserEditor(user){
     var id = "au-form-" + f.id;
     row.innerHTML = '<input type="checkbox" id="' + id + '" class="au-form" value="' + f.id + '">' +
       '<label for="' + id + '" style="margin:0">' + escapeHtml(f.name) + '</label>';
-    row.querySelector("input").checked = !!(user && user.form_ids.indexOf(f.id) !== -1);
+    row.querySelector("input").checked = !!(prefillFrom && prefillFrom.form_ids.indexOf(f.id) !== -1);
     formsBox.appendChild(row);
   });
   toggleAuFormsWrap();
   clearFlash("admin-user-editor-msg");
   show("admin-user-editor-view");
+  if (!user) $("au-username").focus();
 }
 $("au-save").addEventListener("click", function(){
   clearFlash("admin-user-editor-msg");

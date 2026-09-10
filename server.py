@@ -1872,6 +1872,8 @@ class AdminHandler(BaseHandler):
             filters["date_to"] = normalize_filter_dt(self.query_one("date_to"), end_of_range=True)
         if self.query_one("status"):
             filters["status"] = clean(self.query_one("status"), 20)
+        if self.query_one("language"):
+            filters["language"] = clean(self.query_one("language"), 10)
         if self.query_one("q"):
             filters["q"] = clean(self.query_one("q"), 120)
         return filters
