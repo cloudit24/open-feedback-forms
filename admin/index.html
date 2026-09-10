@@ -198,6 +198,7 @@ table.subs tr:last-child td{border-bottom:none}
       <button class="tab" data-tab="subs">Submissions</button>
       <button class="tab" data-tab="config">Configuration</button>
       <button class="tab hidden" id="tab-btn-admin" data-tab="administration">Administration</button>
+      <button class="tab" data-tab="about">About us</button>
     </div>
 
     <!-- ---- dashboard tab ---- -->
@@ -538,6 +539,24 @@ table.subs tr:last-child td{border-bottom:none}
           <p class="hint">Every form picks its questions from this shared catalog instead of typing them out each time. When a field key is added to a form, its current label/type/options are copied onto that form — so editing a key here changes what a <em>future</em> "+ Add a field" picks up, but doesn't retroactively change a question a form already added. Edit that form's own copy from its Questions list if you need to change wording on a form that's already using it.</p>
           <p class="hint">New forms start with no questions at all — add whichever field keys the form actually needs from the Field keys tab or from the form's own Questions list.</p>
           <p class="hint">Deleting a field key here only removes it from the catalog going forward; forms that already added it keep their existing questions and past submissions untouched.</p>
+
+          <h2 style="margin-top:26px">Forms &amp; branding</h2>
+          <p class="hint">Each form is its own listener on its own port, with its own logo, colors, subtitle, questions and expiry date — set these from a form's <b>Edit</b> button (Questions/Branding/Alerts) and <b>Manage</b> button (name, port, languages, expiry). Point one reverse proxy or Cloudflare Tunnel hostname at each form's port to publish it.</p>
+
+          <h2 style="margin-top:26px">Languages</h2>
+          <p class="hint">Every form supports English and Arabic out of the box. Configuration → Language Labels lets you rename either one and add further languages — new ones are auto-translated via the free LibreTranslate API where possible (add an API key there for real translation instead of blank placeholders), and every label stays editable afterward. A form only offers the languages its own Language Labels checkboxes have enabled.</p>
+
+          <h2 style="margin-top:26px">Submissions &amp; export</h2>
+          <p class="hint">The Submissions tab lists every response across every form you have access to, filterable by form, date range, language, status and free text. <b>Download filtered results as CSV</b> (top of that tab) exports exactly what's currently filtered — it opens correctly in Excel with Arabic text intact.</p>
+
+          <h2 style="margin-top:26px">Roles &amp; users (Administration tab)</h2>
+          <p class="hint">Beyond the one primary admin account, you can create any number of additional users, each with a custom <b>role</b> — a checklist of permissions (view dashboard, view/export submissions, edit questions, edit branding, manage settings, manage alerts, ...) that either applies to every form or only to whichever forms that user is individually assigned. <b>Clone</b> on an existing user copies its role and form assignments as a starting point for a new one. See <code>docs/ROLES_AND_PERMISSIONS.md</code> in the repo for the full model.</p>
+
+          <h2 style="margin-top:26px">Alerts</h2>
+          <p class="hint">Configuration → Alerts holds the shared SMTP server and Telegram bot used to send every alert, plus the one global "database disconnected" alert. Each form's own Alerts panel then picks a destination for three triggers: a new submission, a daily digest, and that form reaching its expiry date.</p>
+
+          <h2 style="margin-top:26px">Appearance &amp; time</h2>
+          <p class="hint">Configuration → Appearance sets this admin panel's own primary/text colors (separate from any individual form's branding). Configuration → Time sets the timezone used to display dates here and an NTP server reference (this app can't change your OS clock itself).</p>
         </div>
       </div>
     </div>
@@ -563,6 +582,19 @@ table.subs tr:last-child td{border-bottom:none}
           <div id="admin-users-list" style="margin-top:8px"></div>
           <button class="btn" id="add-admin-user-btn" style="margin-top:14px">+ Add a user</button>
         </div>
+      </div>
+    </div>
+
+    <!-- ---- about us tab ---- -->
+    <div id="tab-about" class="hidden">
+      <div class="card" style="max-width:640px">
+        <h2>About us</h2>
+        <p class="hint">Cloud IT 24 is IT Services — developing and delivering solutions for all types of infrastructure.</p>
+        <p class="hint">Open Feedback Forms is developed by the Cloud IT 24 team.</p>
+        <p class="hint" style="margin-top:18px">
+          <a href="https://github.com/cloudit24/" target="_blank" rel="noopener">github.com/cloudit24</a><br>
+          <a href="https://github.com/shatheitguy" target="_blank" rel="noopener">github.com/shatheitguy</a>
+        </p>
       </div>
     </div>
   </div>
@@ -856,7 +888,7 @@ document.querySelectorAll(".tab").forEach(function(btn){
   btn.addEventListener("click", function(){
     document.querySelectorAll(".tab").forEach(function(b){ b.classList.remove("active"); });
     btn.classList.add("active");
-    ["dashboard","forms","subs","config","administration"].forEach(function(t){
+    ["dashboard","forms","subs","config","administration","about"].forEach(function(t){
       $("tab-" + t).classList.toggle("hidden", btn.dataset.tab !== t);
     });
     if (btn.dataset.tab === "subs") loadSubmissions();
