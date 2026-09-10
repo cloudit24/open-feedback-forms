@@ -134,10 +134,15 @@ table.subs tr:last-child td{border-bottom:none}
 .kpi{flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
 .kpi .n{font-size:26px;font-weight:800;line-height:1.1}
 .kpi .l{color:var(--muted);font-size:12.5px;margin-top:4px}
-.bar-chart{display:flex;align-items:flex-end;gap:4px;height:120px;margin-top:10px}
+.chart-wrap{display:flex;gap:8px;margin-top:10px}
+.chart-y-axis{display:flex;flex-direction:column;justify-content:space-between;align-items:flex-end;height:120px;flex:0 0 auto;padding-right:2px}
+.chart-y-axis span{font-size:9.5px;color:var(--muted);line-height:1}
+.chart-main{flex:1;min-width:0}
+.bar-chart{display:flex;align-items:flex-end;gap:4px;height:120px;border-left:1px solid var(--line);padding-left:6px;position:relative}
+.bar-chart::before{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
 .bar-chart .bar{flex:1;background:var(--yellow);border-radius:3px 3px 0 0;min-height:2px;position:relative}
 .bar-chart .bar:hover{background:var(--yellow-deep)}
-.bar-labels{display:flex;gap:4px;margin-top:4px}
+.bar-labels{display:flex;gap:4px;margin-top:4px;padding-left:7px}
 .bar-labels span{flex:1;text-align:center;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .breakdown-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
 .breakdown-row:last-child{border-bottom:none}
@@ -198,6 +203,7 @@ table.subs tr:last-child td{border-bottom:none}
       <button class="tab" data-tab="subs">Submissions</button>
       <button class="tab" data-tab="config">Configuration</button>
       <button class="tab hidden" id="tab-btn-admin" data-tab="administration">Administration</button>
+      <button class="tab" data-tab="help">Help</button>
       <button class="tab" data-tab="about">About us</button>
     </div>
 
@@ -219,8 +225,13 @@ table.subs tr:last-child td{border-bottom:none}
           <div class="kpi"><div class="n" id="kpi-avgday">—</div><div class="l" id="kpi-avgday-label">Avg. per active day</div></div>
         </div>
         <h2 style="font-size:14px" id="dash-trend-title">Submissions per day</h2>
-        <div class="bar-chart" id="dash-trend-bars"></div>
-        <div class="bar-labels" id="dash-trend-labels"></div>
+        <div class="chart-wrap">
+          <div class="chart-y-axis" id="dash-trend-yaxis"></div>
+          <div class="chart-main">
+            <div class="bar-chart" id="dash-trend-bars"></div>
+            <div class="bar-labels" id="dash-trend-labels"></div>
+          </div>
+        </div>
         <p class="hint" id="dash-empty" style="margin-top:10px">No submissions match these filters yet.</p>
       </div>
       <div class="row">
@@ -243,9 +254,24 @@ table.subs tr:last-child td{border-bottom:none}
         <div class="card">
           <h2>Feedback forms</h2>
           <p class="hint">Each form runs as its own listener on its own port — point one Cloudflare Tunnel hostname at each port to publish it. Give a form a specific port, or leave it blank to auto-assign one.</p>
+          <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
+            <label for="forms-sort" style="margin:0;white-space:nowrap">Sort by</label>
+            <select id="forms-sort" style="max-width:220px">
+              <option value="name-asc">Name (A–Z)</option>
+              <option value="name-desc">Name (Z–A)</option>
+              <option value="date-desc">Newest first</option>
+              <option value="date-asc">Oldest first</option>
+            </select>
+          </div>
           <div id="forms-list"></div>
           <div class="msg bad" id="forms-msg"></div>
           <button class="btn" id="add-form-btn" style="margin-top:14px">+ Add a form</button>
+        </div>
+
+        <div class="card" id="archived-forms-card" style="display:none">
+          <h2>Archived forms</h2>
+          <p class="hint">Disabled forms land here instead of cluttering the active list above — no longer accepting submissions, but everything they collected is untouched. Restore one to bring it back, or permanently delete it once you're sure you don't need it (or its data) anymore.</p>
+          <div id="archived-forms-list"></div>
         </div>
       </div>
 
@@ -374,7 +400,6 @@ table.subs tr:last-child td{border-bottom:none}
           <button class="subtab" data-subtab="cfgtheme">Appearance</button>
           <button class="subtab" data-subtab="cfgtime">Time</button>
           <button class="subtab" data-subtab="cfgalerts">Alerts</button>
-          <button class="subtab" data-subtab="cfghelp">Help</button>
         </div>
 
         <!-- database connection -->
@@ -531,33 +556,6 @@ table.subs tr:last-child td{border-bottom:none}
           <div class="msg" id="db-alert-msg" style="margin-top:10px"></div>
           <button class="btn" id="db-alert-save-btn" style="margin-top:6px">Save</button>
         </div>
-
-        <!-- help -->
-        <div id="sub-cfghelp" class="hidden">
-          <h2>What are field keys?</h2>
-          <p class="hint">A field key is one reusable question definition — its key (a stable internal id like <code>nationality</code>), its English and Arabic labels, its type (short text, dropdown, rating...), and its options if it's a dropdown.</p>
-          <p class="hint">Every form picks its questions from this shared catalog instead of typing them out each time. When a field key is added to a form, its current label/type/options are copied onto that form — so editing a key here changes what a <em>future</em> "+ Add a field" picks up, but doesn't retroactively change a question a form already added. Edit that form's own copy from its Questions list if you need to change wording on a form that's already using it.</p>
-          <p class="hint">New forms start with no questions at all — add whichever field keys the form actually needs from the Field keys tab or from the form's own Questions list.</p>
-          <p class="hint">Deleting a field key here only removes it from the catalog going forward; forms that already added it keep their existing questions and past submissions untouched.</p>
-
-          <h2 style="margin-top:26px">Forms &amp; branding</h2>
-          <p class="hint">Each form is its own listener on its own port, with its own logo, colors, subtitle, questions and expiry date — set these from a form's <b>Edit</b> button (Questions/Branding/Alerts) and <b>Manage</b> button (name, port, languages, expiry). Point one reverse proxy or Cloudflare Tunnel hostname at each form's port to publish it.</p>
-
-          <h2 style="margin-top:26px">Languages</h2>
-          <p class="hint">Every form supports English and Arabic out of the box. Configuration → Language Labels lets you rename either one and add further languages — new ones are auto-translated via the free LibreTranslate API where possible (add an API key there for real translation instead of blank placeholders), and every label stays editable afterward. A form only offers the languages its own Language Labels checkboxes have enabled.</p>
-
-          <h2 style="margin-top:26px">Submissions &amp; export</h2>
-          <p class="hint">The Submissions tab lists every response across every form you have access to, filterable by form, date range, language, status and free text. <b>Download filtered results as CSV</b> (top of that tab) exports exactly what's currently filtered — it opens correctly in Excel with Arabic text intact.</p>
-
-          <h2 style="margin-top:26px">Roles &amp; users (Administration tab)</h2>
-          <p class="hint">Beyond the one primary admin account, you can create any number of additional users, each with a custom <b>role</b> — a checklist of permissions (view dashboard, view/export submissions, edit questions, edit branding, manage settings, manage alerts, ...) that either applies to every form or only to whichever forms that user is individually assigned. <b>Clone</b> on an existing user copies its role and form assignments as a starting point for a new one. See <code>docs/ROLES_AND_PERMISSIONS.md</code> in the repo for the full model.</p>
-
-          <h2 style="margin-top:26px">Alerts</h2>
-          <p class="hint">Configuration → Alerts holds the shared SMTP server and Telegram bot used to send every alert, plus the one global "database disconnected" alert. Each form's own Alerts panel then picks a destination for three triggers: a new submission, a daily digest, and that form reaching its expiry date.</p>
-
-          <h2 style="margin-top:26px">Appearance &amp; time</h2>
-          <p class="hint">Configuration → Appearance sets this admin panel's own primary/text colors (separate from any individual form's branding). Configuration → Time sets the timezone used to display dates here and an NTP server reference (this app can't change your OS clock itself).</p>
-        </div>
       </div>
     </div>
 
@@ -585,15 +583,63 @@ table.subs tr:last-child td{border-bottom:none}
       </div>
     </div>
 
+    <!-- ---- help tab ---- -->
+    <div id="tab-help" class="hidden">
+      <div class="card" style="max-width:720px">
+        <h2>What are field keys?</h2>
+        <p class="hint">A field key is one reusable question definition — its key (a stable internal id like <code>nationality</code>), its English and Arabic labels, its type (short text, dropdown, rating...), and its options if it's a dropdown.</p>
+        <p class="hint">Every form picks its questions from this shared catalog instead of typing them out each time. When a field key is added to a form, its current label/type/options are copied onto that form — so editing a key here changes what a <em>future</em> "+ Add a field" picks up, but doesn't retroactively change a question a form already added. Edit that form's own copy from its Questions list if you need to change wording on a form that's already using it.</p>
+        <p class="hint">New forms start with no questions at all — add whichever field keys the form actually needs from the Field keys tab or from the form's own Questions list.</p>
+        <p class="hint">Deleting a field key here only removes it from the catalog going forward; forms that already added it keep their existing questions and past submissions untouched.</p>
+
+        <h2 style="margin-top:26px">Forms &amp; branding</h2>
+        <p class="hint">Each form is its own listener on its own port, with its own logo, colors, subtitle, questions and expiry date — set these from a form's <b>Edit</b> button (Questions/Branding/Alerts) and <b>Manage</b> button (name, port, languages, expiry). Point one reverse proxy or Cloudflare Tunnel hostname at each form's port to publish it. A disabled form moves to <b>Archived forms</b> at the bottom of the Forms tab — restore it any time, or permanently delete it (and everything it collected) once you're sure.</p>
+
+        <h2 style="margin-top:26px">Languages</h2>
+        <p class="hint">Every form supports English and Arabic out of the box. Configuration → Language Labels lets you rename either one and add further languages — new ones are auto-translated via the free LibreTranslate API where possible (add an API key there for real translation instead of blank placeholders), and every label stays editable afterward. A form only offers the languages its own Language Labels checkboxes have enabled.</p>
+
+        <h2 style="margin-top:26px">Dashboard &amp; submissions</h2>
+        <p class="hint">The Dashboard's trend chart shows daily bars by default; pick both a From and To date within a 2-day span and it switches to an hourly 24h view instead, so you can see exactly when submissions came in on a given day. The Submissions tab lists every response you have access to, filterable by form, date range, language, status and free text — <b>Download filtered results as CSV</b> (top of that tab) exports exactly what's currently filtered, and opens correctly in Excel with Arabic text intact.</p>
+
+        <h2 style="margin-top:26px">Roles &amp; users (Administration tab)</h2>
+        <p class="hint">Beyond the one primary admin account, you can create any number of additional users, each with a custom <b>role</b> — a checklist of permissions (view dashboard, view/export submissions, edit questions, edit branding, manage settings, manage alerts, ...) that either applies to every form or only to whichever forms that user is individually assigned. <b>Clone</b> on an existing user copies its role and form assignments as a starting point for a new one. See <code>docs/ROLES_AND_PERMISSIONS.md</code> in the repo for the full model.</p>
+
+        <h2 style="margin-top:26px">Alerts</h2>
+        <p class="hint">Configuration → Alerts holds the shared SMTP server and Telegram bot used to send every alert, plus the one global "database disconnected" alert. Each form's own Alerts panel then picks a destination for any of three triggers: a new submission, a daily digest, and that form reaching its expiry date — add as many rules as you need, mixing channels and triggers freely.</p>
+
+        <h2 style="margin-top:26px">Appearance &amp; time</h2>
+        <p class="hint">Configuration → Appearance sets this admin panel's own primary/text colors (separate from any individual form's branding). Configuration → Time sets the timezone used to display dates here and an NTP server reference (this app can't change your OS clock itself).</p>
+      </div>
+    </div>
+
     <!-- ---- about us tab ---- -->
     <div id="tab-about" class="hidden">
-      <div class="card" style="max-width:640px">
-        <h2>About us</h2>
+      <div class="card" style="max-width:720px">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <h2 style="margin:0">About us</h2>
+          <span class="hint" id="about-version" style="margin:0"></span>
+        </div>
         <p class="hint">Cloud IT 24 is IT Services — developing and delivering solutions for all types of infrastructure.</p>
         <p class="hint">Open Feedback Forms is developed by the Cloud IT 24 team.</p>
-        <p class="hint" style="margin-top:18px">
+
+        <h2 style="margin-top:26px;font-size:15px">What this app does</h2>
+        <p class="hint">A self-hosted, bilingual feedback form platform — no external services required beyond the MariaDB database you point it at. Run any number of independently branded forms, each on its own port, managed from one admin panel.</p>
+
+        <h2 style="margin-top:22px;font-size:15px">Highlights</h2>
+        <ul class="hint" style="margin:0;padding-left:18px;line-height:1.9">
+          <li>English/Arabic out of the box, plus any language you add — auto-translated via LibreTranslate, RTL-aware throughout</li>
+          <li>Per-form branding: logo, colors, subtitle, custom questions, expiry date</li>
+          <li>Custom roles built from a permission checklist — full access, one form only, read-only, whatever you need</li>
+          <li>SMTP and Telegram alerts: new submissions, daily digests, database-disconnected, form expiry</li>
+          <li>Dashboard with a daily or hourly (24h) submissions trend, filterable by form/date/language/status</li>
+          <li>CSV export, Docker deployment, and a one-line installer</li>
+        </ul>
+
+        <h2 style="margin-top:22px;font-size:15px">Links</h2>
+        <p class="hint">
           <a href="https://github.com/cloudit24/" target="_blank" rel="noopener">github.com/cloudit24</a><br>
-          <a href="https://github.com/shatheitguy" target="_blank" rel="noopener">github.com/shatheitguy</a>
+          <a href="https://github.com/shatheitguy" target="_blank" rel="noopener">github.com/shatheitguy</a><br>
+          <a href="https://github.com/cloudit24/open-feedback-forms" target="_blank" rel="noopener">github.com/cloudit24/open-feedback-forms</a> — source, docs, and <code>docs/ROLES_AND_PERMISSIONS.md</code>
         </p>
       </div>
     </div>
@@ -816,6 +862,9 @@ function boot(){
     STATE.isBootstrap = (s.permissions === "all");
     STATE.permissions = s.permissions;
     STATE.allowedForms = s.allowedForms;
+    STATE.version = s.version || "";
+    var aboutVersion = document.getElementById("about-version");
+    if (aboutVersion) aboutVersion.textContent = STATE.version ? ("v" + STATE.version) : "";
     applyPermissionVisibility();
     show("dash-view");
     renderStatus(s);
@@ -888,7 +937,7 @@ document.querySelectorAll(".tab").forEach(function(btn){
   btn.addEventListener("click", function(){
     document.querySelectorAll(".tab").forEach(function(b){ b.classList.remove("active"); });
     btn.classList.add("active");
-    ["dashboard","forms","subs","config","administration","about"].forEach(function(t){
+    ["dashboard","forms","subs","config","administration","help","about"].forEach(function(t){
       $("tab-" + t).classList.toggle("hidden", btn.dataset.tab !== t);
     });
     if (btn.dataset.tab === "subs") loadSubmissions();
@@ -981,10 +1030,24 @@ function loadForms(){
     }
   });
 }
+function sortForms(list){
+  var mode = $("forms-sort").value;
+  var sorted = list.slice();
+  sorted.sort(function(a, b){
+    if (mode === "name-asc") return a.name.localeCompare(b.name);
+    if (mode === "name-desc") return b.name.localeCompare(a.name);
+    var da = a.created_at || "", db = b.created_at || "";
+    return mode === "date-asc" ? da.localeCompare(db) : db.localeCompare(da);
+  });
+  return sorted;
+}
 function renderForms(){
   var box = $("forms-list");
   box.innerHTML = "";
-  STATE.forms.forEach(function(f){
+  var active = STATE.forms.filter(function(f){ return f.active; });
+  var archived = STATE.forms.filter(function(f){ return !f.active; });
+
+  sortForms(active).forEach(function(f){
     var row = document.createElement("div");
     row.className = "form-row";
     var expired = f.expiry_date && f.expiry_date <= new Date().toISOString().slice(0, 10);
@@ -1006,16 +1069,60 @@ function renderForms(){
       buttons.push(mkBtn("Manage", function(){ openFormEditor(f); }));       // name, port, languages
     }
     if (hasPermission("manage_forms")){
-      buttons.push(mkBtn(f.active ? "Disable" : "Enable", function(){ toggleFormActive(f); }));
+      buttons.push(mkBtn("Archive", function(){ toggleFormActive(f); }));
     }
     buttons.forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
     row.appendChild(actions);
     box.appendChild(row);
   });
-  if (!STATE.forms.length){
-    box.innerHTML = '<p class="hint">No forms yet — add one to start collecting feedback.</p>';
+  if (!active.length){
+    box.innerHTML = '<p class="hint">No active forms — add one to start collecting feedback.</p>';
   }
+
+  $("archived-forms-card").style.display = archived.length ? "" : "none";
+  var archBox = $("archived-forms-list");
+  archBox.innerHTML = "";
+  sortForms(archived).forEach(function(f){
+    var row = document.createElement("div");
+    row.className = "form-row";
+    row.innerHTML =
+      '<div class="info"><b>' + escapeHtml(f.name) + '</b>' +
+      '<div class="meta">port <code>' + f.port + '</code> · <span class="badge off">archived</span></div></div>';
+    var actions = document.createElement("div");
+    actions.className = "actions";
+    var buttons = [];
+    if (hasAnyPermission(["manage_forms", "manage_form_settings"], f.id)){
+      buttons.push(mkBtn("Manage", function(){ openFormEditor(f); }));
+    }
+    if (hasPermission("manage_forms")){
+      buttons.push(mkBtn("Restore", function(){ toggleFormActive(f); }));
+      var exportLink = document.createElement("a");
+      exportLink.textContent = "Export CSV";
+      exportLink.href = "/admin/export.csv?form_id=" + f.id;
+      exportLink.target = "_blank"; exportLink.rel = "noopener";
+      buttons.push(exportLink);
+      buttons.push(mkBtn("Delete permanently", function(){ destroyForm(f); }));
+    }
+    buttons.forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    if (hasPermission("manage_forms")) actions.lastChild.classList.add("btn-danger");   // "Delete permanently" is always the last button added in that case
+    row.appendChild(actions);
+    archBox.appendChild(row);
+  });
 }
+function destroyForm(f){
+  var ok = confirm(
+    'Permanently delete "' + f.name + '"?\n\n' +
+    'This removes the form and EVERY submission it ever collected — there is no undo. ' +
+    'Use "Export CSV" first if you want to keep a copy.\n\n' +
+    'Type-check: click OK only if you\'re certain you no longer need this data.'
+  );
+  if (!ok) return;
+  api("POST", "/admin/forms/" + f.id + "/destroy").then(function(res){
+    if (!res.body.ok){ flash("forms-msg", res.body.error || "Could not delete this form."); return; }
+    loadForms();
+  });
+}
+$("forms-sort").addEventListener("change", renderForms);
 function populateFormSelects(){
   var selects = [$("lib-form-select"), $("f-form"), $("dash-form")];
   var filterIds = { "f-form": true, "dash-form": true };
@@ -1086,7 +1193,7 @@ $("fd-toggle").addEventListener("click", function(){
   if (f) toggleFormActive(f);
 });
 function toggleFormActive(f){
-  if (f.active && !confirm('Disable "' + f.name + '"? Its listener stops immediately; past submissions are kept.')) return;
+  if (f.active && !confirm('Archive "' + f.name + '"? Its listener stops immediately and it moves to Archived forms below — past submissions are kept, and you can restore it or permanently delete it from there.')) return;
   api("POST", "/admin/forms/" + f.id + "/" + (f.active ? "delete" : "restore")).then(function(res){
     if (!res.body.ok){ flash("forms-msg", res.body.error || "Could not update the form."); return; }
     loadForms();
@@ -1475,6 +1582,18 @@ function renderDashboard(s){
   var bars = $("dash-trend-bars"), labels = $("dash-trend-labels");
   bars.innerHTML = ""; labels.innerHTML = "";
   var maxN = Math.max(1, Math.max.apply(null, s.trend.map(function(d){ return d.n; }).concat([0])));
+
+  // Y-axis: count scale, top to bottom (4 ticks + zero) so the chart can be
+  // read without hovering every bar.
+  var yAxis = $("dash-trend-yaxis");
+  yAxis.innerHTML = "";
+  var ticks = 4;
+  for (var t = ticks; t >= 0; t--){
+    var val = Math.round((maxN * t) / ticks);
+    var tick = document.createElement("span");
+    tick.textContent = val;
+    yAxis.appendChild(tick);
+  }
   s.trend.forEach(function(d, i){
     var bar = document.createElement("div");
     bar.className = "bar";
@@ -2360,7 +2479,7 @@ function renderFormAlertRules(){
     row.className = "row";
     row.style.alignItems = "flex-end";
     row.innerHTML =
-      '<div><label>Trigger</label><select class="fa-trigger" disabled>' +
+      '<div><label>Trigger</label><select class="fa-trigger">' +
       Object.keys(ALERT_TRIGGER_LABELS).map(function(k){
         return '<option value="' + k + '"' + (rule.trigger_type === k ? " selected" : "") + '>' + ALERT_TRIGGER_LABELS[k] + '</option>';
       }).join("") + '</select></div>' +
@@ -2375,6 +2494,7 @@ function renderFormAlertRules(){
     row.querySelector(".fa-save").addEventListener("click", function(){
       clearFlash("form-alerts-msg");
       var payload = {
+        trigger_type: row.querySelector(".fa-trigger").value,
         channel: row.querySelector(".fa-channel").value,
         destination: row.querySelector(".fa-dest").value.trim(),
         enabled: row.querySelector(".fa-enabled").checked,
@@ -2399,8 +2519,10 @@ function renderFormAlertRules(){
 }
 $("add-form-alert-btn").addEventListener("click", function(){
   clearFlash("form-alerts-msg");
+  var used = (STATE.formAlertRules || []).map(function(r){ return r.trigger_type; });
+  var nextTrigger = Object.keys(ALERT_TRIGGER_LABELS).find(function(k){ return used.indexOf(k) === -1; }) || "new_submission";
   api("POST", "/admin/alert-rules", {
-    form_id: STATE.currentFormId, trigger_type: "new_submission",
+    form_id: STATE.currentFormId, trigger_type: nextTrigger,
     channel: "email", destination: "", enabled: true,
   }).then(function(res){
     if (!res.body.ok){ flash("form-alerts-msg", res.body.error || "Could not add an alert."); return; }

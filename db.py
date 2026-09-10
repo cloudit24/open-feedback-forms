@@ -647,6 +647,31 @@ def set_form_active(form_id, active):
         conn.close()
 
 
+def delete_form_permanently(form_id):
+    """Irreversible — every submission, question and alert rule this form
+    ever had goes with it. Only ever called on a form that's already
+    archived (inactive); server.py enforces that and the CSV-export warning
+    before this is reached. Returns the logo_filename (if any) so the
+    caller can remove that file from disk too — this function only touches
+    the database."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT logo_filename FROM forms WHERE id=%s", (form_id,))
+        row = cur.fetchone()
+        logo_filename = row["logo_filename"] if row else None
+        cur.execute("DELETE FROM feedback WHERE form_id=%s", (form_id,))
+        cur.execute("DELETE FROM form_fields WHERE form_id=%s", (form_id,))
+        cur.execute("DELETE FROM alert_rules WHERE form_id=%s", (form_id,))
+        cur.execute("DELETE FROM admin_user_forms WHERE form_id=%s", (form_id,))
+        cur.execute("DELETE FROM forms WHERE id=%s", (form_id,))
+        conn.commit()
+        cur.close()
+        return logo_filename
+    finally:
+        conn.close()
+
+
 def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
                      subtitle_en=None, subtitle_ar=None, logo_filename=None, clear_logo=False):
     conn = _conn()
@@ -1246,11 +1271,13 @@ def create_alert_rule(form_id, trigger_type, channel, destination, enabled=True)
         conn.close()
 
 
-def update_alert_rule(rule_id, channel=None, destination=None, enabled=None):
+def update_alert_rule(rule_id, trigger_type=None, channel=None, destination=None, enabled=None):
     conn = _conn()
     try:
         cur = conn.cursor()
         sets, params = [], []
+        if trigger_type is not None:
+            sets.append("trigger_type=%s"); params.append(trigger_type)
         if channel is not None:
             sets.append("channel=%s"); params.append(channel)
         if destination is not None:

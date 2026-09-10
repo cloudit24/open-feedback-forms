@@ -881,13 +881,15 @@ class AdminHandler(BaseHandler):
                 return self.post_admin_user_update(user_id)
             return self.post_admin_user_delete(user_id)
 
-        m = re.match(r"^/admin/forms/(\d+)/(update|delete|restore)$", path)
+        m = re.match(r"^/admin/forms/(\d+)/(update|delete|restore|destroy)$", path)
         if m:
             form_id, action = int(m.group(1)), m.group(2)
             if action == "update":
                 return self.post_form_update(form_id)
             if action == "restore":
                 return self.post_form_restore(form_id)
+            if action == "destroy":
+                return self.post_form_destroy(form_id)
             return self.post_form_delete(form_id)
 
         m = re.match(r"^/admin/forms/(\d+)/branding$", path)
@@ -1247,12 +1249,15 @@ class AdminHandler(BaseHandler):
         if not self.require_permission("manage_form_alerts", existing["form_id"]):
             return
         body = self.read_json_body() or {}
+        trigger_type = body.get("trigger_type") if body.get("trigger_type") in \
+            ("new_submission", "daily_digest", "form_expiry") else None
         channel = body.get("channel") if body.get("channel") in ("email", "telegram") else None
         # Empty destination is allowed (see _validate_alert_rule_payload) —
         # the rule just does nothing until filled in.
         destination = clean(body.get("destination"), 200) if "destination" in body else None
         enabled = bool(body.get("enabled")) if "enabled" in body else None
-        db.update_alert_rule(rule_id, channel=channel, destination=destination, enabled=enabled)
+        db.update_alert_rule(rule_id, trigger_type=trigger_type, channel=channel,
+                             destination=destination, enabled=enabled)
         return self.send_json(200, {"ok": True})
 
     def post_alert_rule_delete(self, rule_id):
@@ -1324,6 +1329,7 @@ class AdminHandler(BaseHandler):
             "lang_en": f["lang_en"], "lang_ar": f["lang_ar"],
             "enabled_extra_langs": f.get("enabled_extra_langs") or [],
             "expiry_date": str(f["expiry_date"]) if f.get("expiry_date") else None,
+            "created_at": str(f["created_at"]) if f.get("created_at") else None,
         } for f in forms]
         return self.send_json(200, {"ok": True, "forms": out, "adminPort": ADMIN_PORT})
 
@@ -1464,6 +1470,30 @@ class AdminHandler(BaseHandler):
                 "error": "port %d is no longer free on this machine — edit this form's port first" % form["port"]})
         db.set_form_active(form_id, True)
         FORMS.sync()
+        return self.send_json(200, {"ok": True})
+
+    def post_form_destroy(self, form_id):
+        """Permanent delete — only for a form that's already archived
+        (inactive). The admin UI requires an explicit confirmation and
+        offers a CSV export first; this endpoint itself just enforces the
+        one hard rule (must already be archived) and does the irreversible
+        part."""
+        if not self.require_permission("manage_forms"):
+            return
+        form = db.get_form(form_id)
+        if not form:
+            return self.send_json(404, {"ok": False, "error": "form not found"})
+        if form["active"]:
+            return self.send_json(400, {"ok": False,
+                "error": "archive this form first (Disable) before permanently deleting it"})
+        logo_filename = db.delete_form_permanently(form_id)
+        if logo_filename:
+            try:
+                os.remove(os.path.join(config_store.uploads_dir(), logo_filename))
+            except OSError:
+                pass
+        FORMS.sync()
+        log("form permanently deleted: %s (#%d)" % (form["name"], form_id))
         return self.send_json(200, {"ok": True})
 
     # ---- branding ---------------------------------------------------------
