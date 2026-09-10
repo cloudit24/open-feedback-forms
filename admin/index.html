@@ -142,6 +142,11 @@ table.subs tr:last-child td{border-bottom:none}
 .bar-chart::before{content:"";position:absolute;left:0;right:0;bottom:0;height:1px;background:var(--line)}
 .bar-chart .bar{flex:1;background:var(--yellow);border-radius:3px 3px 0 0;min-height:2px;position:relative}
 .bar-chart .bar:hover{background:var(--yellow-deep)}
+.line-chart{width:100%;height:120px;border-left:1px solid var(--line);border-bottom:1px solid var(--line);display:block}
+.line-chart .trend-area{fill:var(--yellow);opacity:.15}
+.line-chart .trend-line{fill:none;stroke:var(--yellow-deep);stroke-width:2}
+.line-chart .trend-dot{fill:var(--yellow-deep);cursor:pointer}
+.line-chart .trend-dot:hover{fill:var(--yellow)}
 .bar-labels{display:flex;gap:4px;margin-top:4px;padding-left:7px}
 .bar-labels{position:relative}
 .bar-labels span{flex:1;text-align:center;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:visible;position:relative}
@@ -225,11 +230,11 @@ table.subs tr:last-child td{border-bottom:none}
           <div class="kpi"><div class="n" id="kpi-forms">—</div><div class="l">Forms with submissions</div></div>
           <div class="kpi"><div class="n" id="kpi-avgday">—</div><div class="l" id="kpi-avgday-label">Avg. per active day</div></div>
         </div>
-        <h2 style="font-size:14px" id="dash-trend-title">Submissions per day</h2>
+        <h2 style="font-size:14px" id="dash-trend-title">Submissions trend</h2>
         <div class="chart-wrap">
           <div class="chart-y-axis" id="dash-trend-yaxis"></div>
           <div class="chart-main">
-            <div class="bar-chart" id="dash-trend-bars"></div>
+            <svg id="dash-trend-svg" class="line-chart" viewBox="0 0 1000 120" preserveAspectRatio="none"></svg>
             <div class="bar-labels" id="dash-trend-labels"></div>
           </div>
         </div>
@@ -1580,16 +1585,17 @@ function renderDashboard(s){
   var activePeriods = s.trend.filter(function(d){ return d.n > 0; }).length;
   $("kpi-avgday").textContent = activePeriods ? (s.total / activePeriods).toFixed(1) : "0";
   $("kpi-avgday-label").textContent = isHourly ? "Avg. per active hour" : "Avg. per active day";
-  $("dash-trend-title").textContent = isHourly ? "Submissions per hour (24h view)" : "Submissions per day";
+  $("dash-trend-title").textContent = isHourly ? "Submissions trend — hourly (24h view)" : "Submissions trend";
 
   $("dash-empty").classList.toggle("hidden", s.total > 0);
 
-  var bars = $("dash-trend-bars"), labels = $("dash-trend-labels");
-  bars.innerHTML = ""; labels.innerHTML = "";
+  var svg = $("dash-trend-svg"), labels = $("dash-trend-labels");
+  var svgNS = "http://www.w3.org/2000/svg";
+  svg.innerHTML = ""; labels.innerHTML = "";
   var maxN = Math.max(1, Math.max.apply(null, s.trend.map(function(d){ return d.n; }).concat([0])));
 
   // Y-axis: count scale, top to bottom (4 ticks + zero) so the chart can be
-  // read without hovering every bar.
+  // read without hovering every point.
   var yAxis = $("dash-trend-yaxis");
   yAxis.innerHTML = "";
   var ticks = 4;
@@ -1599,22 +1605,56 @@ function renderDashboard(s){
     tick.textContent = val;
     yAxis.appendChild(tick);
   }
+
+  function hourLabelFor(d){
+    var hourLabel = d.date.slice(11, 16);   // "HH:00:00" -> "HH:00", UTC bucket edge
+    try {
+      hourLabel = new Intl.DateTimeFormat(undefined, {
+        timeZone: STATE.timezone, hour: "2-digit", minute: "2-digit", hour12: false
+      }).format(new Date(d.date.replace(" ", "T") + "Z"));
+    } catch (e){ /* keep the UTC fallback above */ }
+    return hourLabel;
+  }
+
+  var n = s.trend.length;
+  var W = 1000, H = 120, PAD = 6;
+  if (n > 0){
+    var pts = s.trend.map(function(d, i){
+      var x = n === 1 ? W / 2 : (i / (n - 1)) * W;
+      var y = H - PAD - (d.n / maxN) * (H - PAD * 2);
+      return { x: x, y: y, d: d };
+    });
+    var lineD = pts.map(function(p, i){ return (i === 0 ? "M" : "L") + p.x.toFixed(1) + "," + p.y.toFixed(1); }).join(" ");
+    var areaD = lineD + " L" + pts[pts.length - 1].x.toFixed(1) + "," + H + " L" + pts[0].x.toFixed(1) + "," + H + " Z";
+
+    var area = document.createElementNS(svgNS, "path");
+    area.setAttribute("d", areaD);
+    area.setAttribute("class", "trend-area");
+    svg.appendChild(area);
+
+    var line = document.createElementNS(svgNS, "path");
+    line.setAttribute("d", lineD);
+    line.setAttribute("class", "trend-line");
+    svg.appendChild(line);
+
+    pts.forEach(function(p){
+      var dot = document.createElementNS(svgNS, "circle");
+      dot.setAttribute("cx", p.x.toFixed(1));
+      dot.setAttribute("cy", p.y.toFixed(1));
+      dot.setAttribute("r", 3);
+      dot.setAttribute("class", "trend-dot");
+      var title = document.createElementNS(svgNS, "title");
+      title.textContent = (isHourly ? hourLabelFor(p.d) : p.d.date) + ": " + p.d.n;
+      dot.appendChild(title);
+      svg.appendChild(dot);
+    });
+  }
+
   s.trend.forEach(function(d, i){
-    var bar = document.createElement("div");
-    bar.className = "bar";
-    bar.style.height = Math.max(2, Math.round((d.n / maxN) * 100)) + "px";
     var lab = document.createElement("span");
     if (isHourly){
-      var hourLabel = d.date.slice(11, 16);   // "HH:00:00" -> "HH:00", UTC bucket edge
-      try {
-        hourLabel = new Intl.DateTimeFormat(undefined, {
-          timeZone: STATE.timezone, hour: "2-digit", minute: "2-digit", hour12: false
-        }).format(new Date(d.date.replace(" ", "T") + "Z"));
-      } catch (e){ /* keep the UTC fallback above */ }
-      bar.title = hourLabel + ": " + d.n;
-      lab.textContent = (i % 3 === 0) ? hourLabel : "";   // thin out labels, 48 bars is too crowded otherwise
+      lab.textContent = (i % 3 === 0) ? hourLabelFor(d) : "";   // thin out labels, 48 points is too crowded otherwise
     } else {
-      bar.title = d.date + ": " + d.n;
       // Zero-filled days mean this can now be a long timeline (weeks/months) —
       // thin labels so they don't overlap/truncate, always keeping the first
       // and last so the visible range is still clear at a glance.
@@ -1622,7 +1662,6 @@ function renderDashboard(s){
       var isEdge = (i === 0 || i === s.trend.length - 1);
       lab.textContent = (isEdge || i % dayStep === 0) ? d.date.slice(5) : "";
     }
-    bars.appendChild(bar);
     labels.appendChild(lab);
   });
 
