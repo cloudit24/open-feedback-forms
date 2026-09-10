@@ -33,13 +33,31 @@ fi
 if [ -f .env ]; then
     echo ".env already exists — leaving it as-is. Delete it first to re-run this wizard."
 else
+    # When run as `curl ... | sh`, stdin IS the script — a plain `read` would
+    # swallow the next lines of this file instead of waiting for the keyboard.
+    # Always prompt via the terminal directly; fall back to "skip" when there
+    # is no terminal at all (CI, or a fully unattended run).
+    if [ -r /dev/tty ]; then
+        ask() { printf "%s" "$1" > /dev/tty; read -r "$2" < /dev/tty; }
+        ask_secret() {
+            printf "%s" "$1" > /dev/tty
+            stty -echo < /dev/tty 2>/dev/null
+            read -r "$2" < /dev/tty
+            stty echo < /dev/tty 2>/dev/null
+            echo > /dev/tty
+        }
+    else
+        echo "No terminal available — skipping the database wizard (set it up from /admin later)."
+        ask() { eval "$2=''"; }
+        ask_secret() { eval "$2=''"; }
+    fi
+
     echo
     echo "Database setup:"
     echo "  1) Install a bundled MariaDB container for me (easiest)"
     echo "  2) Connect to a database I already have"
     echo "  3) Skip for now — I'll set it up later from the admin panel"
-    printf "Choose [1/2/3]: "
-    read -r db_choice
+    ask "Choose [1/2/3]: " db_choice
 
     cp .env.example .env
 
@@ -67,12 +85,12 @@ else
             NEEDS_BOOTSTRAP=1
             ;;
         2)
-            printf "Database host: "; read -r db_host
-            printf "Port [3306]: "; read -r db_port
+            ask "Database host: " db_host
+            ask "Port [3306]: " db_port
             db_port=${db_port:-3306}
-            printf "Database name: "; read -r db_name
-            printf "Username: "; read -r db_user
-            printf "Password: "; stty -echo 2>/dev/null; read -r db_pass; stty echo 2>/dev/null; echo
+            ask "Database name: " db_name
+            ask "Username: " db_user
+            ask_secret "Password: " db_pass
             {
                 echo "OFF_DB_HOST=$db_host"
                 echo "OFF_DB_PORT=$db_port"
