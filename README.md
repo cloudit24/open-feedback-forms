@@ -1,5 +1,7 @@
 # Open Feedback Forms
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A self-hosted, bilingual (English / Arabic) fan/customer feedback form —
 built for sports clubs, but generic enough for any organization. Runs any
 number of forms, each with its own port, its own logo/colors/name, and its
@@ -214,3 +216,9 @@ Cloudit24
 
 Shatheitguy
 [https://github.com/shatheitguy](https://github.com/shatheitguy)
+
+## License
+
+Released under the [MIT License](LICENSE) — free to use, modify and
+self-host, including commercially, with no warranty. See the [LICENSE](LICENSE)
+file for the full text.
