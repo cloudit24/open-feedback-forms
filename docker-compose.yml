@@ -1,0 +1,62 @@
+# Usage:
+#   ./install.sh                 interactive setup wizard (recommended — see README)
+#   docker compose up -d --build manual start once .env exists (see .env.example)
+#
+# The "db" service only starts when you opt into a bundled database —
+# install.sh handles this via `COMPOSE_PROFILES=bundled-db` in .env; running
+# `docker compose up` by hand with no bundled-db profile just starts the app,
+# which you then point at your own MariaDB from the admin panel's Database tab.
+
+services:
+  app:
+    build: .
+    image: open-feedback-forms:${VERSION:-latest}
+    restart: unless-stopped
+    ports:
+      - "${ADMIN_PORT:-8080}:8080"
+      - "${FORM_PORT:-8081}:8081"
+      # Every additional form an admin creates auto-assigns a port from this
+      # range — published in full so a new form works without editing this
+      # file. Narrow it if you'd rather publish specific ports per form.
+      - "8090-8189:8090-8189"
+    environment:
+      ADMIN_PORT: "8080"
+      FORM_PORT: "8081"
+      TURNSTILE_SECRET: "${TURNSTILE_SECRET:-}"
+      RATE_LIMIT: "${RATE_LIMIT:-5}"
+      OFF_WAIT_FOR_DB_HOST: "${OFF_WAIT_FOR_DB_HOST:-}"
+      OFF_WAIT_FOR_DB_PORT: "${OFF_WAIT_FOR_DB_PORT:-3306}"
+      # Only read by docker/bootstrap.py (a one-off `docker compose run`,
+      # not the normal server process) — see install.sh.
+      OFF_DB_HOST: "${OFF_DB_HOST:-}"
+      OFF_DB_PORT: "${OFF_DB_PORT:-3306}"
+      OFF_DB_USER: "${OFF_DB_USER:-}"
+      OFF_DB_PASSWORD: "${OFF_DB_PASSWORD:-}"
+      OFF_DB_NAME: "${OFF_DB_NAME:-}"
+    volumes:
+      - off_data:/data
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false
+
+  db:
+    image: mariadb:11
+    restart: unless-stopped
+    profiles: ["bundled-db"]
+    environment:
+      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:?set in .env — install.sh generates this}"
+      MARIADB_DATABASE: "${DB_NAME:-open_feedback_forms}"
+      MARIADB_USER: "${DB_USER:-off_app}"
+      MARIADB_PASSWORD: "${DB_PASSWORD:?set in .env — install.sh generates this}"
+    volumes:
+      - off_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  off_data:
+  off_db_data:

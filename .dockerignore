@@ -1,0 +1,24 @@
+# Local secrets — never bake these into an image.
+config.json
+.env
+*.env
+
+# Uploaded logos and any local data — belongs in the /data volume, not the image.
+uploads/
+data/
+
+# Build artifacts / packaging (Windows MSI path, irrelevant to the container)
+build/
+dist/
+packaging/out/
+*.spec
+
+# Python
+__pycache__/
+*.pyc
+
+# VCS / editor / logs
+.git/
+.gitignore
+*.log
+.vscode/

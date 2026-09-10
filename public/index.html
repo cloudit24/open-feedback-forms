@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Fan Feedback</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* Defaults — each form's actual colors are pushed in at runtime from its
+     Branding settings (see applyBranding() below), so these only matter
+     before that fetch resolves, or when a form hasn't set any yet. */
+  --yellow:#FFEC01; --yellow-deep:#E0CF00; --on-yellow:#0B0B0B;
+  --ink:#0B0B0B; --ink-soft:#3A3A38;
+  --bg:#F4F6F9; --card:#FFFFFF; --line:#DCE2EA; --muted:#5A6675;
+  --err:#C62828; --ok:#1B7F3B; --focus:#0B0B0B; --focus-glow:rgba(11,11,11,.16);
+  --radius:16px; --shadow:0 2px 4px rgba(14,22,33,.06), 0 12px 32px rgba(14,22,33,.08);
+  --font-display:'Bebas Neue','Dubai','Noto Sans Arabic',sans-serif;
+}
+/* System preference applies unless the visitor picks a theme explicitly (data-theme). */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#0B0B0B; --card:#141414; --line:rgba(255,236,1,.22); --ink:#F5F5F3; --ink-soft:#C9C9C7;
+         --muted:#8F8F8C; --focus:#FFEC01; --focus-glow:rgba(255,236,1,.25);
+         --shadow:0 2px 4px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.5); }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0B0B; --card:#141414; --line:rgba(255,236,1,.22); --ink:#F5F5F3; --ink-soft:#C9C9C7;
+  --muted:#8F8F8C; --focus:#FFEC01; --focus-glow:rgba(255,236,1,.25);
+  --shadow:0 2px 4px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font-family:'Inter',"Segoe UI",system-ui,-apple-system,"Noto Sans Arabic","Dubai",Tahoma,sans-serif;
+  line-height:1.55; -webkit-font-smoothing:antialiased;
+}
+html[dir="rtl"] body{ font-family:"Dubai","Noto Sans Arabic","Segoe UI",Tahoma,sans-serif; }
+
+.wrap{max-width:720px;margin:0 auto;padding:24px 16px 64px}
+.hidden{display:none !important}
+
+/* ---------- header ---------- */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:22px}
+.brand{display:flex;align-items:center;gap:12px;min-width:0}
+.crest{width:44px;height:44px;flex:0 0 44px;object-fit:contain;display:block}
+.brand-text{min-width:0}
+.brand-text b{
+  display:block;font-size:18px;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-family:var(--font-display);letter-spacing:.02em;font-weight:400;
+}
+.brand-text span{display:block;font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top-actions{display:flex;align-items:center;gap:8px;flex:0 0 auto}
+.langbtn{
+  border:1px solid var(--line);background:var(--card);color:var(--ink);
+  border-radius:999px;padding:8px 16px;font-size:14px;font-weight:600;cursor:pointer;
+  font-family:inherit;white-space:nowrap;
+}
+.langbtn:hover{border-color:var(--yellow)}
+.langbtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.iconbtn{
+  width:38px;height:38px;flex:0 0 38px;border-radius:50%;
+  border:1px solid var(--line);background:var(--card);color:var(--ink);
+  display:grid;place-items:center;cursor:pointer;padding:0;
+}
+.iconbtn svg{width:18px;height:18px}
+.iconbtn:hover{border-color:var(--yellow)}
+.iconbtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+/* ---------- card ---------- */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);overflow:hidden}
+.card-head{padding:26px 24px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,var(--brand-tint,rgba(245,197,24,.10)),transparent)}
+.card-head h1{margin:0 0 6px;font-size:26px;line-height:1.15;font-family:var(--font-display);letter-spacing:.02em;font-weight:400}
+.card-head p{margin:0;color:var(--muted);font-size:14.5px}
+.card-body{padding:24px}
+
+/* ---------- fields ---------- */
+.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:560px){ .row{grid-template-columns:1fr} }
+.field{margin-bottom:18px}
+label{display:block;font-size:14px;font-weight:600;margin-bottom:7px}
+.opt{font-weight:400;color:var(--muted);font-size:12.5px}
+.req{color:var(--err);margin-inline-start:3px}
+input[type=text],input[type=email],input[type=tel],input[type=date],select,textarea{
+  width:100%;padding:11px 13px;font-size:16px;font-family:inherit;color:var(--ink);
+  background:var(--card);border:1px solid var(--line);border-radius:10px;
+  transition:border-color .12s, box-shadow .12s;
+}
+textarea{resize:vertical;min-height:130px}
+input:focus,select:focus,textarea:focus{
+  outline:none;border-color:var(--focus);box-shadow:0 0 0 3px var(--focus-glow);
+}
+.invalid input,.invalid select,.invalid textarea{border-color:var(--err)}
+.invalid input:focus,.invalid select:focus,.invalid textarea:focus{box-shadow:0 0 0 3px rgba(198,40,40,.16)}
+.err{display:none;color:var(--err);font-size:13px;margin:6px 0 0}
+.invalid .err{display:block}
+
+/* phone */
+.phone{display:flex;gap:8px}
+.phone select{flex:0 0 120px;width:120px}
+.phone input{flex:1 1 auto;min-width:0}
+
+/* rating */
+.stars{display:flex;gap:6px}
+html[dir="rtl"] .stars{flex-direction:row-reverse;justify-content:flex-end}
+.stars input{position:absolute;opacity:0;width:0;height:0}
+.stars label{
+  margin:0;cursor:pointer;padding:3px;border-radius:8px;line-height:0;
+  color:var(--line);transition:color .1s,transform .1s;
+}
+.stars label svg{width:34px;height:34px;display:block}
+.stars label:hover{transform:scale(1.08)}
+.stars input:checked + label,.stars label.on{color:var(--yellow)}
+.stars input:focus-visible + label{outline:2px solid var(--focus);outline-offset:2px}
+.rating-word{font-size:13.5px;color:var(--muted);margin:7px 0 0;min-height:20px}
+
+/* counter */
+.counter{float:right;font-size:12.5px;color:var(--muted);font-weight:400}
+html[dir="rtl"] .counter{float:left}
+.counter.near{color:var(--err)}
+
+/* checkboxes */
+.check{display:flex;gap:10px;align-items:flex-start;margin-bottom:14px}
+.check input{margin:3px 0 0;flex:0 0 auto;width:17px;height:17px;accent-color:var(--yellow-deep)}
+.check label{margin:0;font-weight:400;font-size:14px;line-height:1.5}
+.privacy{
+  background:rgba(128,140,155,.09);border:1px solid var(--line);border-radius:10px;
+  padding:14px 16px;font-size:13.5px;color:var(--ink-soft);margin:24px 0 18px;
+}
+.privacy b{display:block;margin-bottom:5px;color:var(--ink);font-size:13.5px}
+
+/* honeypot — never shown to humans */
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+
+/* submit */
+.submit{
+  width:100%;padding:14px 20px;font-size:16px;font-weight:700;font-family:inherit;
+  background:var(--yellow);color:var(--on-yellow);border:none;border-radius:10px;cursor:pointer;
+  transition:background .12s,transform .06s;
+}
+.submit:hover:not(:disabled){background:var(--yellow-deep)}
+.submit:active:not(:disabled){transform:translateY(1px)}
+.submit:disabled{opacity:.6;cursor:not-allowed}
+.submit:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+
+.banner{display:none;padding:13px 16px;border-radius:10px;font-size:14px;margin-bottom:18px}
+.banner.show{display:block}
+.banner.bad{background:rgba(198,40,40,.10);border:1px solid rgba(198,40,40,.35);color:var(--err)}
+
+/* success */
+.done{display:none;text-align:center;padding:44px 24px}
+.done.show{display:block}
+.done .tick{
+  width:66px;height:66px;margin:0 auto 20px;border-radius:50%;
+  background:rgba(27,127,59,.12);color:var(--ok);display:grid;place-items:center;
+}
+.done .tick svg{width:34px;height:34px}
+.done h2{margin:0 0 10px;font-size:24px;font-family:var(--font-display);letter-spacing:.02em;font-weight:400}
+.done p{margin:0 0 20px;color:var(--muted);font-size:15px}
+.ref{
+  display:inline-block;background:var(--bg);border:1px dashed var(--line);
+  border-radius:10px;padding:11px 20px;font-size:17px;font-weight:700;
+  letter-spacing:1px;font-family:"Consolas",ui-monospace,monospace;direction:ltr;
+}
+.ref-label{display:block;font-size:12px;color:var(--muted);letter-spacing:0;font-weight:600;margin-bottom:4px;font-family:inherit}
+.again{
+  margin-top:26px;background:none;border:1px solid var(--line);color:var(--ink);
+  border-radius:999px;padding:9px 20px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;
+}
+.again:hover{border-color:var(--yellow)}
+
+.foot{text-align:center;color:var(--muted);font-size:12.5px;margin-top:22px}
+#ts-widget:not(:empty){margin:0 0 18px}
+
+/* the form isn't reachable yet (fresh install, DB not connected) */
+.setup-notice{
+  background:rgba(198,40,40,.08);border:1px solid rgba(198,40,40,.28);color:var(--ink-soft);
+  border-radius:10px;padding:16px 18px;font-size:14px;margin-bottom:18px;
+}
+.setup-notice b{display:block;color:var(--err);margin-bottom:4px}
+
+/* ---------- mobile ---------- */
+@media (max-width:600px){
+  .wrap{padding:16px 12px 40px}
+  .top{margin-bottom:16px}
+  .crest{width:38px;height:38px;flex:0 0 38px}
+  .card{border-radius:12px}
+  .card-head{padding:20px 16px 16px}
+  .card-head h1{font-size:20px}
+  .card-head p{font-size:14px}
+  .card-body{padding:16px}
+  .row{gap:12px}
+  .field{margin-bottom:16px}
+  textarea{min-height:120px}
+  /* keep the code short so the number field has room to breathe */
+  .phone{gap:6px}
+  .phone select{flex:0 0 92px;width:92px;padding-left:8px;padding-right:6px}
+  /* bigger tap targets: same visuals, more room around them for a thumb */
+  .stars label{padding:6px}
+  .check{padding:2px 0}
+  .check input{width:20px;height:20px}
+  .submit{padding:15px 20px}
+  .done{padding:32px 16px}
+}
+@media (max-width:380px){
+  .brand-text b{font-size:14.5px}
+  .brand-text span{font-size:11.5px}
+  .langbtn{padding:7px 12px;font-size:13px}
+  .card-head h1{font-size:18.5px}
+}
+
+/* iOS Safari: disable the blue tap-flash on buttons and labels */
+button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="top">
+    <div class="brand">
+      <img class="crest" id="crestImg" src="" alt="" aria-hidden="true" style="display:none">
+      <div class="brand-text">
+        <b data-i18n="club">Your Club</b>
+        <span data-i18n="fanvoice">Fan Voice</span>
+      </div>
+    </div>
+    <div class="top-actions">
+      <button type="button" class="iconbtn" id="theme" aria-label="Switch theme"></button>
+      <select class="langbtn" id="lang" aria-label="Switch language"></select>
+    </div>
+  </div>
+
+  <div class="card">
+
+    <div class="card-head" id="head">
+      <h1 data-i18n="title">Tell us what you think</h1>
+      <p data-i18n="subtitle">Your feedback helps us improve matchdays, facilities and everything around the club. It takes about two minutes.</p>
+    </div>
+
+    <div class="card-body">
+
+      <div class="setup-notice hidden" id="setupNotice">
+        <b data-i18n="setupTitle">This form isn't ready yet</b>
+        <span data-i18n="setupBody">The club is still setting this up. Please check back shortly.</span>
+      </div>
+
+      <div class="banner bad" id="banner" role="alert"></div>
+
+      <form id="form" novalidate>
+
+        <div class="row">
+          <div class="field" id="f-first">
+            <label for="firstName"><span data-i18n="firstName">First name</span><span class="req">*</span></label>
+            <input type="text" id="firstName" name="firstName" maxlength="60" autocomplete="given-name">
+            <p class="err" data-i18n="errFirst">Please enter your first name.</p>
+          </div>
+          <div class="field" id="f-last">
+            <label for="lastName"><span data-i18n="lastName">Last name</span><span class="req">*</span></label>
+            <input type="text" id="lastName" name="lastName" maxlength="60" autocomplete="family-name">
+            <p class="err" data-i18n="errLast">Please enter your last name.</p>
+          </div>
+        </div>
+
+        <div class="field" id="f-email">
+          <label for="email"><span data-i18n="email">Email address</span><span class="req">*</span></label>
+          <input type="email" id="email" name="email" maxlength="120" autocomplete="email" dir="ltr">
+          <p class="err" data-i18n="errEmail">Please enter a valid email address.</p>
+        </div>
+
+        <!-- Everything below is admin-configured: fetched from /api/form-fields and
+             rendered by renderDynamicFields(). See the script block at the bottom. -->
+        <div id="dynamic-fields"></div>
+
+        <!-- Honeypot: hidden from people, filled in by bots. -->
+        <div class="hp" aria-hidden="true">
+          <label for="website">Website</label>
+          <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+        </div>
+
+        <div class="privacy">
+          <b data-i18n="privacyTitle">Terms and Conditions</b>
+          <span data-i18n="privacyBody">We're grateful for the time you're taking to share your thoughts with us. {club} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you as one of our fans. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside the club. You're always welcome to ask us to update or delete your information by emailing the club.</span>
+        </div>
+
+        <div id="ts-widget"></div>
+
+        <div class="check">
+          <input type="checkbox" id="consent" name="consent">
+          <label for="consent"><span data-i18n="consent">I agree to terms and conditions</span><span class="req">*</span></label>
+        </div>
+        <p class="err" id="consentErr" data-i18n="errConsent" style="margin:-8px 0 16px">You need to agree before we can accept your feedback.</p>
+
+        <button type="submit" class="submit" id="submit" data-i18n="submit">Send feedback</button>
+      </form>
+
+      <div class="done" id="done">
+        <div class="tick" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <h2 data-i18n="doneTitle">Thank you — we've got it</h2>
+        <p data-i18n="doneBody">Your feedback has reached the club. If you asked us to contact you, someone will be in touch.</p>
+        <div class="ref">
+          <span class="ref-label" data-i18n="refLabel">YOUR REFERENCE</span>
+          <span id="refNo">—</span>
+        </div>
+        <div><button type="button" class="again" id="again" data-i18n="again">Send more feedback</button></div>
+      </div>
+
+    </div>
+  </div>
+
+  <p class="foot" data-i18n="foot">{club}</p>
+</div>
+
+<script>
+/* ---------------------------------------------------------------
+   Cloudflare Turnstile.
+   Paste your site key between the quotes to switch bot protection on.
+   Left empty, the form still works (the server keeps the honeypot
+   and the rate limit), but you get no bot protection.
+--------------------------------------------------------------- */
+var TURNSTILE_SITEKEY = "";
+
+/* ---------------------------- text ---------------------------- */
+var T = {
+  en: {
+    club:"Your Club", fanvoice:"Fan Voice",
+    title:"Tell us what you think",
+    subtitle:"Your feedback helps us improve matchdays, facilities and everything around the club. It takes about two minutes.",
+    firstName:"First name", lastName:"Last name", email:"Email address",
+    optional:"(optional)", choose:"Please choose...",
+    setupTitle:"This form isn't ready yet",
+    setupBody:"The club is still setting this up. Please check back shortly.",
+    privacyTitle:"Terms and Conditions",
+    privacyBody:"We're grateful for the time you're taking to share your thoughts with us. {club} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you as one of our fans. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside the club. You're always welcome to ask us to update or delete your information by emailing the club.",
+    consent:"I agree to terms and conditions",
+    submit:"Send feedback", sending:"Sending...",
+    errFirst:"Please enter your first name.",
+    errLast:"Please enter your last name.",
+    errEmail:"Please enter a valid email address.",
+    errRequired:"This is required.",
+    errPhoneFormat:"Please enter a valid mobile number, digits only.",
+    errEmailFormat:"Please enter a valid email address.",
+    errShort:"Please write at least 10 characters.",
+    errSelect:"Please make a choice.",
+    errRating:"Please give a rating.",
+    errConsent:"You need to agree before we can accept your feedback.",
+    errFix:"Please check the highlighted fields and try again.",
+    errNet:"We could not send your feedback. Please check your connection and try again.",
+    errRate:"You have sent several messages already. Please try again later.",
+    errBot:"Please complete the verification check and try again.",
+    doneTitle:"Thank you — we've got it",
+    doneBody:"Your feedback has reached the club. If you asked us to contact you, someone will be in touch.",
+    refLabel:"YOUR REFERENCE", again:"Send more feedback",
+    foot:"{club}",
+    words:["","Very poor","Poor","Okay","Good","Excellent"]
+  },
+  ar: {
+    club:"ناديكم", fanvoice:"صوت الجمهور",
+    title:"شاركنا رأيك",
+    subtitle:"ملاحظاتك تساعدنا على تحسين أيام المباريات والمرافق وكل ما يخص النادي. لن تستغرق أكثر من دقيقتين.",
+    firstName:"الاسم الأول", lastName:"اسم العائلة", email:"البريد الإلكتروني",
+    optional:"(اختياري)", choose:"الرجاء الاختيار...",
+    setupTitle:"هذا النموذج غير جاهز بعد",
+    setupBody:"لا يزال النادي يعمل على إعداد هذا النموذج. يرجى المحاولة لاحقاً.",
+    privacyTitle:"الشروط والأحكام",
+    privacyBody:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يقوم {club} بجمع اسمك وبريدك الإلكتروني ورقم هاتفك المتحرك وجنسيتك حتى يتمكن فريقنا من مراجعة ملاحظاتك، وإبقائك على اطلاع بآخر المستجدات، والحفاظ على علاقتنا المستمرة بك كأحد جماهيرنا الأعزاء. وقد نتواصل معك أيضاً بخصوص الملاحظة التي شاركتنا إياها، سواء للمتابعة أو للاستفسار أو لمجرد شكرك عليها. نتعامل مع بياناتك بعناية تامة، ولا نبيعها أبداً، ولا نشاركها خارج النادي. ويسعدنا دائماً أن تطلب منا تحديث أو حذف بياناتك عبر مراسلة النادي.",
+    consent:"أوافق على الشروط والأحكام",
+    submit:"إرسال الملاحظة", sending:"جارٍ الإرسال...",
+    errFirst:"الرجاء إدخال الاسم الأول.",
+    errLast:"الرجاء إدخال اسم العائلة.",
+    errEmail:"الرجاء إدخال بريد إلكتروني صحيح.",
+    errRequired:"هذا الحقل مطلوب.",
+    errPhoneFormat:"الرجاء إدخال رقم هاتف صحيح بالأرقام فقط.",
+    errEmailFormat:"الرجاء إدخال بريد إلكتروني صحيح.",
+    errShort:"الرجاء كتابة 10 أحرف على الأقل.",
+    errSelect:"الرجاء الاختيار.",
+    errRating:"الرجاء إضافة تقييم.",
+    errConsent:"يجب الموافقة قبل أن نتمكن من استلام ملاحظتك.",
+    errFix:"يرجى مراجعة الحقول المحددة والمحاولة مرة أخرى.",
+    errNet:"تعذر إرسال ملاحظتك. يرجى التحقق من الاتصال والمحاولة مرة أخرى.",
+    errRate:"لقد أرسلت عدة رسائل بالفعل. يرجى المحاولة لاحقاً.",
+    errBot:"يرجى إكمال التحقق الأمني والمحاولة مرة أخرى.",
+    doneTitle:"شكراً لك — وصلتنا ملاحظتك",
+    doneBody:"وصلت ملاحظتك إلى النادي. وإذا طلبت التواصل معك، سيقوم أحد موظفينا بالاتصال بك.",
+    refLabel:"رقم المرجع", again:"إرسال ملاحظة أخرى",
+    foot:"{club}",
+    words:["","ضعيف جداً","ضعيف","مقبول","جيد","ممتاز"]
+  }
+};
+
+/* Country codes for the phone widget. Not admin-managed — this is a fixed
+   convenience list for the 'tel' field type, not a form question itself. */
+var CODES = ["+971","+966","+965","+974","+973","+968","+20","+962","+961","+963","+964",
+             "+91","+92","+880","+94","+977","+63","+62","+60","+86","+81","+82","+90",
+             "+44","+33","+49","+39","+34","+31","+7","+1","+61","+27","+234","+254",
+             "+212","+216","+213","+249","+218"];
+
+/* --------------------------- state --------------------------- */
+var lang = "en";
+var themeOverride = null;      /* null = follow the system, else "light" or "dark" */
+var FIELDS = [];               /* admin-configured fields, fetched from the server */
+var ratingValues = {};         /* field_key -> 1..5, for any 'rating' fields */
+function $(id){ return document.getElementById(id); }
+
+/* ------------------------- theme ------------------------------ */
+var THEME_ICON = {
+  /* shown icon = the theme you'll SWITCH TO, same convention as the language button */
+  sun:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5z"/></svg>'
+};
+function systemPrefersDark(){
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+function effectiveTheme(){
+  return themeOverride || (systemPrefersDark() ? "dark" : "light");
+}
+function applyTheme(next, persist){
+  themeOverride = next;
+  if (next){
+    document.documentElement.setAttribute("data-theme", next);
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+  var current = effectiveTheme();
+  $("theme").innerHTML = THEME_ICON[current === "dark" ? "sun" : "moon"];
+  $("theme").setAttribute("aria-label", current === "dark" ? "Switch to light theme" : "Switch to dark theme");
+  if (persist){
+    try { localStorage.setItem("awTheme", next || ""); } catch(e){}
+  }
+  applyBrandInk();
+}
+
+/* ------------------------- language -------------------------- */
+var BRANDING = {};
+var LANGUAGES = { en: true, ar: true };     // kept for back-compat call sites
+var LANG_LIST = ["en", "ar"];               // codes enabled for this form, in order
+var LANG_META = {                           // app-wide registry: {code: {name, dir}}
+  en: { name: "English", dir: "ltr" }, ar: { name: "Arabic", dir: "rtl" }
+};
+
+function applyLanguageAvailability(){
+  var sel = $("lang");
+  var current = sel.value;
+  sel.innerHTML = "";
+  LANG_LIST.forEach(function(code){
+    var meta = LANG_META[code] || { name: code.toUpperCase() };
+    sel.appendChild(new Option(meta.name, code));
+  });
+  sel.style.display = LANG_LIST.length > 1 ? "" : "none";
+  var target = LANG_LIST.indexOf(lang) !== -1 ? lang : (LANG_LIST.indexOf(current) !== -1 ? current : LANG_LIST[0]);
+  ensureUiStrings(target).then(function(){ applyLang(target || "en"); });
+}
+
+/* en/ar's UI text is always the hardcoded T.en/T.ar below — zero network
+   dependency for the two default languages. Anything else is fetched once
+   (server-cached, translated when the language was added) and merged in. */
+function ensureUiStrings(code){
+  if (!code || code === "en" || code === "ar" || T[code]) return Promise.resolve();
+  return fetch("/api/ui-strings?lang=" + encodeURIComponent(code))
+    .then(function(r){ return r.json().then(function(j){ return {status: r.status, body: j}; }); })
+    .then(function(res){
+      if (res.status === 200 && res.body.ok){
+        T[code] = Object.assign({}, T.en, res.body.strings);
+      }
+    })
+    .catch(function(){});
+}
+
+function applyLang(next){
+  lang = next;
+  var strings = T[lang] || T.en;
+  var meta = LANG_META[lang] || { dir: "ltr" };
+  var clubName = BRANDING.orgName || strings.club;
+  document.documentElement.lang = lang;
+  document.documentElement.dir = meta.dir;
+  document.title = clubName + (lang === "ar" ? " — الملاحظات" : " — Feedback");
+
+  var subtitleOverride = lang === "ar" ? BRANDING.subtitleAr : (lang === "en" ? BRANDING.subtitleEn : null);
+  var nodes = document.querySelectorAll("[data-i18n]");
+  for (var i = 0; i < nodes.length; i++){
+    var k = nodes[i].getAttribute("data-i18n");
+    var text = (k === "subtitle" && subtitleOverride) ? subtitleOverride : strings[k];
+    if (!text) continue;
+    if (k === "club") text = clubName;
+    else if (text.indexOf("{club}") !== -1) text = text.split("{club}").join(clubName);
+    nodes[i].textContent = text;
+  }
+  $("lang").value = lang;
+  try { localStorage.setItem("awLang", lang); } catch(e){}
+  renderDynamicFields();       // labels/options are language-dependent
+}
+
+/* ------------------------- branding --------------------------- */
+function hexToRgb(hex){
+  hex = (hex || "").replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map(function(c){ return c + c; }).join("");
+  var n = parseInt(hex, 16);
+  return isNaN(n) ? [0,0,0] : [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function relativeLuminance(hex){
+  var rgb = hexToRgb(hex).map(function(v){
+    v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+}
+function darken(hex, amount){
+  var rgb = hexToRgb(hex).map(function(v){ return Math.max(0, Math.round(v * (1 - amount))); });
+  return "#" + rgb.map(function(v){ return v.toString(16).padStart(2, "0"); }).join("");
+}
+function applyBrandInk(){
+  // --ink is also the page's light/dark text color, so only override it in
+  // light mode — forcing a fixed ink color in dark mode would make text
+  // unreadable against the dark background.
+  var root = document.documentElement.style;
+  if (BRANDING.inkColor && effectiveTheme() === "light"){
+    root.setProperty("--ink", BRANDING.inkColor);
+  } else {
+    root.removeProperty("--ink");
+  }
+  // Unlike --ink, the focus ring isn't body text — readability isn't a
+  // concern, so it always follows the form's brand color instead of falling
+  // back to the hardcoded default (yellow in dark mode) once ink is unset.
+  root.setProperty("--focus", BRANDING.primaryColor || "#FFEC01");
+}
+function applyBranding(b){
+  BRANDING = b || {};
+  var primary = BRANDING.primaryColor || "#FFEC01";
+  var root = document.documentElement.style;
+  root.setProperty("--yellow", primary);
+  root.setProperty("--yellow-deep", darken(primary, 0.12));
+  root.setProperty("--on-yellow", relativeLuminance(primary) > 0.45 ? "#0B0B0B" : "#FFFFFF");
+  var rgb = hexToRgb(primary);
+  root.setProperty("--brand-tint", "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ",.10)");
+  root.setProperty("--line", "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ",.32)");
+  applyBrandInk();
+
+  var img = $("crestImg");
+  if (BRANDING.logoUrl){
+    img.src = BRANDING.logoUrl;
+    img.style.display = "";
+  } else {
+    img.removeAttribute("src");
+    img.style.display = "none";
+  }
+  applyLang(lang);
+  void document.documentElement.offsetHeight;   // force a repaint so every branded color is live immediately
+}
+
+/* -------------------------------------------------- dynamic fields ---- */
+function fetchFields(){
+  return fetch("/api/form-fields")
+    .then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); })
+    .then(function(res){
+      if (res.status !== 200 || !res.body.ok){
+        $("setupNotice").classList.remove("hidden");
+        $("form").classList.add("hidden");
+        return;
+      }
+      FIELDS = res.body.fields;
+      LANGUAGES = res.body.languages || { en: true, ar: true };
+      LANG_META = res.body.languageLabels || LANG_META;
+      LANG_LIST = [];
+      if (LANGUAGES.en) LANG_LIST.push("en");
+      if (LANGUAGES.ar) LANG_LIST.push("ar");
+      (res.body.extraLanguages || []).forEach(function(code){
+        if (LANG_META[code]) LANG_LIST.push(code);
+      });
+      if (!LANG_LIST.length) LANG_LIST = ["en"];
+      applyBranding(res.body.branding);
+      applyLanguageAvailability();
+    })
+    .catch(function(){
+      $("setupNotice").classList.remove("hidden");
+      $("form").classList.add("hidden");
+    });
+}
+
+function fieldInputId(f){ return "field_" + f.field_key; }
+function fieldWrapId(f){ return "fwrap_" + f.field_key; }
+
+function fieldLabel(f){
+  // en/ar always come from their own dedicated columns; any language beyond
+  // that lives in labels_extra, filled in by hand or by auto-translate.
+  if (lang !== "en" && lang !== "ar") return (f.labels_extra && f.labels_extra[lang]) || f.label_en;
+  return lang === "ar" ? f.label_ar : f.label_en;
+}
+function optionLabel(o){
+  if (lang !== "en" && lang !== "ar") return (o.label_extra && o.label_extra[lang]) || o.label_en || o.label_ar;
+  return lang === "ar" ? (o.label_ar || o.label_en) : (o.label_en || o.label_ar);
+}
+function renderDynamicFields(){
+  var box = $("dynamic-fields");
+  box.innerHTML = "";
+
+  FIELDS.forEach(function(f){
+    var wrap = document.createElement("div");
+    wrap.className = "field";
+    wrap.id = fieldWrapId(f);
+
+    var labelHtml = '<label for="' + fieldInputId(f) + '">' + escapeHtml(fieldLabel(f)) +
+      (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') +
+      '</label>';
+
+    if (f.field_type === "tel"){
+      wrap.innerHTML = labelHtml +
+        '<div class="phone">' +
+          '<select id="' + fieldInputId(f) + '_code" aria-label="Country code" dir="ltr"></select>' +
+          '<input type="tel" id="' + fieldInputId(f) + '" maxlength="15" dir="ltr" inputmode="numeric" placeholder="50 123 4567">' +
+        '</div>' +
+        '<p class="err">' + escapeHtml(T[lang].errPhoneFormat) + '</p>';
+      box.appendChild(wrap);
+      var code = wrap.querySelector("select");
+      CODES.forEach(function(c){ code.appendChild(new Option(c, c)); });
+      code.value = "+971";
+
+    } else if (f.field_type === "select"){
+      wrap.innerHTML = labelHtml + '<select id="' + fieldInputId(f) + '"></select>' +
+        '<p class="err">' + escapeHtml(T[lang].errSelect) + '</p>';
+      box.appendChild(wrap);
+      var sel = wrap.querySelector("select");
+      sel.appendChild(new Option(T[lang].choose, ""));
+      (f.options || []).forEach(function(o){
+        sel.appendChild(new Option(optionLabel(o), o.value));
+      });
+
+    } else if (f.field_type === "rating"){
+      wrap.innerHTML =
+        '<label id="' + fieldInputId(f) + '_label">' + escapeHtml(fieldLabel(f)) +
+          (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') +
+        '</label>' +
+        '<div class="stars" id="' + fieldInputId(f) + '" role="radiogroup" aria-labelledby="' + fieldInputId(f) + '_label"></div>' +
+        '<p class="rating-word" id="' + fieldInputId(f) + '_word"></p>' +
+        '<p class="err">' + escapeHtml(T[lang].errRating) + '</p>';
+      box.appendChild(wrap);
+      buildStars(f);
+
+    } else if (f.field_type === "textarea"){
+      wrap.innerHTML =
+        '<label for="' + fieldInputId(f) + '">' + escapeHtml(fieldLabel(f)) +
+          (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') +
+          ' <span class="counter" id="' + fieldInputId(f) + '_counter">0 / 1000</span>' +
+        '</label>' +
+        '<textarea id="' + fieldInputId(f) + '" maxlength="1000"></textarea>' +
+        '<p class="err">' + escapeHtml(T[lang].errShort) + '</p>';
+      box.appendChild(wrap);
+      wrap.querySelector("textarea").addEventListener("input", function(){
+        var n = this.value.length;
+        var c = $(fieldInputId(f) + "_counter");
+        c.textContent = n + " / 1000";
+        c.classList.toggle("near", n > 900);
+      });
+
+    } else if (f.field_type === "checkbox"){
+      wrap.className = "check";
+      wrap.innerHTML =
+        '<input type="checkbox" id="' + fieldInputId(f) + '">' +
+        '<label for="' + fieldInputId(f) + '">' + escapeHtml(fieldLabel(f)) + (f.required ? '<span class="req">*</span>' : '') + '</label>';
+      box.appendChild(wrap);
+
+    } else {                                       // text / email
+      wrap.innerHTML = labelHtml +
+        '<input type="' + (f.field_type === "email" ? "email" : "text") + '" id="' + fieldInputId(f) + '" maxlength="200">' +
+        '<p class="err">' + escapeHtml(f.field_type === "email" ? T[lang].errEmailFormat : T[lang].errRequired) + '</p>';
+      box.appendChild(wrap);
+    }
+
+  });
+}
+
+function escapeHtml(s){
+  var d = document.createElement("div");
+  d.textContent = s == null ? "" : s;
+  return d.innerHTML;
+}
+
+/* ------------------------ star widget -------------------------
+   Generalized from a single hardcoded field to any 'rating' field,
+   keyed by field_key so more than one could exist. */
+function buildStars(f){
+  var box = $(fieldInputId(f));
+  box.innerHTML = "";
+  for (var i = 1; i <= 5; i++){
+    var inp = document.createElement("input");
+    inp.type = "radio"; inp.name = "rating_" + f.field_key; inp.value = i;
+    inp.id = fieldInputId(f) + "_" + i;
+    var lab = document.createElement("label");
+    lab.htmlFor = inp.id;
+    lab.setAttribute("aria-label", i + " / 5");
+    lab.innerHTML = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.26 6.85.72-5.1 4.6 1.44 6.72L12 16.9l-6.09 3.4 1.44-6.72-5.1-4.6 6.85-.72z"/></svg>';
+    (function(n, input, label){
+      input.addEventListener("change", function(){ setRating(f, n); });
+      label.addEventListener("mouseenter", function(){ paintStars(f, n); });
+    })(i, inp, lab);
+    box.appendChild(inp);
+    box.appendChild(lab);
+  }
+  box.addEventListener("mouseleave", function(){ paintStars(f, ratingValues[f.field_key] || 0); });
+}
+function paintStars(f, n){
+  var labs = $(fieldInputId(f)).querySelectorAll("label");
+  for (var i = 0; i < labs.length; i++) labs[i].classList.toggle("on", i < n);
+}
+function setRating(f, n){
+  ratingValues[f.field_key] = n;
+  paintStars(f, n);
+  $(fieldInputId(f) + "_word").textContent = T[lang].words[n] || "";
+  clearErr(fieldWrapId(f));
+}
+
+/* ------------------------ validation ------------------------- */
+function setErr(id){ var el = $(id); if (el) el.classList.add("invalid"); }
+function clearErr(id){ var el = $(id); if (el) el.classList.remove("invalid"); }
+function validEmail(v){ return /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(v); }
+function digits(v){ return v.replace(/[^0-9]/g, ""); }
+
+function checkCore(name){
+  switch (name){
+    case "firstName":
+      if ($("firstName").value.trim().length < 2){ setErr("f-first"); return false; }
+      clearErr("f-first"); return true;
+    case "lastName":
+      if ($("lastName").value.trim().length < 2){ setErr("f-last"); return false; }
+      clearErr("f-last"); return true;
+    case "email":
+      if (!validEmail($("email").value.trim())){ setErr("f-email"); return false; }
+      clearErr("f-email"); return true;
+    case "consent":
+      if (!$("consent").checked){ $("consentErr").style.display = "block"; return false; }
+      $("consentErr").style.display = "none"; return true;
+  }
+  return true;
+}
+
+function checkDynamicField(f){
+  var wrapId = fieldWrapId(f);
+  if (f.field_type === "rating"){
+    if (f.required && !ratingValues[f.field_key]){ setErr(wrapId); return false; }
+    clearErr(wrapId); return true;
+  }
+  if (f.field_type === "checkbox"){
+    var el = $(fieldInputId(f));
+    if (f.required && !el.checked){ setErr(wrapId); return false; }
+    clearErr(wrapId); return true;
+  }
+  if (f.field_type === "select"){
+    var v = $(fieldInputId(f)).value;
+    if (f.required && !v){ setErr(wrapId); return false; }
+    clearErr(wrapId); return true;
+  }
+  if (f.field_type === "tel"){
+    var v2 = digits($(fieldInputId(f)).value);
+    if (f.required && v2.length === 0){ setErr(wrapId); return false; }
+    if (v2.length > 0 && (v2.length < 6 || v2.length > 15)){ setErr(wrapId); return false; }
+    clearErr(wrapId); return true;
+  }
+  if (f.field_type === "email"){
+    var v3 = $(fieldInputId(f)).value.trim();
+    if (f.required && !v3){ setErr(wrapId); return false; }
+    if (v3 && !validEmail(v3)){ setErr(wrapId); return false; }
+    clearErr(wrapId); return true;
+  }
+  if (f.field_type === "textarea"){
+    var v4 = $(fieldInputId(f)).value.trim();
+    if (f.required && v4.length === 0){ setErr(wrapId); return false; }
+    if (v4.length > 0 && v4.length < 10){ setErr(wrapId); return false; }
+    clearErr(wrapId); return true;
+  }
+  // text
+  var v5 = $(fieldInputId(f)).value.trim();
+  if (f.required && !v5){ setErr(wrapId); return false; }
+  clearErr(wrapId); return true;
+}
+
+function banner(msg){
+  var b = $("banner");
+  if (!msg){ b.classList.remove("show"); b.textContent = ""; return; }
+  b.textContent = msg;
+  b.classList.add("show");
+  b.scrollIntoView({behavior:"smooth", block:"center"});
+}
+
+/* -------------------------- submit --------------------------- */
+function collectDynamicValue(f){
+  if (f.field_type === "rating") return ratingValues[f.field_key] || null;
+  if (f.field_type === "checkbox") return $(fieldInputId(f)).checked;
+  if (f.field_type === "tel"){
+    var num = digits($(fieldInputId(f)).value);
+    var code = $(fieldInputId(f) + "_code");
+    return num ? (code.value + num) : "";
+  }
+  return $(fieldInputId(f)).value.trim();
+}
+
+function submit(e){
+  e.preventDefault();
+  banner("");
+
+  var ok = true, firstBadEl = null;
+  ["firstName", "lastName", "email"].forEach(function(n){
+    if (!checkCore(n) && !firstBadEl) firstBadEl = $(n);
+    if (!checkCore(n)) ok = false;
+  });
+  FIELDS.forEach(function(f){
+    if (!checkDynamicField(f)){
+      ok = false;
+      if (!firstBadEl){
+        var el = $(fieldInputId(f));
+        firstBadEl = el || $(fieldWrapId(f));
+      }
+    }
+  });
+  if (!checkCore("consent")){ ok = false; if (!firstBadEl) firstBadEl = $("consent"); }
+
+  if (!ok){
+    banner(T[lang].errFix);
+    if (firstBadEl && firstBadEl.focus){ try { firstBadEl.focus(); } catch(err){} }
+    return;
+  }
+
+  var tsField = document.querySelector('[name="cf-turnstile-response"]');
+  var extra = {};
+  FIELDS.forEach(function(f){ extra[f.field_key] = collectDynamicValue(f); });
+
+  var payload = {
+    firstName: $("firstName").value.trim(),
+    lastName:  $("lastName").value.trim(),
+    email:     $("email").value.trim(),
+    consent:   true,
+    language:  lang,
+    website:   $("website").value,                 /* honeypot */
+    turnstile: tsField ? tsField.value : "",
+    fields:    extra
+  };
+
+  var btn = $("submit");
+  btn.disabled = true;
+  btn.textContent = T[lang].sending;
+
+  fetch("/api/feedback", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(payload)
+  })
+  .then(function(r){
+    return r.json()
+      .catch(function(){ return {}; })
+      .then(function(j){ return {status:r.status, body:j}; });
+  })
+  .then(function(res){
+    if (res.status === 200 && res.body.ok){
+      $("refNo").textContent = res.body.reference || "—";
+      $("form").style.display = "none";
+      $("done").classList.add("show");
+      $("head").scrollIntoView({behavior:"smooth", block:"start"});
+      return;
+    }
+    if (res.status === 429)      banner(T[lang].errRate);
+    else if (res.status === 403) banner(T[lang].errBot);
+    else                         banner(T[lang].errFix);
+    if (window.turnstile){ try { window.turnstile.reset(); } catch(e){} }
+  })
+  .catch(function(){ banner(T[lang].errNet); })
+  .then(function(){
+    btn.disabled = false;
+    btn.textContent = T[lang].submit;
+  });
+}
+
+/* --------------------------- start --------------------------- */
+function init(){
+  var savedTheme = null;
+  try { savedTheme = localStorage.getItem("awTheme") || null; } catch(e){}
+  applyTheme(savedTheme, false);
+  $("theme").addEventListener("click", function(){
+    applyTheme(effectiveTheme() === "dark" ? "light" : "dark", true);
+  });
+  if (window.matchMedia){
+    window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(){
+      if (!themeOverride) applyTheme(null, false);      /* no explicit choice: track the system live */
+    });
+  }
+
+  var saved = null;
+  try { saved = localStorage.getItem("awLang"); } catch(e){}
+  var browser = (navigator.language || "en").toLowerCase().indexOf("ar") === 0 ? "ar" : "en";
+  applyLang(saved || browser);
+
+  $("lang").addEventListener("change", function(){
+    var next = this.value;
+    ensureUiStrings(next).then(function(){ applyLang(next); });
+  });
+
+  [["firstName","firstName"],["lastName","lastName"],["email","email"]].forEach(function(p){
+    $(p[0]).addEventListener("blur", function(){ checkCore(p[1]); });
+  });
+  $("consent").addEventListener("change", function(){ checkCore("consent"); });
+
+  $("again").addEventListener("click", function(){
+    $("form").reset();
+    ratingValues = {};
+    renderDynamicFields();
+    banner("");
+    $("consentErr").style.display = "none";
+    $("done").classList.remove("show");
+    $("form").style.display = "";
+    if (window.turnstile){ try { window.turnstile.reset(); } catch(e){} }
+    $("firstName").focus();
+  });
+
+  $("form").addEventListener("submit", submit);
+
+  if (TURNSTILE_SITEKEY){
+    var d = document.createElement("div");
+    d.className = "cf-turnstile";
+    d.setAttribute("data-sitekey", TURNSTILE_SITEKEY);
+    d.setAttribute("data-theme", "auto");
+    $("ts-widget").appendChild(d);
+    var s = document.createElement("script");
+    s.src = "https://challenges.cloudflare.com/turnstile/v0/api.js";
+    s.async = true;
+    s.defer = true;
+    document.head.appendChild(s);
+  }
+
+  fetchFields();
+}
+
+if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
+else init();
+</script>
+</body>
+</html>

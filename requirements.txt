@@ -1,0 +1,9 @@
+# Build-time only — these get bundled into the .msi by PyInstaller.
+# End users never run `pip install`; the installer carries everything.
+mysql-connector-python>=9.0
+pyinstaller>=6.10
+
+# Windows has no built-in IANA timezone database, so Python's stdlib
+# zoneinfo module has nothing to read from unless this is installed too
+# (Linux/macOS already have one on disk and don't strictly need this).
+tzdata>=2024.1

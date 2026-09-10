@@ -1,0 +1,5 @@
+# Shell scripts run inside Linux containers — CRLF (from a Windows
+# checkout with core.autocrlf on) would break their shebang and every line.
+*.sh text eol=lf
+Dockerfile text eol=lf
+docker-compose.yml text eol=lf

@@ -1,0 +1,1771 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Open Feedback Forms — Admin</title>
+<style>
+:root{
+  --yellow:#FFEC01; --yellow-deep:#E0CF00; --on-yellow:#0B0B0B;
+  --ink:#0B0B0B; --ink-soft:#3A3A38;
+  --bg:#F4F6F9; --card:#FFFFFF; --line:#DCE2EA; --muted:#5A6675;
+  --err:#C62828; --ok:#1B7F3B; --focus:#0B0B0B;
+  --radius:12px;
+  color-scheme:light;
+}
+/* System preference applies unless the admin picks a theme explicitly (data-theme). Also
+   flips color-scheme, so native controls (the datetime-local calendar popup, scrollbars)
+   render with dark chrome instead of a light popup stranded on a dark page. */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --bg:#0B0B0B; --card:#141414; --line:#2A2A28; --ink:#F5F5F3; --ink-soft:#C9C9C7;
+         --muted:#8F8F8C; --focus:#FFEC01; color-scheme:dark; }
+}
+:root[data-theme="dark"]{
+  --bg:#0B0B0B; --card:#141414; --line:#2A2A28; --ink:#F5F5F3; --ink-soft:#C9C9C7;
+  --muted:#8F8F8C; --focus:#FFEC01;
+  color-scheme:dark;
+}
+:root[data-theme="light"]{ color-scheme:light; }
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--ink); font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+  line-height:1.5; font-size:15px;
+}
+@media (min-width:640px){
+  .card{padding:26px 28px}
+  .card h2{font-size:17.5px}
+}
+.wrap{max-width:1240px;margin:0 auto;padding:32px 32px 80px}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
+.top h1{font-size:22px;margin:0;font-weight:700}
+.top .sub{color:var(--muted);font-size:14px;margin-top:2px}
+button{font-family:inherit;cursor:pointer}
+.btn{
+  background:var(--yellow);color:var(--on-yellow);border:none;border-radius:8px;
+  padding:9px 16px;font-size:14px;font-weight:700;
+}
+.btn:hover{background:var(--yellow-deep)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-outline{
+  background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:8px;
+  padding:8px 15px;font-size:14px;font-weight:600;
+}
+.btn-outline:hover{border-color:var(--yellow)}
+.btn-danger{color:var(--err);border-color:var(--err)}
+.btn-sm{padding:5px 10px;font-size:12.5px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px}
+.card h2{margin:0 0 14px;font-size:16px}
+label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
+label:first-child{margin-top:0}
+input[type=text],input[type=password],input[type=number],input[type=email],input[type=datetime-local],select,textarea{
+  width:100%;padding:9px 11px;font-size:14px;font-family:inherit;color:var(--ink);
+  background:var(--card);border:1px solid var(--line);border-radius:8px;
+}
+input[type=datetime-local]{accent-color:var(--yellow);color-scheme:inherit}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--focus);outline-offset:1px}
+textarea{resize:vertical;min-height:70px}
+.hint{color:var(--muted);font-size:12px;margin-top:4px}
+.row{display:flex;gap:12px;flex-wrap:wrap}
+.row > *{flex:1;min-width:140px}
+.check-row{display:flex;align-items:center;gap:8px;margin:12px 0}
+.check-row input{width:auto}
+.check-row label{margin:0;font-weight:400}
+.msg{padding:10px 13px;border-radius:8px;font-size:13.5px;margin:12px 0;display:none}
+.msg.show{display:block}
+.msg.bad{background:rgba(198,40,40,.1);border:1px solid rgba(198,40,40,.3);color:var(--err)}
+.msg.good{background:rgba(27,127,59,.1);border:1px solid rgba(27,127,59,.3);color:var(--ok)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700}
+.badge.on{background:rgba(27,127,59,.15);color:var(--ok)}
+.badge.off{background:rgba(90,102,117,.15);color:var(--muted)}
+.badge.req{background:rgba(198,40,40,.12);color:var(--err)}
+.field-row{
+  display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);
+}
+.field-row:last-child{border-bottom:none}
+.field-row .info{flex:1;min-width:0}
+.field-row .info b{display:block;font-size:14px}
+.field-row .info .meta{color:var(--muted);font-size:12px;margin-top:2px}
+.field-row .actions{display:flex;gap:6px;flex-wrap:wrap}
+.opts-list{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px}
+.opt-row{display:flex;gap:6px;margin-bottom:6px}
+.opt-row input{flex:1}
+.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+.tab{
+  padding:9px 16px;font-size:14px;font-weight:600;border:none;background:none;color:var(--muted);
+  border-bottom:2px solid transparent;margin-bottom:-1px;
+}
+.tab.active{color:var(--ink);border-bottom-color:var(--yellow)}
+.subtabs{display:flex;gap:4px;margin:18px 0 16px;border-bottom:1px solid var(--line)}
+.subtab{
+  padding:7px 14px;font-size:13.5px;font-weight:600;border:none;background:none;color:var(--muted);
+  border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;cursor:pointer;
+}
+.subtab.active{color:var(--ink);border-bottom-color:var(--yellow)}
+.fd-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:16px}
+.fd-header h2{margin:0;font-size:19px}
+.fd-header .actions{display:flex;gap:6px;flex-wrap:wrap}
+.hidden{display:none !important}
+.center{max-width:380px;margin:60px auto}
+.status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+.status-dot.on{background:var(--ok)}
+.status-dot.off{background:var(--err)}
+a.csv-link{color:var(--ink);font-size:13.5px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-weight:600}
+a.csv-link:hover{border-color:var(--yellow)}
+.form-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
+.form-row:last-child{border-bottom:none}
+.form-row .info{flex:1;min-width:0}
+.form-row .info b{display:block;font-size:14px}
+.form-row .info .meta{color:var(--muted);font-size:12px;margin-top:2px}
+.form-row .meta code{background:rgba(90,102,117,.12);padding:1px 5px;border-radius:4px}
+.form-row .actions{display:flex;gap:6px;flex-wrap:wrap}
+table.subs{width:100%;border-collapse:collapse;font-size:13px}
+table.subs th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.02em;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.subs td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+table.subs tr:last-child td{border-bottom:none}
+.subs-wrap{overflow-x:auto}
+.filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
+.filters > div{flex:1;min-width:150px}
+.filters label{margin:0 0 5px}
+.pager{display:flex;align-items:center;gap:10px;margin-top:14px;font-size:13px;color:var(--muted)}
+.form-select{max-width:260px}
+.kpi-row{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:18px}
+.kpi{flex:1;min-width:140px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px}
+.kpi .n{font-size:26px;font-weight:800;line-height:1.1}
+.kpi .l{color:var(--muted);font-size:12.5px;margin-top:4px}
+.bar-chart{display:flex;align-items:flex-end;gap:4px;height:120px;margin-top:10px}
+.bar-chart .bar{flex:1;background:var(--yellow);border-radius:3px 3px 0 0;min-height:2px;position:relative}
+.bar-chart .bar:hover{background:var(--yellow-deep)}
+.bar-labels{display:flex;gap:4px;margin-top:4px}
+.bar-labels span{flex:1;text-align:center;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.breakdown-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
+.breakdown-row:last-child{border-bottom:none}
+.breakdown-row .name{flex:1}
+.breakdown-row .bar-track{flex:2;background:var(--bg);border-radius:4px;height:8px;overflow:hidden}
+.breakdown-row .bar-fill{height:100%;background:var(--yellow)}
+.breakdown-row .count{width:40px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+.key-editor-list{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px;max-height:260px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ============ first run: create admin account ============ -->
+  <div id="setup-view" class="center hidden">
+    <div class="card">
+      <h2>Create the admin account</h2>
+      <p class="hint">This is the first time the app has run. Choose a username and password for this admin panel — you'll need them every time you log in.</p>
+      <label for="su-user">Username</label>
+      <input type="text" id="su-user" autocomplete="username">
+      <label for="su-pass">Password</label>
+      <input type="password" id="su-pass" autocomplete="new-password">
+      <p class="hint">At least 8 characters.</p>
+      <div class="msg bad" id="setup-msg"></div>
+      <button class="btn" id="setup-btn" style="margin-top:14px;width:100%">Create account</button>
+    </div>
+  </div>
+
+  <!-- ============ login ============ -->
+  <div id="login-view" class="center hidden">
+    <div class="card">
+      <h2>Admin sign in</h2>
+      <label for="li-user">Username</label>
+      <input type="text" id="li-user" autocomplete="username">
+      <label for="li-pass">Password</label>
+      <input type="password" id="li-pass" autocomplete="current-password">
+      <div class="msg bad" id="login-msg"></div>
+      <button class="btn" id="login-btn" style="margin-top:14px;width:100%">Sign in</button>
+    </div>
+  </div>
+
+  <!-- ============ dashboard ============ -->
+  <div id="dash-view" class="hidden">
+    <div class="top">
+      <div>
+        <h1>Open Feedback Forms — Admin</h1>
+        <div class="sub"><span class="status-dot" id="conn-dot"></span><span id="conn-text">checking…</span></div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn-outline btn-sm" id="theme-btn" aria-label="Switch theme">Dark</button>
+        <button class="btn-outline btn-sm" id="logout-btn">Log out</button>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-tab="dashboard">Dashboard</button>
+      <button class="tab" data-tab="forms">Forms</button>
+      <button class="tab" data-tab="subs">Submissions</button>
+      <button class="tab" data-tab="config">Configuration</button>
+    </div>
+
+    <!-- ---- dashboard tab ---- -->
+    <div id="tab-dashboard">
+      <div class="card">
+        <h2>Overview</h2>
+        <p class="hint" id="dash-clock" style="margin-top:-8px"></p>
+        <div class="filters">
+          <div><label for="dash-form">Form</label><select id="dash-form"><option value="">All forms</option></select></div>
+          <div><label for="dash-from">From</label><input type="datetime-local" id="dash-from"></div>
+          <div><label for="dash-to">To</label><input type="datetime-local" id="dash-to"></div>
+          <div style="flex:0 0 auto"><button class="btn-outline" id="dash-apply">Apply</button></div>
+          <div style="flex:0 0 auto"><button class="btn-outline" id="dash-clear">Clear</button></div>
+        </div>
+        <div class="kpi-row">
+          <div class="kpi"><div class="n" id="kpi-total">—</div><div class="l">Total submissions</div></div>
+          <div class="kpi"><div class="n" id="kpi-forms">—</div><div class="l">Forms with submissions</div></div>
+          <div class="kpi"><div class="n" id="kpi-avgday">—</div><div class="l">Avg. per active day</div></div>
+        </div>
+        <h2 style="font-size:14px">Submissions per day</h2>
+        <div class="bar-chart" id="dash-trend-bars"></div>
+        <div class="bar-labels" id="dash-trend-labels"></div>
+        <p class="hint" id="dash-empty" style="margin-top:10px">No submissions match these filters yet.</p>
+      </div>
+      <div class="row">
+        <div class="card">
+          <h2>By form</h2>
+          <div id="dash-by-form"></div>
+        </div>
+        <div class="card">
+          <h2>By language</h2>
+          <div id="dash-by-lang"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- forms tab (list + per-form detail: fields & branding) ---- -->
+    <div id="tab-forms" class="hidden">
+
+      <!-- forms list -->
+      <div id="forms-list-view">
+        <div class="card">
+          <h2>Feedback forms</h2>
+          <p class="hint">Each form runs as its own listener on its own port — point one Cloudflare Tunnel hostname at each port to publish it. Give a form a specific port, or leave it blank to auto-assign one.</p>
+          <div id="forms-list"></div>
+          <div class="msg bad" id="forms-msg"></div>
+          <button class="btn" id="add-form-btn" style="margin-top:14px">+ Add a form</button>
+        </div>
+      </div>
+
+      <!-- per-form detail: questions + branding, no extra top-level tabs -->
+      <div id="form-detail-view" class="hidden">
+        <div class="card">
+          <button class="btn-outline btn-sm" id="fd-back">&larr; All forms</button>
+          <div class="fd-header">
+            <div>
+              <h2 id="fd-title"></h2>
+              <div class="hint" id="fd-meta"></div>
+            </div>
+            <div class="actions">
+              <button class="btn-outline btn-sm" id="fd-view">View</button>
+              <button class="btn-outline btn-sm" id="fd-subs">Submissions</button>
+              <button class="btn-outline btn-sm" id="fd-edit">Manage</button>
+              <button class="btn-outline btn-sm" id="fd-toggle">Disable</button>
+            </div>
+          </div>
+
+          <div class="subtabs">
+            <button class="subtab active" data-subtab="fdfields">Questions</button>
+            <button class="subtab" data-subtab="fdbranding">Branding</button>
+          </div>
+
+          <!-- questions sub-panel -->
+          <div id="sub-fdfields">
+            <p class="hint">First name, last name and email always appear and can't be removed. Everything below is yours to edit — changes apply to the public form immediately.</p>
+            <div id="fields-list"></div>
+            <div class="msg bad" id="fields-msg"></div>
+            <button class="btn" id="add-field-btn" style="margin-top:14px">+ Add a field</button>
+          </div>
+
+          <!-- branding sub-panel -->
+          <div id="sub-fdbranding" class="hidden">
+            <p class="hint">Shown to fans on this form's public page — its header, its browser tab, and its Terms and Conditions text.</p>
+
+            <label for="br-org">Organization / club name</label>
+            <input type="text" id="br-org" placeholder="Shown as the header title and in the terms text">
+
+            <label for="br-subtitle-en">Subtitle (English)</label>
+            <input type="text" id="br-subtitle-en" placeholder="Shown under the title, e.g. how long the form takes">
+            <label for="br-subtitle-ar">Subtitle (Arabic)</label>
+            <input type="text" id="br-subtitle-ar" dir="rtl" placeholder="نفس النص بالعربية">
+            <p class="hint">Leave either blank to use the default wording.</p>
+
+            <label for="br-logo">Logo</label>
+            <div style="display:flex;align-items:center;gap:14px;margin-top:4px">
+              <img id="br-logo-preview" alt="" style="width:52px;height:52px;object-fit:contain;border:1px solid var(--line);border-radius:8px;padding:4px;background:#fff">
+              <input type="file" id="br-logo" accept="image/png,image/jpeg,image/webp,image/svg+xml">
+            </div>
+            <p class="hint">PNG, JPG, WEBP or SVG, under 2&nbsp;MB.</p>
+            <button class="btn-outline btn-sm hidden" id="br-remove-logo" style="margin-top:8px">Remove logo</button>
+
+            <div class="row" style="margin-top:14px">
+              <div>
+                <label for="br-primary">Primary color</label>
+                <div style="display:flex;gap:8px">
+                  <input type="color" id="br-primary-picker" style="width:44px;padding:2px">
+                  <input type="text" id="br-primary" placeholder="#FFEC01">
+                </div>
+              </div>
+              <div>
+                <label for="br-ink">Text / ink color</label>
+                <div style="display:flex;gap:8px">
+                  <input type="color" id="br-ink-picker" style="width:44px;padding:2px">
+                  <input type="text" id="br-ink" placeholder="#0B0B0B">
+                </div>
+              </div>
+            </div>
+
+            <div class="msg" id="branding-msg"></div>
+            <button class="btn" id="branding-save-btn" style="margin-top:14px">Save branding</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ---- submissions / dashboard tab ---- -->
+    <div id="tab-subs" class="hidden">
+      <div class="card">
+        <h2>Submissions</h2>
+        <div class="filters">
+          <div><label for="f-form">Form</label><select id="f-form"><option value="">All forms</option></select></div>
+          <div><label for="f-from">From</label><input type="datetime-local" id="f-from"></div>
+          <div><label for="f-to">To</label><input type="datetime-local" id="f-to"></div>
+          <div><label for="f-q">Search</label><input type="text" id="f-q" placeholder="name, email or reference"></div>
+          <div style="flex:0 0 auto"><button class="btn-outline" id="f-apply">Apply</button></div>
+          <div style="flex:0 0 auto"><button class="btn-outline" id="f-clear">Clear</button></div>
+        </div>
+        <div class="subs-wrap">
+          <table class="subs">
+            <thead><tr><th>Reference</th><th>Received</th><th>Form</th><th>Name</th><th>Email</th><th>Lang</th><th>Status</th></tr></thead>
+            <tbody id="subs-body"></tbody>
+          </table>
+        </div>
+        <div class="pager">
+          <button class="btn-outline btn-sm" id="subs-prev">&larr; Prev</button>
+          <span id="subs-page-info"></span>
+          <button class="btn-outline btn-sm" id="subs-next">Next &rarr;</button>
+        </div>
+      </div>
+      <div class="card">
+        <a class="csv-link" id="csv-link" href="/admin/export.csv" target="_blank" rel="noopener">Download filtered results as CSV</a>
+      </div>
+    </div>
+
+    <!-- ---- configuration tab (db connection + field keys + help) ---- -->
+    <div id="tab-config" class="hidden">
+      <div class="card">
+        <div class="subtabs">
+          <button class="subtab active" data-subtab="cfgdb">Database connection</button>
+          <button class="subtab" data-subtab="cfgkeys">Field keys</button>
+          <button class="subtab" data-subtab="cfglang">Language Labels</button>
+          <button class="subtab" data-subtab="cfgtheme">Appearance</button>
+          <button class="subtab" data-subtab="cfgtime">Time</button>
+          <button class="subtab" data-subtab="cfghelp">Help</button>
+        </div>
+
+        <!-- database connection -->
+        <div id="sub-cfgdb">
+          <h2>MariaDB connection</h2>
+          <p class="hint">Create an empty database on your MariaDB server first, and a user with rights on it (CREATE, ALTER, SELECT, INSERT, UPDATE is enough — this app never needs to create the database itself). Enter those details here.</p>
+          <div class="row">
+            <div><label for="db-host">Host</label><input type="text" id="db-host" placeholder="127.0.0.1"></div>
+            <div style="max-width:110px"><label for="db-port">Port</label><input type="number" id="db-port" placeholder="3306"></div>
+          </div>
+          <div class="row">
+            <div><label for="db-user">User</label><input type="text" id="db-user"></div>
+            <div><label for="db-pass">Password</label><input type="password" id="db-pass" placeholder="(leave blank to keep the saved one)"></div>
+          </div>
+          <label for="db-name">Database name</label>
+          <input type="text" id="db-name">
+          <div class="msg" id="db-msg"></div>
+          <div style="display:flex;gap:10px;margin-top:14px">
+            <button class="btn-outline" id="db-test-btn">Test connection</button>
+            <button class="btn" id="db-save-btn">Save &amp; connect</button>
+          </div>
+        </div>
+
+        <!-- field keys library -->
+        <div id="sub-cfgkeys" class="hidden">
+          <h2>Field keys</h2>
+          <p class="hint">The catalog of questions available to every form (nationality, gender, experience ratings...). This is the only place field keys are defined or edited — a form's field editor can only pick from this list, never type a new one.</p>
+          <label for="lib-form-select">Add to form</label>
+          <select id="lib-form-select" class="form-select"></select>
+          <div class="msg bad" id="lib-msg" style="margin-top:10px"></div>
+          <div id="lib-list" style="margin-top:8px"></div>
+          <button class="btn" id="add-key-btn" style="margin-top:14px">+ Add a field key</button>
+        </div>
+
+        <!-- language labels -->
+        <div id="sub-cfglang" class="hidden">
+          <h2>Language Labels</h2>
+          <p class="hint">The two languages this app supports. The key (<code>en</code>/<code>ar</code>) is fixed — it's baked into every field key, option and form — but you can rename what each is called and set its reading direction, and that name is used everywhere this admin panel talks about it (the Language Labels checkboxes on a form's Manage panel, for instance).</p>
+
+          <div class="row">
+            <div>
+              <label for="lang-en-name">Label1: key <code>en</code></label>
+              <input type="text" id="lang-en-name" placeholder="English">
+              <label for="lang-en-dir" style="margin-top:8px">Direction</label>
+              <select id="lang-en-dir">
+                <option value="ltr">Left-to-right</option>
+                <option value="rtl">Right-to-left</option>
+              </select>
+            </div>
+            <div>
+              <label for="lang-ar-name">Label2: key <code>ar</code></label>
+              <input type="text" id="lang-ar-name" placeholder="Arabic">
+              <label for="lang-ar-dir" style="margin-top:8px">Direction</label>
+              <select id="lang-ar-dir">
+                <option value="ltr">Left-to-right</option>
+                <option value="rtl">Right-to-left</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="msg" id="lang-labels-msg" style="margin-top:14px"></div>
+          <button class="btn" id="lang-labels-save-btn" style="margin-top:6px">Save</button>
+
+          <div id="lang-extra-list" style="margin-top:22px"></div>
+
+          <h2 style="margin-top:26px;font-size:14px">Add a language</h2>
+          <p class="hint">Every existing field label, dropdown option and the public form's fixed text (Submit, error messages...) get auto-translated via the free <a href="https://libretranslate.com" target="_blank" rel="noopener">LibreTranslate</a> API when you add one — review the results afterward, since machine translation won't always be perfect.</p>
+          <label for="translate-api-key">LibreTranslate API key <span class="hint" style="display:inline">(optional — get one free at <a href="https://portal.libretranslate.com" target="_blank" rel="noopener">portal.libretranslate.com</a>; without it the language still gets added, just with nothing auto-translated)</span></label>
+          <div style="display:flex;gap:10px">
+            <input type="text" id="translate-api-key" placeholder="leave blank for none" style="flex:1">
+            <button class="btn-outline btn-sm" id="translate-key-save-btn" type="button" style="flex:0 0 auto">Save key</button>
+          </div>
+          <div class="row" style="margin-top:14px">
+            <div>
+              <label for="lang-add-select">Language</label>
+              <select id="lang-add-select"><option value="">Loading…</option></select>
+            </div>
+            <div style="flex:0 0 auto;align-self:flex-end">
+              <button class="btn" id="lang-add-btn" type="button">+ Add &amp; translate</button>
+            </div>
+          </div>
+          <div class="msg" id="lang-add-msg" style="margin-top:10px"></div>
+        </div>
+
+        <!-- admin panel appearance -->
+        <div id="sub-cfgtheme" class="hidden">
+          <h2>Appearance</h2>
+          <p class="hint">This colors the admin panel itself — buttons, tabs, the calendar picker's selected day — not any individual public feedback form (set each form's own colors and logo from its Manage panel instead).</p>
+          <div class="row">
+            <div>
+              <label for="theme-primary">Primary color</label>
+              <div style="display:flex;gap:8px">
+                <input type="color" id="theme-primary-picker" style="width:44px;padding:2px">
+                <input type="text" id="theme-primary" placeholder="#FFEC01">
+              </div>
+            </div>
+            <div>
+              <label for="theme-text">Text color (light mode only)</label>
+              <div style="display:flex;gap:8px">
+                <input type="color" id="theme-text-picker" style="width:44px;padding:2px">
+                <input type="text" id="theme-text" placeholder="#0B0B0B">
+              </div>
+            </div>
+          </div>
+          <p class="hint">Dark mode keeps its own light-on-dark text color no matter what's set here, so it stays readable.</p>
+          <div class="msg" id="theme-msg" style="margin-top:10px"></div>
+          <button class="btn" id="theme-save-btn" style="margin-top:6px">Save</button>
+        </div>
+
+        <!-- time & timezone -->
+        <div id="sub-cfgtime" class="hidden">
+          <h2>Time &amp; timezone</h2>
+          <p class="hint">Every timestamp is stored in UTC no matter what's picked here — this only controls how dates and times are <em>displayed</em> in this admin panel (Submissions, Dashboard, CSV export) and in the date/time filters.</p>
+          <label for="tz-select">Display timezone</label>
+          <select id="tz-select"></select>
+
+          <label for="ntp-server" style="margin-top:18px">NTP server</label>
+          <input type="text" id="ntp-server" placeholder="pool.ntp.org">
+          <p class="hint">Reference only — a Python web app can't set the operating system's clock. Point this machine's own NTP client at this server so its clock (and every timestamp this app records) stays accurate.</p>
+
+          <div class="msg" id="time-msg"></div>
+          <button class="btn" id="time-save-btn" style="margin-top:14px">Save</button>
+        </div>
+
+        <!-- help -->
+        <div id="sub-cfghelp" class="hidden">
+          <h2>What are field keys?</h2>
+          <p class="hint">A field key is one reusable question definition — its key (a stable internal id like <code>nationality</code>), its English and Arabic labels, its type (short text, dropdown, rating...), and its options if it's a dropdown.</p>
+          <p class="hint">Every form picks its questions from this shared catalog instead of typing them out each time. When a field key is added to a form, its current label/type/options are copied onto that form — so editing a key here changes what a <em>future</em> "+ Add a field" picks up, but doesn't retroactively change a question a form already added. Edit that form's own copy from its Questions list if you need to change wording on a form that's already using it.</p>
+          <p class="hint">New forms start with no questions at all — add whichever field keys the form actually needs from the Field keys tab or from the form's own Questions list.</p>
+          <p class="hint">Deleting a field key here only removes it from the catalog going forward; forms that already added it keep their existing questions and past submissions untouched.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ form editor (simple inline panel, not a real dialog) ============ -->
+  <div id="form-editor-view" class="hidden">
+    <div class="card" style="max-width:480px;margin:0 auto">
+      <h2 id="form-editor-title">Add a form</h2>
+      <label for="fe-name">Form name</label>
+      <input type="text" id="fe-name" placeholder="e.g. Downtown Music Festival">
+      <label for="fe-port">Port</label>
+      <input type="number" id="fe-port" placeholder="leave blank to auto-assign">
+      <p class="hint">Each form needs its own port (1024–65535). Point a separate Cloudflare Tunnel hostname at this port to publish it.</p>
+
+      <label>Language Labels</label>
+      <div class="check-row"><input type="checkbox" id="fe-lang-en"><label for="fe-lang-en" style="margin:0">English</label></div>
+      <div class="check-row" style="margin-top:0"><input type="checkbox" id="fe-lang-ar"><label for="fe-lang-ar" style="margin:0">Arabic</label></div>
+      <div id="fe-lang-extra-wrap"></div>
+      <p class="hint">At least one must stay enabled. With only one enabled, visitors won't see a language switcher at all.</p>
+
+      <div class="msg bad" id="form-editor-msg"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-outline" id="fe-cancel">Cancel</button>
+        <button class="btn" id="fe-save">Save form</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ field editor modal (simple inline panel, not a real dialog) ============ -->
+  <div id="editor-view" class="hidden">
+    <div class="card" style="max-width:560px;margin:0 auto">
+      <h2 id="editor-title">Add a field</h2>
+      <div id="ed-predefined-wrap">
+        <label for="ed-predefined">Field key</label>
+        <select id="ed-predefined"><option value="">— choose a field key —</option></select>
+        <p class="hint">Field keys are defined on the Field keys tab. Don't see the one you need? Add it there first.</p>
+      </div>
+      <div id="ed-key-wrap">
+        <label for="ed-key">Field key</label>
+        <input type="text" id="ed-key" placeholder="e.g. matchDate" disabled>
+        <p class="hint">Set from the Field keys tab. Can't be changed here.</p>
+      </div>
+      <label for="ed-en">Label (English)</label>
+      <input type="text" id="ed-en" disabled>
+      <label for="ed-ar">Label (Arabic)</label>
+      <input type="text" id="ed-ar" dir="rtl" disabled>
+      <label for="ed-type">Type</label>
+      <select id="ed-type" disabled>
+        <option value="text">Short text</option>
+        <option value="email">Email address</option>
+        <option value="tel">Phone number</option>
+        <option value="textarea">Long text</option>
+        <option value="select">Dropdown</option>
+        <option value="rating">Star rating (1–5)</option>
+        <option value="checkbox">Checkbox</option>
+      </select>
+      <div class="check-row"><input type="checkbox" id="ed-required"><label for="ed-required">Required</label></div>
+
+      <div id="ed-options-wrap" class="hidden">
+        <label>Dropdown options</label>
+        <p class="hint" style="margin-top:-2px">Each option needs a value and at least one label — English only, Arabic only, or both.</p>
+        <div class="opts-list" id="ed-options"></div>
+        <button class="btn-outline btn-sm" id="ed-add-opt" type="button">+ Add option</button>
+      </div>
+
+      <div class="msg bad" id="editor-msg"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-outline" id="ed-cancel">Cancel</button>
+        <button class="btn" id="ed-save">Save field</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ field key editor modal (Field keys tab) ============ -->
+  <div id="key-editor-view" class="hidden">
+    <div class="card" style="max-width:560px;margin:0 auto">
+      <h2 id="key-editor-title">Add a field key</h2>
+      <label for="ke-key">Field key</label>
+      <input type="text" id="ke-key" placeholder="e.g. matchDate">
+      <p class="hint">Lowercase letters, numbers and underscores only, starting with a letter. Can't be changed later.</p>
+      <label for="ke-en">Label (English)</label>
+      <input type="text" id="ke-en">
+      <label for="ke-ar">Label (Arabic)</label>
+      <input type="text" id="ke-ar" dir="rtl">
+      <div id="ke-extra-wrap"></div>
+      <label for="ke-type">Type</label>
+      <select id="ke-type">
+        <option value="text">Short text</option>
+        <option value="email">Email address</option>
+        <option value="tel">Phone number</option>
+        <option value="textarea">Long text</option>
+        <option value="select">Dropdown</option>
+        <option value="rating">Star rating (1–5)</option>
+        <option value="checkbox">Checkbox</option>
+      </select>
+
+      <div id="ke-options-wrap" class="hidden">
+        <label>Dropdown options</label>
+        <p class="hint" style="margin-top:-2px">Each option needs a value and at least one label — English only, Arabic only, or both.</p>
+        <div class="opts-list" id="ke-options"></div>
+        <button class="btn-outline btn-sm" id="ke-add-opt" type="button">+ Add option</button>
+      </div>
+
+      <div class="msg bad" id="key-editor-msg"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-outline" id="ke-cancel">Cancel</button>
+        <button class="btn" id="ke-save">Save field key</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function $(id){ return document.getElementById(id); }
+
+function api(method, url, body){
+  return fetch(url, {
+    method: method,
+    headers: body ? {"Content-Type": "application/json"} : undefined,
+    body: body ? JSON.stringify(body) : undefined
+  }).then(function(r){
+    return r.json().catch(function(){ return {}; }).then(function(j){ return {status:r.status, body:j}; });
+  });
+}
+
+function show(id){
+  ["setup-view","login-view","dash-view","editor-view","form-editor-view","key-editor-view"].forEach(function(v){
+    $(v).classList.toggle("hidden", v !== id);
+  });
+}
+function flash(id, text, ok){
+  var el = $(id);
+  el.textContent = text;
+  el.className = "msg show " + (ok ? "good" : "bad");
+}
+function clearFlash(id){ $(id).className = "msg"; }
+
+var STATE = { fields: [], editingId: null, forms: [], currentFormId: null,
+              editingFormId: null, subsPage: 1, library: [], editingKeyId: null,
+              timezone: "UTC",
+              languageLabels: { en: { name: "English", dir: "ltr" }, ar: { name: "Arabic", dir: "rtl" } },
+              adminTheme: { primary: "#FFEC01", text: "#0B0B0B" }, translateApiKey: "" };
+
+/* ------------------------------------------------------- bootstrap ---- */
+function boot(){
+  api("GET", "/admin/status").then(function(res){
+    var s = res.body;
+    if (s.adminTheme){ STATE.adminTheme = s.adminTheme; }
+    applyAdminTheme(STATE.adminTheme);   // needed pre-login too — the setup/login screens use it
+    if (!s.adminConfigured){ show("setup-view"); return; }
+    if (!s.authenticated){ show("login-view"); return; }
+    show("dash-view");
+    renderStatus(s);
+    loadDbSettings();
+    if (s.dbConnected){ loadForms(); loadFieldLibrary(); loadDashboard(); loadAppSettings(true); }
+  });
+}
+
+function renderStatus(s){
+  $("conn-dot").className = "status-dot " + (s.dbConnected ? "on" : "off");
+  $("conn-text").textContent = s.dbConnected
+    ? "Database connected"
+    : (s.dbConfigured ? "Database configured but not reachable — check the Database tab" : "Database not set up yet — open the Database tab");
+}
+
+/* ----------------------------------------------------------- setup ---- */
+$("setup-btn").addEventListener("click", function(){
+  clearFlash("setup-msg");
+  var username = $("su-user").value.trim(), password = $("su-pass").value;
+  if (username.length < 3){ flash("setup-msg", "Username needs to be at least 3 characters."); return; }
+  if (password.length < 8){ flash("setup-msg", "Password needs to be at least 8 characters."); return; }
+  api("POST", "/admin/setup", {username: username, password: password}).then(function(res){
+    if (res.status === 200 && res.body.ok){ boot(); return; }
+    flash("setup-msg", res.body.error || "Could not create the account.");
+  });
+});
+
+/* ----------------------------------------------------------- login ---- */
+$("login-btn").addEventListener("click", doLogin);
+[$("li-user"), $("li-pass")].forEach(function(el){
+  el.addEventListener("keydown", function(e){ if (e.key === "Enter") doLogin(); });
+});
+function doLogin(){
+  clearFlash("login-msg");
+  var username = $("li-user").value.trim(), password = $("li-pass").value;
+  api("POST", "/admin/login", {username: username, password: password}).then(function(res){
+    if (res.status === 200 && res.body.ok){ boot(); return; }
+    flash("login-msg", res.body.error || "Sign-in failed.");
+  });
+}
+$("logout-btn").addEventListener("click", function(){
+  api("POST", "/admin/logout").then(function(){ boot(); });
+});
+
+/* ------------------------------------------------------------ tabs ---- */
+document.querySelectorAll(".tab").forEach(function(btn){
+  btn.addEventListener("click", function(){
+    document.querySelectorAll(".tab").forEach(function(b){ b.classList.remove("active"); });
+    btn.classList.add("active");
+    ["dashboard","forms","subs","config"].forEach(function(t){
+      $("tab-" + t).classList.toggle("hidden", btn.dataset.tab !== t);
+    });
+    if (btn.dataset.tab === "subs") loadSubmissions();
+    if (btn.dataset.tab === "dashboard") loadDashboard();
+    if (btn.dataset.tab === "forms"){ closeFormDetail(); loadForms(); }
+    if (btn.dataset.tab === "config") loadFieldLibrary();
+  });
+});
+
+/* ---------------------------------------------------------- subtabs --- */
+/* Scoped per .subtabs group, so the "Forms" detail view and the
+   "Configuration" tab can each have their own independent sub-tab set. */
+document.querySelectorAll(".subtabs").forEach(function(group){
+  var buttons = Array.from(group.querySelectorAll(".subtab"));
+  buttons.forEach(function(btn){
+    btn.addEventListener("click", function(){
+      buttons.forEach(function(b){ b.classList.remove("active"); });
+      btn.classList.add("active");
+      buttons.forEach(function(b){
+        $("sub-" + b.dataset.subtab).classList.toggle("hidden", b !== btn);
+      });
+      if (btn.dataset.subtab === "fdbranding") loadBranding();
+      if (btn.dataset.subtab === "cfgkeys") loadFieldLibrary();
+      if (btn.dataset.subtab === "cfgtime") loadAppSettings();
+      if (btn.dataset.subtab === "cfglang") loadLanguageLabels();
+      if (btn.dataset.subtab === "cfgtheme") loadAdminTheme();
+    });
+  });
+});
+
+/* -------------------------------------------------- database settings */
+function loadDbSettings(){
+  api("GET", "/admin/db-settings").then(function(res){
+    if (res.status !== 200) return;
+    var d = res.body.db;
+    $("db-host").value = d.host || "";
+    $("db-port").value = d.port || 3306;
+    $("db-user").value = d.user || "";
+    $("db-name").value = d.database || "";
+    $("db-pass").placeholder = d.hasPassword ? "(leave blank to keep the saved password)" : "";
+  });
+}
+function dbFormValue(){
+  return {
+    host: $("db-host").value.trim(),
+    port: parseInt($("db-port").value, 10) || 3306,
+    user: $("db-user").value.trim(),
+    password: $("db-pass").value,
+    database: $("db-name").value.trim()
+  };
+}
+$("db-test-btn").addEventListener("click", function(){
+  clearFlash("db-msg");
+  $("db-test-btn").disabled = true;
+  api("POST", "/admin/db-settings/test", dbFormValue()).then(function(res){
+    $("db-test-btn").disabled = false;
+    if (res.body.ok) flash("db-msg", "Connection succeeded.", true);
+    else flash("db-msg", res.body.error || "Could not connect.", false);
+  });
+});
+$("db-save-btn").addEventListener("click", function(){
+  clearFlash("db-msg");
+  $("db-save-btn").disabled = true;
+  api("POST", "/admin/db-settings", dbFormValue()).then(function(res){
+    $("db-save-btn").disabled = false;
+    if (res.body.ok){
+      flash("db-msg", "Saved and connected. The required tables are ready.", true);
+      $("db-pass").value = "";
+      boot();
+    } else {
+      flash("db-msg", res.body.error || "Could not connect with those settings — nothing was saved.", false);
+    }
+  });
+});
+
+/* ------------------------------------------------------------- forms */
+function loadForms(){
+  api("GET", "/admin/forms").then(function(res){
+    if (res.status !== 200) return;
+    STATE.forms = res.body.forms;
+    renderForms();
+    populateFormSelects();
+    if (STATE.currentFormId && !$("form-detail-view").classList.contains("hidden")){
+      refreshFormDetailHeader();
+    }
+  });
+}
+function renderForms(){
+  var box = $("forms-list");
+  box.innerHTML = "";
+  STATE.forms.forEach(function(f){
+    var row = document.createElement("div");
+    row.className = "form-row";
+    row.innerHTML =
+      '<div class="info"><b>' + escapeHtml(f.name) + '</b>' +
+      '<div class="meta">port <code>' + f.port + '</code> · ' + escapeHtml(f.url) +
+      ' · <span class="badge ' + (f.listening ? "on" : "off") + '">' + (f.listening ? "listening" : "not listening") + '</span></div></div>';
+    var actions = document.createElement("div");
+    actions.className = "actions";
+    var view = mkBtn("View", function(){ window.open(f.url, "_blank", "noopener"); });
+    var openDetail = mkBtn("Edit", function(){ openFormDetail(f); });         // questions & branding
+    var openSettings = mkBtn("Manage", function(){ openFormEditor(f); });    // name, port, languages
+    var toggle = mkBtn(f.active ? "Disable" : "Enable", function(){ toggleFormActive(f); });
+    [view, openDetail, openSettings, toggle].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+  if (!STATE.forms.length){
+    box.innerHTML = '<p class="hint">No forms yet — add one to start collecting feedback.</p>';
+  }
+}
+function populateFormSelects(){
+  var selects = [$("lib-form-select"), $("f-form"), $("dash-form")];
+  var filterIds = { "f-form": true, "dash-form": true };
+  selects.forEach(function(sel){
+    var isFilter = !!filterIds[sel.id];
+    var current = sel.value;
+    sel.innerHTML = isFilter ? '<option value="">All forms</option>' : "";
+    STATE.forms.forEach(function(f){
+      var opt = document.createElement("option");
+      opt.value = f.id; opt.textContent = f.name + (f.active ? "" : " (disabled)");
+      sel.appendChild(opt);
+    });
+    if (current) sel.value = current;
+  });
+  if (STATE.currentFormId && !$("lib-form-select").value) $("lib-form-select").value = STATE.currentFormId;
+}
+
+/* ------------------------------------------------------ form detail --- */
+function openFormDetail(f){
+  STATE.currentFormId = f.id;
+  $("forms-list-view").classList.add("hidden");
+  $("form-detail-view").classList.remove("hidden");
+  refreshFormDetailHeader(f);
+  document.querySelectorAll(".subtab").forEach(function(b){ b.classList.remove("active"); });
+  document.querySelector('.subtab[data-subtab="fdfields"]').classList.add("active");
+  $("sub-fdfields").classList.remove("hidden");
+  $("sub-fdbranding").classList.add("hidden");
+  loadFields();
+}
+function refreshFormDetailHeader(f){
+  f = f || STATE.forms.find(function(x){ return x.id === STATE.currentFormId; });
+  if (!f) return;
+  $("fd-title").textContent = f.name;
+  $("fd-meta").innerHTML = 'port <code>' + f.port + '</code> · ' + escapeHtml(f.url) +
+    ' · <span class="badge ' + (f.listening ? "on" : "off") + '">' + (f.listening ? "listening" : "not listening") + '</span>';
+  $("fd-toggle").textContent = f.active ? "Disable" : "Enable";
+}
+function closeFormDetail(){
+  $("form-detail-view").classList.add("hidden");
+  $("forms-list-view").classList.remove("hidden");
+}
+function currentForm(){
+  return STATE.forms.find(function(x){ return x.id === STATE.currentFormId; });
+}
+$("fd-back").addEventListener("click", closeFormDetail);
+$("fd-view").addEventListener("click", function(){
+  var f = currentForm();
+  if (f) window.open(f.url, "_blank", "noopener");
+});
+$("fd-subs").addEventListener("click", function(){
+  document.querySelector('.tab[data-tab="subs"]').click();
+  $("f-form").value = STATE.currentFormId;
+  STATE.subsPage = 1;
+  loadSubmissions();
+});
+$("fd-edit").addEventListener("click", function(){ openFormEditor(currentForm()); });
+$("fd-toggle").addEventListener("click", function(){
+  var f = currentForm();
+  if (f) toggleFormActive(f);
+});
+function toggleFormActive(f){
+  if (f.active && !confirm('Disable "' + f.name + '"? Its listener stops immediately; past submissions are kept.')) return;
+  api("POST", "/admin/forms/" + f.id + "/" + (f.active ? "delete" : "restore")).then(function(res){
+    if (!res.body.ok){ flash("forms-msg", res.body.error || "Could not update the form."); return; }
+    loadForms();
+  });
+}
+$("add-form-btn").addEventListener("click", function(){ openFormEditor(null); });
+$("fe-cancel").addEventListener("click", function(){ show("dash-view"); });
+function openFormEditor(form){
+  STATE.editingFormId = form ? form.id : null;
+  $("form-editor-title").textContent = form ? "Edit form" : "Add a form";
+  $("fe-name").value = form ? form.name : "";
+  $("fe-port").value = form ? form.port : "";
+  $("fe-lang-en").checked = form ? form.lang_en : true;
+  $("fe-lang-ar").checked = form ? form.lang_ar : true;
+  renderFormEditorExtraLangs(form ? (form.enabled_extra_langs || []) : []);
+  clearFlash("form-editor-msg");
+  show("form-editor-view");
+}
+function renderFormEditorExtraLangs(enabled){
+  var wrap = $("fe-lang-extra-wrap");
+  wrap.innerHTML = "";
+  extraLangCodes().forEach(function(code){
+    var lang = STATE.languageLabels[code];
+    var row = document.createElement("div");
+    row.className = "check-row";
+    row.style.marginTop = "0";
+    var id = "fe-lang-extra-" + code;
+    row.innerHTML = '<input type="checkbox" id="' + id + '" class="fe-lang-extra" data-lang="' + code + '">' +
+      '<label for="' + id + '" style="margin:0">' + escapeHtml(lang.name) + '</label>';
+    row.querySelector("input").checked = enabled.indexOf(code) !== -1;
+    row.querySelector("input").addEventListener("change", function(){ enforceOneLanguageMinimum(this); });
+    wrap.appendChild(row);
+  });
+}
+function collectFormEditorExtraLangs(){
+  return Array.from($("fe-lang-extra-wrap").querySelectorAll(".fe-lang-extra"))
+    .filter(function(c){ return c.checked; }).map(function(c){ return c.dataset.lang; });
+}
+function anyLanguageChecked(){
+  return $("fe-lang-en").checked || $("fe-lang-ar").checked || collectFormEditorExtraLangs().length > 0;
+}
+function enforceOneLanguageMinimum(justChecked){
+  // Prevent unchecking the last remaining language client-side, mirroring
+  // the server-side "at least one" rule so the error message is rare.
+  if (!anyLanguageChecked()){
+    justChecked.checked = true;
+  }
+}
+$("fe-lang-en").addEventListener("change", function(){ enforceOneLanguageMinimum($(this.checked ? "fe-lang-en" : "fe-lang-ar")); });
+$("fe-lang-ar").addEventListener("change", function(){ enforceOneLanguageMinimum($(this.checked ? "fe-lang-ar" : "fe-lang-en")); });
+$("fe-save").addEventListener("click", function(){
+  clearFlash("form-editor-msg");
+  var name = $("fe-name").value.trim();
+  var port = $("fe-port").value.trim();
+  if (name.length < 2){ flash("form-editor-msg", "Form name is required."); return; }
+  var langEn = $("fe-lang-en").checked, langAr = $("fe-lang-ar").checked;
+  var extraLangs = collectFormEditorExtraLangs();
+  if (!langEn && !langAr && !extraLangs.length){ flash("form-editor-msg", "At least one language must stay enabled."); return; }
+  var payload = { name: name, port: port || undefined, lang_en: langEn, lang_ar: langAr, enabled_extra_langs: extraLangs };
+  var url = STATE.editingFormId ? "/admin/forms/" + STATE.editingFormId + "/update" : "/admin/forms";
+  api("POST", url, payload).then(function(res){
+    if (res.body.ok){ show("dash-view"); loadForms(); return; }
+    flash("form-editor-msg", res.body.error || "Could not save this form.");
+  });
+});
+
+/* ------------------------------------------------------------ fields */
+function loadFields(){
+  if (!STATE.currentFormId){ STATE.fields = []; renderFields(); return; }
+  api("GET", "/admin/fields?form_id=" + STATE.currentFormId).then(function(res){
+    if (res.status !== 200) return;
+    STATE.fields = res.body.fields;
+    renderFields();
+  });
+}
+function renderFields(){
+  var box = $("fields-list");
+  box.innerHTML = "";
+  var sorted = STATE.fields.slice().sort(function(a,b){ return a.sort_order - b.sort_order; });
+  sorted.forEach(function(f, i){
+    var row = document.createElement("div");
+    row.className = "field-row";
+    row.innerHTML =
+      '<div class="info"><b>' + escapeHtml(f.label_en) + '</b>' +
+      '<div class="meta">' + f.field_type + (f.required ? ' · required' : '') + ' · key: ' + escapeHtml(f.field_key) + '</div></div>' +
+      '<span class="badge ' + (f.active ? "on" : "off") + '">' + (f.active ? "active" : "hidden") + '</span>';
+    var actions = document.createElement("div");
+    actions.className = "actions";
+
+    var up = mkBtn("↑", function(){ move(f.id, -1); });
+    up.disabled = i === 0;
+    var down = mkBtn("↓", function(){ move(f.id, 1); });
+    down.disabled = i === sorted.length - 1;
+    var edit = mkBtn("Edit", function(){ openEditor(f); });
+    var toggle = mkBtn(f.active ? "Hide" : "Restore", function(){ toggleActive(f); });
+
+    [up, down, edit, toggle].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+  if (!sorted.length){
+    box.innerHTML = '<p class="hint">No extra fields yet — first name, last name and email are always shown.</p>';
+  }
+}
+function mkBtn(label, onClick){
+  var b = document.createElement("button");
+  b.type = "button"; b.textContent = label;
+  b.addEventListener("click", onClick);
+  return b;
+}
+function escapeHtml(s){
+  var d = document.createElement("div"); d.textContent = s == null ? "" : s; return d.innerHTML;
+}
+function formatDT(raw){
+  if (!raw) return "";
+  var iso = String(raw);
+  if (iso.indexOf("Z") === -1 && iso.indexOf("+") === -1) iso += "Z";   // stored/sent as UTC
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return String(raw).replace("T", " ").slice(0, 16);
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      timeZone: STATE.timezone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false
+    }).format(d).replace(",", "");
+  } catch (e){
+    return String(raw).replace("T", " ").slice(0, 16);
+  }
+}
+
+function move(id, dir){
+  var sorted = STATE.fields.slice().sort(function(a,b){ return a.sort_order - b.sort_order; });
+  var idx = sorted.findIndex(function(f){ return f.id === id; });
+  var swapWith = idx + dir;
+  if (swapWith < 0 || swapWith >= sorted.length) return;
+  var tmp = sorted[idx]; sorted[idx] = sorted[swapWith]; sorted[swapWith] = tmp;
+  var order = sorted.map(function(f){ return f.id; });
+  api("POST", "/admin/fields/reorder", {order: order}).then(function(){ loadFields(); });
+}
+function toggleActive(f){
+  if (f.active && !confirm('Hide "' + f.label_en + '" from the public form? Past submissions keep their data.')) return;
+  api("POST", "/admin/fields/" + f.id + "/" + (f.active ? "delete" : "restore"))
+    .then(function(){ loadFields(); });
+}
+
+/* -------------------------------------------------- field key library */
+function loadFieldLibrary(){
+  return api("GET", "/admin/field-library").then(function(res){
+    if (res.status !== 200) return;
+    STATE.library = res.body.fields;
+    populatePredefinedSelect();
+    renderLibrary();
+  });
+}
+function populatePredefinedSelect(){
+  var sel = $("ed-predefined");
+  var current = sel.value;
+  sel.innerHTML = '<option value="">— choose a field key —</option>';
+  STATE.library.forEach(function(f){
+    var opt = document.createElement("option");
+    opt.value = f.field_key; opt.textContent = f.label_en + " (" + f.field_key + ")";
+    sel.appendChild(opt);
+  });
+  if (current) sel.value = current;
+}
+function renderLibrary(){
+  var box = $("lib-list");
+  box.innerHTML = "";
+  STATE.library.forEach(function(f){
+    var row = document.createElement("div");
+    row.className = "field-row";
+    var optCount = f.options ? f.options.length + " options" : "";
+    row.innerHTML =
+      '<div class="info"><b>' + escapeHtml(f.label_en) + ' / ' + escapeHtml(f.label_ar) + '</b>' +
+      '<div class="meta">' + f.field_type + (optCount ? " · " + optCount : "") + ' · key: ' + escapeHtml(f.field_key) + '</div></div>';
+    var actions = document.createElement("div");
+    actions.className = "actions";
+    var add = mkBtn("+ Add to form", function(){ addLibraryField(f); });
+    var edit = mkBtn("Edit", function(){ openKeyEditor(f); });
+    var del = mkBtn("Delete", function(){ deleteLibraryKey(f); });
+    [add, edit, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    row.appendChild(actions);
+    box.appendChild(row);
+  });
+  if (!STATE.library.length){
+    box.innerHTML = '<p class="hint">No field keys yet — add one below.</p>';
+  }
+}
+function addLibraryField(f){
+  clearFlash("lib-msg");
+  var formId = parseInt($("lib-form-select").value, 10) || null;
+  if (!formId){ flash("lib-msg", "Choose a form first."); return; }
+  var payload = { form_id: formId, field_key: f.field_key, required: false };
+  api("POST", "/admin/fields", payload).then(function(res){
+    if (res.body.ok){
+      flash("lib-msg", '"' + f.label_en + '" added.', true);
+      if (formId === STATE.currentFormId) loadFields();
+      return;
+    }
+    flash("lib-msg", res.body.error || "Could not add this field — it may already be on that form.");
+  });
+}
+function deleteLibraryKey(f){
+  if (!confirm('Delete the field key "' + f.label_en + '"? Forms that already added it keep their existing data — this only removes it from the catalog.')) return;
+  api("POST", "/admin/field-keys/" + f.id + "/delete").then(function(res){
+    if (!res.body.ok){ flash("lib-msg", res.body.error || "Could not delete this field key."); return; }
+    loadFieldLibrary();
+  });
+}
+
+/* --------------------------------------------------- field key editor */
+$("add-key-btn").addEventListener("click", function(){ openKeyEditor(null); });
+$("ke-cancel").addEventListener("click", function(){ show("dash-view"); });
+$("ke-type").addEventListener("change", function(){
+  $("ke-options-wrap").classList.toggle("hidden", $("ke-type").value !== "select");
+});
+$("ke-add-opt").addEventListener("click", function(){ addKeyOptionRow({value:"", label_en:"", label_ar:""}); });
+
+function extraLangCodes(){
+  return Object.keys(STATE.languageLabels).filter(function(c){ return c !== "en" && c !== "ar"; });
+}
+function renderKeyExtraLangs(labelsExtra){
+  labelsExtra = labelsExtra || {};
+  var wrap = $("ke-extra-wrap");
+  wrap.innerHTML = "";
+  extraLangCodes().forEach(function(code){
+    var lang = STATE.languageLabels[code];
+    var label = document.createElement("label");
+    label.textContent = "Label (" + lang.name + ")";
+    var input = document.createElement("input");
+    input.type = "text"; input.className = "ke-extra-input";
+    input.dataset.lang = code;
+    input.dir = lang.dir;
+    input.value = labelsExtra[code] || "";
+    wrap.appendChild(label);
+    wrap.appendChild(input);
+  });
+}
+function collectKeyExtraLangs(){
+  var out = {};
+  Array.from($("ke-extra-wrap").querySelectorAll(".ke-extra-input")).forEach(function(input){
+    var v = input.value.trim();
+    if (v) out[input.dataset.lang] = v;
+  });
+  return out;
+}
+function openKeyEditor(key){
+  STATE.editingKeyId = key ? key.id : null;
+  $("key-editor-title").textContent = key ? "Edit field key" : "Add a field key";
+  $("ke-key").value = key ? key.field_key : "";
+  $("ke-key").disabled = !!key;
+  $("ke-en").value = key ? key.label_en : "";
+  $("ke-ar").value = key ? key.label_ar : "";
+  renderKeyExtraLangs(key ? key.labels_extra : null);
+  $("ke-type").value = key ? key.field_type : "text";
+  $("ke-options").innerHTML = "";
+  if (key && key.field_type === "select" && key.options){ key.options.forEach(addKeyOptionRow); }
+  $("ke-options-wrap").classList.toggle("hidden", $("ke-type").value !== "select");
+  clearFlash("key-editor-msg");
+  show("key-editor-view");
+}
+function addKeyOptionRow(opt){
+  var row = document.createElement("div");
+  row.className = "opt-row";
+  row.innerHTML =
+    '<input placeholder="value" class="opt-value">' +
+    '<input placeholder="English label (optional)" class="opt-en">' +
+    '<input placeholder="Arabic label (optional)" class="opt-ar" dir="rtl">';
+  extraLangCodes().forEach(function(code){
+    var lang = STATE.languageLabels[code];
+    var input = document.createElement("input");
+    input.placeholder = lang.name + " label (optional)";
+    input.className = "opt-extra"; input.dataset.lang = code; input.dir = lang.dir;
+    input.value = (opt.label_extra && opt.label_extra[code]) || "";
+    row.appendChild(input);
+  });
+  var del = mkBtn("✕", function(){ row.remove(); });
+  del.className = "btn-outline btn-sm";
+  row.appendChild(del);
+  row.querySelector(".opt-value").value = opt.value || "";
+  row.querySelector(".opt-en").value = opt.label_en || "";
+  row.querySelector(".opt-ar").value = opt.label_ar || "";
+  $("ke-options").appendChild(row);
+}
+function collectKeyOptions(){
+  return Array.from($("ke-options").querySelectorAll(".opt-row")).map(function(r){
+    var labelExtra = {};
+    Array.from(r.querySelectorAll(".opt-extra")).forEach(function(input){
+      var v = input.value.trim();
+      if (v) labelExtra[input.dataset.lang] = v;
+    });
+    return {
+      value: r.querySelector(".opt-value").value.trim(),
+      label_en: r.querySelector(".opt-en").value.trim(),
+      label_ar: r.querySelector(".opt-ar").value.trim(),
+      label_extra: labelExtra
+    };
+  }).filter(function(o){ return o.value || o.label_en || o.label_ar; });
+}
+$("ke-save").addEventListener("click", function(){
+  clearFlash("key-editor-msg");
+  var type = $("ke-type").value;
+  var payload = {
+    field_key: $("ke-key").value.trim(),
+    label_en: $("ke-en").value.trim(),
+    label_ar: $("ke-ar").value.trim(),
+    labels_extra: collectKeyExtraLangs(),
+    field_type: type,
+    options: type === "select" ? collectKeyOptions() : null
+  };
+  var url = STATE.editingKeyId ? "/admin/field-keys/" + STATE.editingKeyId + "/update" : "/admin/field-keys";
+  api("POST", url, payload).then(function(res){
+    if (res.body.ok){ show("dash-view"); loadFieldLibrary(); return; }
+    flash("key-editor-msg", res.body.error || "Could not save this field key.");
+  });
+});
+
+/* --------------------------------------------------------- dashboard */
+function dashFilters(){
+  return { form_id: $("dash-form").value, date_from: $("dash-from").value.trim(), date_to: $("dash-to").value.trim() };
+}
+function loadDashboard(){
+  var f = dashFilters();
+  var parts = [];
+  Object.keys(f).forEach(function(k){ if (f[k]) parts.push(k + "=" + encodeURIComponent(f[k])); });
+  api("GET", "/admin/dashboard" + (parts.length ? "?" + parts.join("&") : "")).then(function(res){
+    if (res.status !== 200) return;
+    renderDashboard(res.body.summary);
+  });
+}
+function renderDashboard(s){
+  $("kpi-total").textContent = s.total;
+  $("kpi-forms").textContent = s.byForm.length;
+  var activeDays = s.trend.filter(function(d){ return d.n > 0; }).length;
+  $("kpi-avgday").textContent = activeDays ? (s.total / activeDays).toFixed(1) : "0";
+
+  $("dash-empty").classList.toggle("hidden", s.total > 0);
+
+  var bars = $("dash-trend-bars"), labels = $("dash-trend-labels");
+  bars.innerHTML = ""; labels.innerHTML = "";
+  var maxN = Math.max(1, Math.max.apply(null, s.trend.map(function(d){ return d.n; }).concat([0])));
+  s.trend.forEach(function(d){
+    var bar = document.createElement("div");
+    bar.className = "bar";
+    bar.style.height = Math.max(2, Math.round((d.n / maxN) * 100)) + "px";
+    bar.title = d.date + ": " + d.n;
+    bars.appendChild(bar);
+    var lab = document.createElement("span");
+    lab.textContent = d.date.slice(5);
+    labels.appendChild(lab);
+  });
+
+  renderBreakdown("dash-by-form", s.byForm.map(function(r){ return {name: r.name, n: r.n}; }), s.total);
+  renderBreakdown("dash-by-lang", s.byLanguage.map(function(r){ return {name: r.lang === "ar" ? "Arabic" : (r.lang === "en" ? "English" : r.lang), n: r.n}; }), s.total);
+}
+function renderBreakdown(boxId, rows, total){
+  var box = $(boxId);
+  box.innerHTML = "";
+  if (!rows.length){ box.innerHTML = '<p class="hint">No data yet.</p>'; return; }
+  rows.forEach(function(r){
+    var pct = total ? Math.round((r.n / total) * 100) : 0;
+    var row = document.createElement("div");
+    row.className = "breakdown-row";
+    row.innerHTML =
+      '<span class="name">' + escapeHtml(r.name || "—") + '</span>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' + pct + '%"></span></span>' +
+      '<span class="count">' + r.n + '</span>';
+    box.appendChild(row);
+  });
+}
+$("dash-apply").addEventListener("click", loadDashboard);
+$("dash-clear").addEventListener("click", function(){
+  $("dash-form").value = ""; $("dash-from").value = ""; $("dash-to").value = "";
+  loadDashboard();
+});
+
+/* ------------------------------------------------------- field editor */
+$("add-field-btn").addEventListener("click", function(){ openEditor(null); });
+$("ed-cancel").addEventListener("click", function(){ show("dash-view"); });
+$("ed-type").addEventListener("change", function(){
+  $("ed-options-wrap").classList.toggle("hidden", $("ed-type").value !== "select");
+});
+$("ed-add-opt").addEventListener("click", function(){ addOptionRow({value:"", label_en:"", label_ar:""}); });
+
+function setFieldEditorLocked(locked){
+  // A new field's key/labels/type/options are owned by the Field keys tab —
+  // locked here so they can only be picked, not retyped. Editing an existing
+  // form field keeps them editable (only its key stays fixed).
+  [$("ed-en"), $("ed-ar"), $("ed-type")].forEach(function(el){ el.disabled = locked; });
+  setOptionRowsLocked(locked);
+  $("ed-add-opt").classList.toggle("hidden", locked);
+}
+function setOptionRowsLocked(locked){
+  document.querySelectorAll("#ed-options .opt-row input").forEach(function(i){ i.disabled = locked; });
+  document.querySelectorAll("#ed-options .opt-row button").forEach(function(b){ b.classList.toggle("hidden", locked); });
+}
+function openEditor(field){
+  STATE.editingId = field ? field.id : null;
+  $("editor-title").textContent = field ? "Edit field" : "Add a field";
+  $("ed-predefined-wrap").classList.toggle("hidden", !!field);
+  $("ed-key-wrap").classList.toggle("hidden", !field);
+  $("ed-predefined").value = "";
+  $("ed-key").value = field ? field.field_key : "";
+  $("ed-key").disabled = true;
+  $("ed-en").value = field ? field.label_en : "";
+  $("ed-ar").value = field ? field.label_ar : "";
+  $("ed-type").value = field ? field.field_type : "text";
+  $("ed-required").checked = field ? field.required : false;
+  $("ed-options").innerHTML = "";
+  if (field && field.field_type === "select" && field.options){
+    field.options.forEach(addOptionRow);
+  }
+  $("ed-options-wrap").classList.toggle("hidden", $("ed-type").value !== "select");
+  setFieldEditorLocked(!field);
+  clearFlash("editor-msg");
+  show("editor-view");
+}
+$("ed-predefined").addEventListener("change", function(){
+  var key = this.value;
+  var f = STATE.library.find(function(x){ return x.field_key === key; });
+  $("ed-key").value = f ? f.field_key : "";
+  $("ed-en").value = f ? f.label_en : "";
+  $("ed-ar").value = f ? f.label_ar : "";
+  $("ed-type").value = f ? f.field_type : "text";
+  $("ed-options").innerHTML = "";
+  if (f && f.field_type === "select" && f.options){ f.options.forEach(addOptionRow); }
+  $("ed-options-wrap").classList.toggle("hidden", !f || f.field_type !== "select");
+  setOptionRowsLocked(true);
+});
+function addOptionRow(opt){
+  var row = document.createElement("div");
+  row.className = "opt-row";
+  row.innerHTML =
+    '<input placeholder="value" class="opt-value">' +
+    '<input placeholder="English label (optional)" class="opt-en">' +
+    '<input placeholder="Arabic label (optional)" class="opt-ar" dir="rtl">';
+  var del = mkBtn("✕", function(){ row.remove(); });
+  del.className = "btn-outline btn-sm";
+  row.appendChild(del);
+  row.querySelector(".opt-value").value = opt.value || "";
+  row.querySelector(".opt-en").value = opt.label_en || "";
+  row.querySelector(".opt-ar").value = opt.label_ar || "";
+  $("ed-options").appendChild(row);
+}
+function collectOptions(){
+  return Array.from($("ed-options").querySelectorAll(".opt-row")).map(function(r){
+    return {
+      value: r.querySelector(".opt-value").value.trim(),
+      label_en: r.querySelector(".opt-en").value.trim(),
+      label_ar: r.querySelector(".opt-ar").value.trim()
+    };
+  }).filter(function(o){ return o.value || o.label_en || o.label_ar; });
+}
+
+$("ed-save").addEventListener("click", function(){
+  clearFlash("editor-msg");
+  if (!STATE.editingId && !$("ed-predefined").value){
+    flash("editor-msg", "Choose a field key.");
+    return;
+  }
+  var type = $("ed-type").value;
+  var payload = {
+    form_id: STATE.currentFormId,
+    field_key: $("ed-key").value.trim(),
+    label_en: $("ed-en").value.trim(),
+    label_ar: $("ed-ar").value.trim(),
+    field_type: type,
+    required: $("ed-required").checked,
+    options: type === "select" ? collectOptions() : null
+  };
+  var url = STATE.editingId ? "/admin/fields/" + STATE.editingId + "/update" : "/admin/fields";
+  api("POST", url, payload).then(function(res){
+    if (res.body.ok){ show("dash-view"); loadFields(); return; }
+    flash("editor-msg", res.body.error || "Could not save this field.");
+  });
+});
+
+/* -------------------------------------------------------- submissions */
+function subsFilters(){
+  return {
+    form_id: $("f-form").value,
+    date_from: $("f-from").value.trim(),
+    date_to: $("f-to").value.trim(),
+    q: $("f-q").value.trim()
+  };
+}
+function subsQueryString(extra){
+  var f = subsFilters();
+  var parts = [];
+  Object.keys(f).forEach(function(k){ if (f[k]) parts.push(k + "=" + encodeURIComponent(f[k])); });
+  Object.keys(extra || {}).forEach(function(k){ if (extra[k]) parts.push(k + "=" + encodeURIComponent(extra[k])); });
+  return parts.join("&");
+}
+function loadSubmissions(){
+  var qs = subsQueryString({ page: STATE.subsPage });
+  api("GET", "/admin/submissions" + (qs ? "?" + qs : "")).then(function(res){
+    if (res.status !== 200){ return; }
+    renderSubmissions(res.body);
+  });
+  $("csv-link").href = "/admin/export.csv" + (subsQueryString() ? "?" + subsQueryString() : "");
+}
+function renderSubmissions(body){
+  var tbody = $("subs-body");
+  tbody.innerHTML = "";
+  (body.rows || []).forEach(function(r){
+    var tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td>" + escapeHtml(r.reference) + "</td>" +
+      "<td>" + escapeHtml(formatDT(r.created_at)) + "</td>" +
+      "<td>" + escapeHtml(r.form_name || "—") + "</td>" +
+      "<td>" + escapeHtml(r.first_name + " " + r.last_name) + "</td>" +
+      "<td>" + escapeHtml(r.email) + "</td>" +
+      "<td>" + escapeHtml(r.language || "") + "</td>" +
+      "<td>" + escapeHtml(r.status) + "</td>";
+    tbody.appendChild(tr);
+  });
+  if (!(body.rows || []).length){
+    tbody.innerHTML = '<tr><td colspan="7" class="hint" style="padding:14px 10px">No submissions match these filters.</td></tr>';
+  }
+  var pages = Math.max(1, Math.ceil(body.total / body.pageSize));
+  $("subs-page-info").textContent = "Page " + body.page + " of " + pages + " · " + body.total + " total";
+  $("subs-prev").disabled = body.page <= 1;
+  $("subs-next").disabled = body.page >= pages;
+}
+$("f-apply").addEventListener("click", function(){ STATE.subsPage = 1; loadSubmissions(); });
+$("f-clear").addEventListener("click", function(){
+  $("f-form").value = ""; $("f-from").value = ""; $("f-to").value = ""; $("f-q").value = "";
+  STATE.subsPage = 1; loadSubmissions();
+});
+$("subs-prev").addEventListener("click", function(){ if (STATE.subsPage > 1){ STATE.subsPage--; loadSubmissions(); } });
+$("subs-next").addEventListener("click", function(){ STATE.subsPage++; loadSubmissions(); });
+
+/* ------------------------------------------------------------ branding */
+var pendingLogo = null;      // {base64, ext} staged until Save is clicked
+
+function loadBranding(){
+  if (!STATE.currentFormId) return;
+  clearFlash("branding-msg");
+  pendingLogo = null;
+  api("GET", "/admin/forms/" + STATE.currentFormId + "/branding").then(function(res){
+    if (res.status !== 200) return;
+    var b = res.body.branding;
+    $("br-org").value = b.org_name || "";
+    $("br-subtitle-en").value = b.subtitle_en || "";
+    $("br-subtitle-ar").value = b.subtitle_ar || "";
+    $("br-primary").value = b.primary_color;
+    $("br-primary-picker").value = b.primary_color;
+    $("br-ink").value = b.ink_color;
+    $("br-ink-picker").value = b.ink_color;
+    $("br-logo-preview").src = b.hasLogo ? "/admin/forms/" + STATE.currentFormId + "/logo?t=" + Date.now() : "";
+    $("br-logo").value = "";
+    $("br-remove-logo").classList.toggle("hidden", !b.hasLogo);
+  });
+}
+$("br-primary-picker").addEventListener("input", function(){ $("br-primary").value = this.value; });
+$("br-ink-picker").addEventListener("input", function(){ $("br-ink").value = this.value; });
+$("br-primary").addEventListener("input", function(){ if (/^#[0-9a-fA-F]{6}$/.test(this.value)) $("br-primary-picker").value = this.value; });
+$("br-ink").addEventListener("input", function(){ if (/^#[0-9a-fA-F]{6}$/.test(this.value)) $("br-ink-picker").value = this.value; });
+
+$("br-logo").addEventListener("change", function(){
+  var file = this.files[0];
+  if (!file) { pendingLogo = null; return; }
+  if (file.size > 2 * 1024 * 1024){
+    flash("branding-msg", "Logo must be under 2 MB.");
+    this.value = "";
+    return;
+  }
+  var ext = (file.name.split(".").pop() || "").toLowerCase();
+  var reader = new FileReader();
+  reader.onload = function(){
+    var base64 = String(reader.result).split(",")[1];
+    pendingLogo = { base64: base64, ext: ext };
+    $("br-logo-preview").src = String(reader.result);
+  };
+  reader.readAsDataURL(file);
+});
+$("br-remove-logo").addEventListener("click", function(){
+  if (!confirm("Remove this form's logo?")) return;
+  api("POST", "/admin/forms/" + STATE.currentFormId + "/branding", { remove_logo: true }).then(function(res){
+    if (!res.body.ok){ flash("branding-msg", res.body.error || "Could not remove the logo."); return; }
+    loadBranding();
+  });
+});
+$("branding-save-btn").addEventListener("click", function(){
+  clearFlash("branding-msg");
+  var payload = {
+    org_name: $("br-org").value.trim(),
+    subtitle_en: $("br-subtitle-en").value.trim(),
+    subtitle_ar: $("br-subtitle-ar").value.trim(),
+    primary_color: $("br-primary").value.trim(),
+    ink_color: $("br-ink").value.trim()
+  };
+  if (pendingLogo){ payload.logo_base64 = pendingLogo.base64; payload.logo_ext = pendingLogo.ext; }
+  api("POST", "/admin/forms/" + STATE.currentFormId + "/branding", payload).then(function(res){
+    if (res.body.ok){ flash("branding-msg", "Saved.", true); pendingLogo = null; loadBranding(); return; }
+    flash("branding-msg", res.body.error || "Could not save branding.");
+  });
+});
+
+/* -------------------------------------------------------------- theme */
+var themeOverride = null;      // null = follow the system, else "light" or "dark"
+function systemPrefersDark(){
+  return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+}
+function effectiveTheme(){
+  return themeOverride || (systemPrefersDark() ? "dark" : "light");
+}
+function applyTheme(next, persist){
+  themeOverride = next;
+  if (next) document.documentElement.setAttribute("data-theme", next);
+  else document.documentElement.removeAttribute("data-theme");
+  $("theme-btn").textContent = effectiveTheme() === "dark" ? "Light" : "Dark";
+  applyAdminTheme(STATE.adminTheme);   // ink override only applies in light mode — re-evaluate on every switch
+  if (persist){
+    try { localStorage.setItem("offTheme", next || ""); } catch(e){}
+  }
+}
+$("theme-btn").addEventListener("click", function(){
+  applyTheme(effectiveTheme() === "dark" ? "light" : "dark", true);
+});
+if (window.matchMedia){
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(){
+    if (!themeOverride) applyTheme(null, false);
+  });
+}
+(function(){
+  var saved = null;
+  try { saved = localStorage.getItem("offTheme") || null; } catch(e){}
+  applyTheme(saved, false);
+})();
+
+/* -------------------------------------------------- time & timezone --- */
+function loadAppSettings(quiet){
+  return api("GET", "/admin/app-settings").then(function(res){
+    if (res.status !== 200) return;
+    STATE.timezone = res.body.settings.timezone || "UTC";
+    if (res.body.settings.language_labels) STATE.languageLabels = res.body.settings.language_labels;
+    if (res.body.settings.admin_theme) STATE.adminTheme = res.body.settings.admin_theme;
+    STATE.translateApiKey = res.body.settings.translate_api_key || "";
+    applyLanguageLabelNames();
+    applyAdminTheme(STATE.adminTheme);
+    updateDashClock();
+    if (quiet) return;
+    var sel = $("tz-select");
+    if (!sel.options.length){
+      res.body.timezones.forEach(function(tz){
+        var opt = document.createElement("option");
+        opt.value = tz; opt.textContent = tz;
+        sel.appendChild(opt);
+      });
+    }
+    sel.value = STATE.timezone;
+    $("ntp-server").value = res.body.settings.ntp_server || "";
+  });
+}
+$("time-save-btn").addEventListener("click", function(){
+  clearFlash("time-msg");
+  var payload = { timezone: $("tz-select").value, ntp_server: $("ntp-server").value.trim() };
+  api("POST", "/admin/app-settings", payload).then(function(res){
+    if (res.body.ok){
+      flash("time-msg", "Saved.", true);
+      STATE.timezone = payload.timezone;
+      updateDashClock();
+      if (!$("tab-subs").classList.contains("hidden")) loadSubmissions();
+      return;
+    }
+    flash("time-msg", res.body.error || "Could not save these settings.");
+  });
+});
+
+/* ---------------------------------------------------- language labels */
+function applyLanguageLabelNames(){
+  // The key (en/ar) never changes — only the display name shown to the
+  // admin, wherever this panel talks about "English"/"Arabic".
+  var en = STATE.languageLabels.en, ar = STATE.languageLabels.ar;
+  var enCheckLabel = document.querySelector('label[for="fe-lang-en"]');
+  var arCheckLabel = document.querySelector('label[for="fe-lang-ar"]');
+  if (enCheckLabel) enCheckLabel.textContent = en.name;
+  if (arCheckLabel) arCheckLabel.textContent = ar.name;
+}
+function loadLanguageLabels(){
+  var l = STATE.languageLabels;
+  $("lang-en-name").value = l.en.name;
+  $("lang-en-dir").value = l.en.dir;
+  $("lang-ar-name").value = l.ar.name;
+  $("lang-ar-dir").value = l.ar.dir;
+  clearFlash("lang-labels-msg");
+  $("translate-api-key").value = STATE.translateApiKey || "";
+  renderExtraLangList();
+  populateLangAddSelect();
+}
+$("translate-key-save-btn").addEventListener("click", function(){
+  var key = $("translate-api-key").value.trim();
+  api("POST", "/admin/app-settings", {translate_api_key: key}).then(function(res){
+    if (res.body.ok){
+      STATE.translateApiKey = key;
+      flash("lang-add-msg", "API key saved.", true);
+      return;
+    }
+    flash("lang-add-msg", res.body.error || "Could not save the API key.");
+  });
+});
+$("lang-labels-save-btn").addEventListener("click", function(){
+  clearFlash("lang-labels-msg");
+  var payload = {
+    language_labels: {
+      en: { name: $("lang-en-name").value.trim(), dir: $("lang-en-dir").value },
+      ar: { name: $("lang-ar-name").value.trim(), dir: $("lang-ar-dir").value }
+    }
+  };
+  api("POST", "/admin/language-labels", payload).then(function(res){
+    if (res.body.ok){
+      flash("lang-labels-msg", "Saved.", true);
+      // Merge — the server only touches en/ar, so keep any extra languages
+      // already in STATE rather than clobbering them.
+      STATE.languageLabels.en = payload.language_labels.en;
+      STATE.languageLabels.ar = payload.language_labels.ar;
+      applyLanguageLabelNames();
+      return;
+    }
+    flash("lang-labels-msg", res.body.error || "Could not save these labels.");
+  });
+});
+
+/* ------------------------------------------------------ extra languages */
+function renderExtraLangList(){
+  var box = $("lang-extra-list");
+  box.innerHTML = "";
+  extraLangCodes().forEach(function(code){
+    var lang = STATE.languageLabels[code];
+    var row = document.createElement("div");
+    row.className = "row";
+    row.style.alignItems = "flex-end";
+    row.innerHTML =
+      '<div><label>Key <code>' + escapeHtml(code) + '</code></label>' +
+      '<input type="text" class="lex-name" value="' + escapeHtml(lang.name) + '"></div>' +
+      '<div><label>Direction</label><select class="lex-dir">' +
+      '<option value="ltr"' + (lang.dir === "ltr" ? " selected" : "") + '>Left-to-right</option>' +
+      '<option value="rtl"' + (lang.dir === "rtl" ? " selected" : "") + '>Right-to-left</option>' +
+      '</select></div>' +
+      '<div style="flex:0 0 auto"><button class="btn-outline btn-sm lex-save" type="button">Save</button></div>' +
+      '<div style="flex:0 0 auto"><button class="btn-outline btn-sm btn-danger lex-remove" type="button">Remove</button></div>';
+    row.querySelector(".lex-save").addEventListener("click", function(){
+      var name = row.querySelector(".lex-name").value.trim();
+      var dir = row.querySelector(".lex-dir").value;
+      if (!name) return;
+      var payload = { language_labels: {} };
+      payload.language_labels[code] = { name: name, dir: dir };
+      api("POST", "/admin/language-labels", payload).then(function(res){
+        if (res.body.ok){
+          STATE.languageLabels[code] = {name: name, dir: dir};
+          flash("lang-add-msg", "Saved.", true);
+        } else {
+          flash("lang-add-msg", res.body.error || "Could not save.");
+        }
+      });
+    });
+    row.querySelector(".lex-remove").addEventListener("click", function(){
+      if (!confirm('Remove "' + lang.name + '"? Existing translated labels are left in place but no longer shown, and any form using it will drop back to its remaining languages.')) return;
+      api("POST", "/admin/language-labels/remove", {code: code}).then(function(res){
+        if (res.body.ok){
+          delete STATE.languageLabels[code];
+          renderExtraLangList();
+          populateLangAddSelect(true);
+          return;
+        }
+        flash("lang-add-msg", res.body.error || "Could not remove this language.");
+      });
+    });
+    box.appendChild(row);
+  });
+}
+function populateLangAddSelect(forceReload){
+  var sel = $("lang-add-select");
+  api("GET", "/admin/translate/languages").then(function(res){
+    if (res.status !== 200 || !res.body.ok){
+      sel.innerHTML = '<option value="">Translation service unavailable</option>';
+      return;
+    }
+    var langs = res.body.languages || [];
+    if (!langs.length){
+      sel.innerHTML = '<option value="">No more languages to add</option>';
+      return;
+    }
+    sel.innerHTML = "";
+    langs.forEach(function(l){
+      var opt = document.createElement("option");
+      opt.value = l.code; opt.textContent = l.name + " (" + l.code + ")";
+      opt.dataset.name = l.name; opt.dataset.dir = l.dir;
+      sel.appendChild(opt);
+    });
+  });
+}
+$("lang-add-btn").addEventListener("click", function(){
+  clearFlash("lang-add-msg");
+  var sel = $("lang-add-select");
+  var opt = sel.options[sel.selectedIndex];
+  if (!opt || !opt.value){ flash("lang-add-msg", "Choose a language first."); return; }
+  $("lang-add-btn").disabled = true;
+  $("lang-add-btn").textContent = "Adding & translating…";
+  api("POST", "/admin/language-labels/add", {code: opt.value, name: opt.dataset.name, dir: opt.dataset.dir}).then(function(res){
+    $("lang-add-btn").disabled = false;
+    $("lang-add-btn").textContent = "+ Add & translate";
+    if (res.body.ok){
+      STATE.languageLabels[res.body.code] = {name: opt.dataset.name, dir: opt.dataset.dir};
+      flash("lang-add-msg", res.body.translated + " label" + (res.body.translated === 1 ? "" : "s") +
+        " translated automatically" + (res.body.failed ? ", " + res.body.failed + " left blank for you to fill in" : "") + ".", true);
+      renderExtraLangList();
+      populateLangAddSelect();
+      return;
+    }
+    flash("lang-add-msg", res.body.error || "Could not add this language.");
+  });
+});
+
+function updateDashClock(){
+  var el = $("dash-clock");
+  if (!el) return;
+  var now = new Date();
+  var text;
+  try {
+    text = new Intl.DateTimeFormat(undefined, {
+      timeZone: STATE.timezone, year: "numeric", month: "short", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", hour12: false, timeZoneName: "short"
+    }).format(now);
+  } catch (e){
+    text = now.toString();
+  }
+  el.textContent = "Current time: " + text;
+}
+setInterval(updateDashClock, 30000);
+
+/* ------------------------------------------------------ admin theme --- */
+function hexToRgb(hex){
+  hex = (hex || "").replace("#", "");
+  if (hex.length === 3) hex = hex.split("").map(function(c){ return c + c; }).join("");
+  var n = parseInt(hex, 16);
+  return isNaN(n) ? [0,0,0] : [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function darken(hex, amount){
+  var rgb = hexToRgb(hex).map(function(v){ return Math.max(0, Math.round(v * (1 - amount))); });
+  return "#" + rgb.map(function(v){ return v.toString(16).padStart(2, "0"); }).join("");
+}
+function relativeLuminance(hex){
+  var rgb = hexToRgb(hex).map(function(v){
+    v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  });
+  return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+}
+function applyAdminTheme(theme){
+  var root = document.documentElement.style;
+  var primary = (theme && theme.primary) || "#FFEC01";
+  root.setProperty("--yellow", primary);
+  root.setProperty("--yellow-deep", darken(primary, 0.12));
+  root.setProperty("--on-yellow", relativeLuminance(primary) > 0.45 ? "#0B0B0B" : "#FFFFFF");
+  // Text color only applies in light mode — dark mode keeps its own fixed
+  // light-on-dark ink so a dark custom color can't make the page unreadable.
+  var text = (theme && theme.text) || "#0B0B0B";
+  if (effectiveTheme() === "light"){
+    root.setProperty("--ink", text);
+    root.setProperty("--focus", text);
+  } else {
+    root.removeProperty("--ink");
+    // Unlike --ink, the focus outline isn't body text — readability isn't a
+    // concern, so it still follows the brand primary color in dark mode
+    // instead of falling back to the hardcoded default yellow.
+    root.setProperty("--focus", primary);
+  }
+}
+function loadAdminTheme(){
+  var t = STATE.adminTheme;
+  $("theme-primary").value = t.primary;
+  $("theme-primary-picker").value = t.primary;
+  $("theme-text").value = t.text;
+  $("theme-text-picker").value = t.text;
+  clearFlash("theme-msg");
+}
+$("theme-primary-picker").addEventListener("input", function(){ $("theme-primary").value = this.value; });
+$("theme-primary").addEventListener("input", function(){ if (/^#[0-9a-fA-F]{6}$/.test(this.value)) $("theme-primary-picker").value = this.value; });
+$("theme-text-picker").addEventListener("input", function(){ $("theme-text").value = this.value; });
+$("theme-text").addEventListener("input", function(){ if (/^#[0-9a-fA-F]{6}$/.test(this.value)) $("theme-text-picker").value = this.value; });
+$("theme-save-btn").addEventListener("click", function(){
+  clearFlash("theme-msg");
+  var payload = { admin_theme: { primary: $("theme-primary").value.trim(), text: $("theme-text").value.trim() } };
+  if (!/^#[0-9a-fA-F]{6}$/.test(payload.admin_theme.primary) || !/^#[0-9a-fA-F]{6}$/.test(payload.admin_theme.text)){
+    flash("theme-msg", "Colors must be a 6-digit hex code, like #FFEC01.");
+    return;
+  }
+  api("POST", "/admin/app-settings", payload).then(function(res){
+    if (res.body.ok){
+      flash("theme-msg", "Saved.", true);
+      STATE.adminTheme = payload.admin_theme;
+      applyAdminTheme(STATE.adminTheme);
+      return;
+    }
+    flash("theme-msg", res.body.error || "Could not save these colors.");
+  });
+});
+
+boot();
+</script>
+</body>
+</html>

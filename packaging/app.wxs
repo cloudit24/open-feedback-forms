@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WiX v5 source for the Open Feedback Forms installer.
+
+  Built by build-msi.ps1, which runs PyInstaller first (producing
+  ..\dist\OpenFeedbackForms\) and then compiles this file against that
+  output folder. Don't run `wix build` on this directly without having
+  built the PyInstaller bundle first, since there's nothing to harvest yet.
+
+  Per-user install (Scope="perUser"): lands under the current user's
+  LocalAppData, no admin rights needed. Chosen deliberately, since
+  whoever runs this usually won't have admin on a work machine, and a
+  per-machine Program Files install would need elevation for every
+  install and every update.
+
+  The UpgradeCode below is fixed on purpose: it's what lets a future
+  version's .msi upgrade this install in place instead of sitting
+  side-by-side as a second copy. Never change it.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Open Feedback Forms"
+           Manufacturer="Open Feedback Forms contributors"
+           Version="1.0.0"
+           UpgradeCode="fb5d6696-aafb-45d7-938f-8e5975517a43"
+           Compressed="yes"
+           Scope="perUser">
+
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Open Feedback Forms is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="INSTALLFOLDER" Name="Open Feedback Forms" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppMenuFolder" Name="Open Feedback Forms">
+        <Component Id="ShortcutsComponent" Guid="4c1c6e2a-2f2a-4e2e-9a6a-3a2f6b7d9c11">
+          <Shortcut Id="RunShortcut"
+                    Name="Open Feedback Forms"
+                    Description="Starts the feedback receiver and admin panel"
+                    Target="[INSTALLFOLDER]OpenFeedbackForms.exe"
+                    WorkingDirectory="INSTALLFOLDER" />
+          <Shortcut Id="UninstallShortcut"
+                    Name="Uninstall Open Feedback Forms"
+                    Target="[System64Folder]msiexec.exe"
+                    Arguments="/x [ProductCode]" />
+          <RemoveFolder Id="RemoveAppMenuFolder" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\OpenFeedbackForms\App" Name="Installed" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="MainFeature" Title="Open Feedback Forms" Level="1">
+      <Files Include="$(var.DistDir)\**" Directory="INSTALLFOLDER" />
+      <ComponentRef Id="ShortcutsComponent" />
+    </Feature>
+
+    <Icon Id="AppIcon" SourceFile="$(var.DistDir)\OpenFeedbackForms.exe" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+  </Package>
+</Wix>
