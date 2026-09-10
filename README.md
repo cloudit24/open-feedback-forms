@@ -178,16 +178,39 @@ version 5.x — avoid v6+, which requires accepting a paid EULA).
 
 ## About us
 
-**Cloud IT 24** is an IT services company that designs, builds and supports
-technology solutions across every kind of infrastructure — on-premises,
-cloud and hybrid. From custom software development and systems integration
-to networking, security and day-to-day operations, we help organizations
-run reliably today and grow with confidence tomorrow.
+Cloud IT 24 is a team of IT professionals who design, build and support
+technology solutions across on-premises, cloud and hybrid infrastructure.
+Our work spans custom software development, systems integration, networking,
+security and day-to-day operations, helping organizations run reliably today
+and grow with confidence tomorrow.
 
 We favour practical, well-engineered solutions over complexity: tools that
 are simple to deploy, straightforward to maintain, and built to keep working
-long after the project ends. Open Feedback Forms is one of them — developed,
-maintained and released as open source by the Cloud IT 24 team.
+long after the project ends. Open Feedback Forms is one of them, developed,
+maintained and released as open source by the team.
 
-- [github.com/cloudit24](https://github.com/cloudit24/)
-- [github.com/shatheitguy](https://github.com/shatheitguy)
+### What this app does
+
+A self-hosted, bilingual feedback form platform. No external services are
+required beyond the MariaDB database you point it at. Run any number of
+independently branded forms, each on its own port, managed from one admin
+panel.
+
+### Highlights
+
+- English and Arabic out of the box, plus any language you add, auto-translated via LibreTranslate and RTL-aware throughout
+- Per-form branding: logo, colors, subtitle, custom questions, expiry date
+- Custom roles built from a permission checklist: full access, one form only, read-only, or any combination you need
+- SMTP and Telegram alerts: new submissions, daily digests, database disconnection, form expiry
+- Dashboard with a daily or hourly (24h) submissions trend, filterable by form, date, language and status
+- CSV export, Docker deployment, and a one-line installer
+
+### Developed by
+
+Cloudit24
+[https://github.com/cloudit24/](https://github.com/cloudit24/)
+
+&
+
+Shatheitguy
+[https://github.com/shatheitguy](https://github.com/shatheitguy)
