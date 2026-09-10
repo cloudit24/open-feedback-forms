@@ -51,6 +51,16 @@ piping the one-liner — it detects the existing checkout and reuses it. See
 `docker-compose.yml` for the two services (`app`, and `db` — only started
 when you choose the bundled-database option).
 
+**To update an existing install**, re-run the same one-liner (or
+`./install.sh` from inside the checkout) — it pulls the latest code and
+rebuilds the containers. `.env` and your database are untouched. Or by hand:
+
+```bash
+cd open-feedback-forms
+git pull
+docker compose up -d --build
+```
+
 ## Run it on Windows
 
 ```powershell

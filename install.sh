@@ -17,13 +17,19 @@ command -v docker >/dev/null 2>&1 || { echo "Docker is required: https://docs.do
 docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required (bundled with recent Docker Desktop/Engine)."; exit 1; }
 
 # Reuse the current checkout if install.sh is already being run from inside
-# the cloned repo (has server.py as a sibling); otherwise clone fresh.
+# the cloned repo (has server.py as a sibling); otherwise clone fresh. Either
+# way, an existing checkout gets pulled to latest — this is also how you
+# update an install: just re-run this same one-liner.
 if [ -f "./server.py" ] && [ -f "./docker-compose.yml" ]; then
-    echo "Running from an existing checkout — skipping clone."
+    echo "Running from an existing checkout — pulling latest changes..."
+    if command -v git >/dev/null 2>&1; then
+        git pull --ff-only || echo "Could not fast-forward automatically — pull manually, then re-run this script."
+    fi
 else
     command -v git >/dev/null 2>&1 || { echo "git is required: https://git-scm.com/downloads"; exit 1; }
     if [ -d "$DIR" ]; then
-        echo "$DIR already exists — reusing it."
+        echo "$DIR already exists — pulling latest changes..."
+        (cd "$DIR" && git pull --ff-only) || echo "Could not fast-forward automatically — pull manually, then re-run this script."
     else
         git clone "$REPO_URL" "$DIR"
     fi
