@@ -1930,8 +1930,17 @@ class AdminHandler(BaseHandler):
         filters, err = self._restrict_filters_to_identity(identity, filters, "view_dashboard")
         if err:
             return self.send_json(err[0], {"ok": False, "error": err[1]})
+        granularity = "day"
+        if (self.query_one("granularity") == "hour" and filters.get("date_from") and filters.get("date_to")):
+            try:
+                span = (datetime.strptime(filters["date_to"][:19], "%Y-%m-%d %H:%M:%S") -
+                        datetime.strptime(filters["date_from"][:19], "%Y-%m-%d %H:%M:%S"))
+                if timedelta(0) <= span <= timedelta(days=10):
+                    granularity = "hour"
+            except ValueError:
+                pass
         try:
-            summary = db.dashboard_summary(filters)
+            summary = db.dashboard_summary(filters, granularity=granularity)
         except Exception as e:
             log("dashboard query failed: %s" % e)
             return self.send_json(500, {"ok": False})

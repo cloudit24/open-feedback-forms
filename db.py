@@ -16,7 +16,7 @@ a feedback form should need to ask for).
 
 import json
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import mysql.connector
 from mysql.connector import pooling
@@ -340,11 +340,15 @@ def delete_field_key(key_id):
         conn.close()
 
 
-def dashboard_summary(filters=None):
+def dashboard_summary(filters=None, granularity="day"):
     """Core metrics for the Dashboard tab: totals, per-form and per-language
-    breakdowns, and a daily submissions trend — computed from the fixed
-    `feedback` columns only, so it works the same regardless of which custom
-    questions any given form asks."""
+    breakdowns, and a submissions trend — computed from the fixed `feedback`
+    columns only, so it works the same regardless of which custom questions
+    any given form asks. granularity="hour" buckets the trend by hour
+    instead of by day (gaps are zero-filled — see below — so a short,
+    mostly-quiet range still reads as a real 24h graph, not a handful of
+    disconnected bars); the caller (server.py) only allows that when both
+    date_from and date_to are given, so the fill has real bounds."""
     filters = filters or {}
     where, params = _submission_filter_sql(filters, prefix="f.")
     base = " FROM feedback f JOIN forms fm ON fm.id = f.form_id " + where
@@ -364,9 +368,16 @@ def dashboard_summary(filters=None):
             "SELECT COALESCE(NULLIF(f.language,''),'—') AS lang, COUNT(*) AS n" + base + " GROUP BY lang", params)
         by_language = cur.fetchall()
 
-        cur.execute(
-            "SELECT DATE(f.created_at) AS d, COUNT(*) AS n" + base + " GROUP BY DATE(f.created_at) ORDER BY d", params)
-        trend = [{"date": str(r["d"]), "n": r["n"]} for r in cur.fetchall()]
+        if granularity == "hour":
+            cur.execute(
+                "SELECT DATE_FORMAT(f.created_at, '%Y-%m-%d %H:00:00') AS d, COUNT(*) AS n" + base +
+                " GROUP BY d ORDER BY d", params)
+            by_bucket = {r["d"]: r["n"] for r in cur.fetchall()}
+            trend = _fill_hourly_trend(by_bucket, filters.get("date_from"), filters.get("date_to"))
+        else:
+            cur.execute(
+                "SELECT DATE(f.created_at) AS d, COUNT(*) AS n" + base + " GROUP BY DATE(f.created_at) ORDER BY d", params)
+            trend = [{"date": str(r["d"]), "n": r["n"]} for r in cur.fetchall()]
 
         cur.close()
         return {"total": total, "byForm": by_form, "byLanguage": by_language, "trend": trend}
@@ -824,6 +835,38 @@ def save_feedback(form_id, rec):
         raise DBError("could not allocate a reference number")
     finally:
         conn.close()
+
+
+def _fill_hourly_trend(by_bucket, date_from, date_to):
+    """by_bucket: {"YYYY-MM-DD HH:00:00": n, ...} from the query, sparse
+    (hours with zero submissions never appear). Walks every hour between
+    date_from and date_to filling in 0 where the query found nothing, so
+    the chart reads as a real timeline instead of the quiet hours just
+    being absent. Caps at 240 hours (10 days) as a sanity backstop —
+    server.py's own cap is tighter, this is a second line of defense."""
+    def parse(dt_str, fallback):
+        if not dt_str:
+            return fallback
+        text = dt_str[:19].replace("T", " ")
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+            try:
+                return datetime.strptime(text, fmt)
+            except ValueError:
+                continue
+        return fallback
+    now = datetime.now()
+    start = parse(date_from, now - timedelta(hours=23)).replace(minute=0, second=0, microsecond=0)
+    end = parse(date_to, now).replace(minute=0, second=0, microsecond=0)
+    if end < start:
+        start, end = end, start
+    hours = int((end - start).total_seconds() // 3600) + 1
+    hours = min(hours, 240)
+    trend = []
+    for i in range(hours):
+        bucket_dt = start + timedelta(hours=i)
+        key = bucket_dt.strftime("%Y-%m-%d %H:00:00")
+        trend.append({"date": key, "n": by_bucket.get(key, 0)})
+    return trend
 
 
 def _submission_filter_sql(filters, prefix=""):

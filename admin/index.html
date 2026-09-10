@@ -216,9 +216,9 @@ table.subs tr:last-child td{border-bottom:none}
         <div class="kpi-row">
           <div class="kpi"><div class="n" id="kpi-total">—</div><div class="l">Total submissions</div></div>
           <div class="kpi"><div class="n" id="kpi-forms">—</div><div class="l">Forms with submissions</div></div>
-          <div class="kpi"><div class="n" id="kpi-avgday">—</div><div class="l">Avg. per active day</div></div>
+          <div class="kpi"><div class="n" id="kpi-avgday">—</div><div class="l" id="kpi-avgday-label">Avg. per active day</div></div>
         </div>
-        <h2 style="font-size:14px">Submissions per day</h2>
+        <h2 style="font-size:14px" id="dash-trend-title">Submissions per day</h2>
         <div class="bar-chart" id="dash-trend-bars"></div>
         <div class="bar-labels" id="dash-trend-labels"></div>
         <p class="hint" id="dash-empty" style="margin-top:10px">No submissions match these filters yet.</p>
@@ -1218,6 +1218,36 @@ function formatDT(raw){
   }
 }
 
+/* Inverse of formatDT: a datetime-local input's value is "wall clock" time
+   in whatever timezone this admin panel is configured to display (Time tab
+   -> Display timezone), but the server compares filters against UTC-stored
+   created_at with no conversion of its own. Left alone, "From 00:00" meant
+   UTC midnight regardless of the admin's own timezone — off by exactly the
+   UTC offset, worst right at day boundaries, which is exactly where a
+   quick manual test tends to look. Converts the typed wall-clock value to
+   the true UTC instant it represents before it's sent as a filter. */
+function zonedInputToUtcParam(value){
+  if (!value) return "";
+  var m = value.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!m) return value;
+  var guessUtcMs = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], 0);
+  try {
+    var fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: STATE.timezone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false
+    });
+    var parts = {};
+    fmt.formatToParts(new Date(guessUtcMs)).forEach(function(p){ parts[p.type] = p.value; });
+    var hour = parts.hour === "24" ? "00" : parts.hour;
+    var displayedAsUtcMs = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +hour, +parts.minute, +parts.second);
+    var offsetMs = displayedAsUtcMs - guessUtcMs;
+    var realUtc = new Date(guessUtcMs - offsetMs);
+    return realUtc.toISOString().slice(0, 19).replace("T", " ");
+  } catch (e){
+    return value;   // unknown/invalid timezone — fall back to the old (UTC-as-typed) behavior
+  }
+}
+
 function move(id, dir){
   var sorted = STATE.fields.slice().sort(function(a,b){ return a.sort_order - b.sort_order; });
   var idx = sorted.findIndex(function(f){ return f.id === id; });
@@ -1407,12 +1437,23 @@ $("ke-save").addEventListener("click", function(){
 
 /* --------------------------------------------------------- dashboard */
 function dashFilters(){
-  return { form_id: $("dash-form").value, date_from: $("dash-from").value.trim(), date_to: $("dash-to").value.trim() };
+  return {
+    form_id: $("dash-form").value,
+    date_from: zonedInputToUtcParam($("dash-from").value.trim()),
+    date_to: zonedInputToUtcParam($("dash-to").value.trim()),
+  };
 }
 function loadDashboard(){
   var f = dashFilters();
   var parts = [];
   Object.keys(f).forEach(function(k){ if (f[k]) parts.push(k + "=" + encodeURIComponent(f[k])); });
+  // Both ends of the range picked and it's short enough to be meaningful
+  // hour-by-hour (2 days) -> ask for the hourly "24h" trend instead of
+  // one bar per day; server.py re-validates this, it's not trusted as-is.
+  if (f.date_from && f.date_to){
+    var spanMs = new Date(f.date_to.replace(" ", "T") + "Z") - new Date(f.date_from.replace(" ", "T") + "Z");
+    if (spanMs >= 0 && spanMs <= 2 * 24 * 3600 * 1000) parts.push("granularity=hour");
+  }
   api("GET", "/admin/dashboard" + (parts.length ? "?" + parts.join("&") : "")).then(function(res){
     if (res.status !== 200) return;
     renderDashboard(res.body.summary);
@@ -1421,22 +1462,38 @@ function loadDashboard(){
 function renderDashboard(s){
   $("kpi-total").textContent = s.total;
   $("kpi-forms").textContent = s.byForm.length;
-  var activeDays = s.trend.filter(function(d){ return d.n > 0; }).length;
-  $("kpi-avgday").textContent = activeDays ? (s.total / activeDays).toFixed(1) : "0";
+  // Hourly buckets are "YYYY-MM-DD HH:00:00" (19 chars); daily are
+  // "YYYY-MM-DD" (10) — that length is all we need to tell them apart.
+  var isHourly = s.trend.length > 0 && s.trend[0].date.length > 10;
+  var activePeriods = s.trend.filter(function(d){ return d.n > 0; }).length;
+  $("kpi-avgday").textContent = activePeriods ? (s.total / activePeriods).toFixed(1) : "0";
+  $("kpi-avgday-label").textContent = isHourly ? "Avg. per active hour" : "Avg. per active day";
+  $("dash-trend-title").textContent = isHourly ? "Submissions per hour (24h view)" : "Submissions per day";
 
   $("dash-empty").classList.toggle("hidden", s.total > 0);
 
   var bars = $("dash-trend-bars"), labels = $("dash-trend-labels");
   bars.innerHTML = ""; labels.innerHTML = "";
   var maxN = Math.max(1, Math.max.apply(null, s.trend.map(function(d){ return d.n; }).concat([0])));
-  s.trend.forEach(function(d){
+  s.trend.forEach(function(d, i){
     var bar = document.createElement("div");
     bar.className = "bar";
     bar.style.height = Math.max(2, Math.round((d.n / maxN) * 100)) + "px";
-    bar.title = d.date + ": " + d.n;
-    bars.appendChild(bar);
     var lab = document.createElement("span");
-    lab.textContent = d.date.slice(5);
+    if (isHourly){
+      var hourLabel = d.date.slice(11, 16);   // "HH:00:00" -> "HH:00", UTC bucket edge
+      try {
+        hourLabel = new Intl.DateTimeFormat(undefined, {
+          timeZone: STATE.timezone, hour: "2-digit", minute: "2-digit", hour12: false
+        }).format(new Date(d.date.replace(" ", "T") + "Z"));
+      } catch (e){ /* keep the UTC fallback above */ }
+      bar.title = hourLabel + ": " + d.n;
+      lab.textContent = (i % 3 === 0) ? hourLabel : "";   // thin out labels, 48 bars is too crowded otherwise
+    } else {
+      bar.title = d.date + ": " + d.n;
+      lab.textContent = d.date.slice(5);
+    }
+    bars.appendChild(bar);
     labels.appendChild(lab);
   });
 
@@ -1569,8 +1626,8 @@ $("ed-save").addEventListener("click", function(){
 function subsFilters(){
   return {
     form_id: $("f-form").value,
-    date_from: $("f-from").value.trim(),
-    date_to: $("f-to").value.trim(),
+    date_from: zonedInputToUtcParam($("f-from").value.trim()),
+    date_to: zonedInputToUtcParam($("f-to").value.trim()),
     language: $("f-lang").value,
     status: $("f-status").value,
     q: $("f-q").value.trim()
