@@ -143,7 +143,8 @@ table.subs tr:last-child td{border-bottom:none}
 .bar-chart .bar{flex:1;background:var(--yellow);border-radius:3px 3px 0 0;min-height:2px;position:relative}
 .bar-chart .bar:hover{background:var(--yellow-deep)}
 .bar-labels{display:flex;gap:4px;margin-top:4px;padding-left:7px}
-.bar-labels span{flex:1;text-align:center;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bar-labels{position:relative}
+.bar-labels span{flex:1;text-align:center;font-size:9.5px;color:var(--muted);white-space:nowrap;overflow:visible;position:relative}
 .breakdown-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--line);font-size:13.5px}
 .breakdown-row:last-child{border-bottom:none}
 .breakdown-row .name{flex:1}
@@ -1610,7 +1611,12 @@ function renderDashboard(s){
       lab.textContent = (i % 3 === 0) ? hourLabel : "";   // thin out labels, 48 bars is too crowded otherwise
     } else {
       bar.title = d.date + ": " + d.n;
-      lab.textContent = d.date.slice(5);
+      // Zero-filled days mean this can now be a long timeline (weeks/months) —
+      // thin labels so they don't overlap/truncate, always keeping the first
+      // and last so the visible range is still clear at a glance.
+      var dayStep = Math.max(1, Math.ceil(s.trend.length / 14));
+      var isEdge = (i === 0 || i === s.trend.length - 1);
+      lab.textContent = (isEdge || i % dayStep === 0) ? d.date.slice(5) : "";
     }
     bars.appendChild(bar);
     labels.appendChild(lab);

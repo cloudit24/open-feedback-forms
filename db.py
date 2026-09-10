@@ -388,7 +388,22 @@ def dashboard_summary(filters=None, granularity="day", tz_offset_minutes=0):
             cur.execute(
                 "SELECT " + day_expr + " AS d, COUNT(*) AS n" + base + " GROUP BY d ORDER BY d",
                 [tz_offset_minutes] + params)
-            trend = [{"date": str(r["d"]), "n": r["n"]} for r in cur.fetchall()]
+            by_bucket = {str(r["d"]): r["n"] for r in cur.fetchall()}
+            # date_from/date_to are UTC instants (see server.py) — shift them
+            # by the same offset so the fill bounds line up with the
+            # tz-shifted bucket keys above, not raw UTC calendar days.
+            tz_delta = timedelta(minutes=tz_offset_minutes)
+
+            def _shift(dt_str):
+                if not dt_str:
+                    return dt_str
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+                    try:
+                        return (datetime.strptime(dt_str[:19], fmt) + tz_delta).strftime("%Y-%m-%d")
+                    except ValueError:
+                        continue
+                return dt_str
+            trend = _fill_daily_trend(by_bucket, _shift(filters.get("date_from")), _shift(filters.get("date_to")))
 
         cur.close()
         return {"total": total, "byForm": by_form, "byLanguage": by_language, "trend": trend}
@@ -901,6 +916,40 @@ def _fill_hourly_trend(by_bucket, date_from, date_to):
     for i in range(hours):
         bucket_dt = start + timedelta(hours=i)
         key = bucket_dt.strftime("%Y-%m-%d %H:00:00")
+        trend.append({"date": key, "n": by_bucket.get(key, 0)})
+    return trend
+
+
+def _fill_daily_trend(by_bucket, date_from, date_to):
+    """Same idea as _fill_hourly_trend, one level up: by_bucket is sparse
+    (days with zero submissions never come back from the query), so a day
+    with nothing on it would otherwise just be missing from the chart
+    entirely instead of showing as a real, visible zero. Bounds come from
+    the filter's date_from/date_to when given; otherwise from the earliest
+    and latest day that actually has data, since there's no explicit range
+    to fill to. Capped at 400 days as a sanity backstop."""
+    def parse_date(dt_str):
+        if not dt_str:
+            return None
+        text = dt_str[:10]
+        try:
+            return datetime.strptime(text, "%Y-%m-%d").date()
+        except ValueError:
+            return None
+    start = parse_date(date_from)
+    end = parse_date(date_to)
+    if start is None or end is None:
+        if not by_bucket:
+            return []
+        keys = sorted(by_bucket.keys())
+        start = start or datetime.strptime(keys[0], "%Y-%m-%d").date()
+        end = end or datetime.strptime(keys[-1], "%Y-%m-%d").date()
+    if end < start:
+        start, end = end, start
+    days = min((end - start).days + 1, 400)
+    trend = []
+    for i in range(days):
+        key = (start + timedelta(days=i)).strftime("%Y-%m-%d")
         trend.append({"date": key, "n": by_bucket.get(key, 0)})
     return trend
 
