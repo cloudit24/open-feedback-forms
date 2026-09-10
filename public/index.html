@@ -19,18 +19,27 @@
   --err:#C62828; --ok:#1B7F3B; --focus:#0B0B0B; --focus-glow:rgba(11,11,11,.16);
   --radius:16px; --shadow:0 2px 4px rgba(14,22,33,.06), 0 12px 32px rgba(14,22,33,.08);
   --font-display:'Bebas Neue','Dubai','Noto Sans Arabic',sans-serif;
+  color-scheme:light;
 }
+/* Telling the browser this page manages its own light/dark instead of
+   leaving color-scheme undeclared — without this, Chromium/Brave's "force
+   dark mode for web contents" auto-darkening can repaint the page on top
+   of (or instead of) our own dark theme below, producing unreadable
+   black-on-black — most visible on the Arabic layout since Brave/Chrome's
+   heuristics behave differently in RTL. */
 /* System preference applies unless the visitor picks a theme explicitly (data-theme). */
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){ --bg:#0B0B0B; --card:#141414; --line:rgba(255,236,1,.22); --ink:#F5F5F3; --ink-soft:#C9C9C7;
          --muted:#8F8F8C; --focus:#FFEC01; --focus-glow:rgba(255,236,1,.25);
-         --shadow:0 2px 4px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.5); }
+         --shadow:0 2px 4px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.5); color-scheme:dark; }
 }
 :root[data-theme="dark"]{
   --bg:#0B0B0B; --card:#141414; --line:rgba(255,236,1,.22); --ink:#F5F5F3; --ink-soft:#C9C9C7;
   --muted:#8F8F8C; --focus:#FFEC01; --focus-glow:rgba(255,236,1,.25);
   --shadow:0 2px 4px rgba(0,0,0,.4), 0 12px 32px rgba(0,0,0,.5);
+  color-scheme:dark;
 }
+:root[data-theme="light"]{ color-scheme:light; }
 *{box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
