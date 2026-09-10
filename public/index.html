@@ -243,8 +243,8 @@ button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
     <div class="card-body">
 
       <div class="setup-notice hidden" id="setupNotice">
-        <b data-i18n="setupTitle">This form isn't ready yet</b>
-        <span data-i18n="setupBody">The club is still setting this up. Please check back shortly.</span>
+        <b id="setupNoticeTitle" data-i18n="setupTitle">This form isn't ready yet</b>
+        <span id="setupNoticeBody" data-i18n="setupBody">The club is still setting this up. Please check back shortly.</span>
       </div>
 
       <div class="banner bad" id="banner" role="alert"></div>
@@ -334,6 +334,8 @@ var T = {
     optional:"(optional)", choose:"Please choose...",
     setupTitle:"This form isn't ready yet",
     setupBody:"The club is still setting this up. Please check back shortly.",
+    expiredTitle:"This form is no longer accepting responses",
+    expiredBody:"Thanks for your interest — this feedback window has closed.",
     privacyTitle:"Terms and Conditions",
     privacyBody:"We're grateful for the time you're taking to share your thoughts with us. {club} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you as one of our fans. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside the club. You're always welcome to ask us to update or delete your information by emailing the club.",
     consent:"I agree to terms and conditions",
@@ -366,6 +368,8 @@ var T = {
     optional:"(اختياري)", choose:"الرجاء الاختيار...",
     setupTitle:"هذا النموذج غير جاهز بعد",
     setupBody:"لا يزال النادي يعمل على إعداد هذا النموذج. يرجى المحاولة لاحقاً.",
+    expiredTitle:"هذا النموذج لم يعد يقبل الردود",
+    expiredBody:"شكراً لاهتمامك — انتهت فترة استقبال الملاحظات لهذا النموذج.",
     privacyTitle:"الشروط والأحكام",
     privacyBody:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يقوم {club} بجمع اسمك وبريدك الإلكتروني ورقم هاتفك المتحرك وجنسيتك حتى يتمكن فريقنا من مراجعة ملاحظاتك، وإبقائك على اطلاع بآخر المستجدات، والحفاظ على علاقتنا المستمرة بك كأحد جماهيرنا الأعزاء. وقد نتواصل معك أيضاً بخصوص الملاحظة التي شاركتنا إياها، سواء للمتابعة أو للاستفسار أو لمجرد شكرك عليها. نتعامل مع بياناتك بعناية تامة، ولا نبيعها أبداً، ولا نشاركها خارج النادي. ويسعدنا دائماً أن تطلب منا تحديث أو حذف بياناتك عبر مراسلة النادي.",
     consent:"أوافق على الشروط والأحكام",
@@ -556,6 +560,15 @@ function fetchFields(){
     .then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); })
     .then(function(res){
       if (res.status !== 200 || !res.body.ok){
+        $("setupNotice").classList.remove("hidden");
+        $("form").classList.add("hidden");
+        return;
+      }
+      if (res.body.expired){
+        $("setupNoticeTitle").setAttribute("data-i18n", "expiredTitle");
+        $("setupNoticeBody").setAttribute("data-i18n", "expiredBody");
+        LANG_META = res.body.languageLabels || LANG_META;
+        applyBranding(res.body.branding);
         $("setupNotice").classList.remove("hidden");
         $("form").classList.add("hidden");
         return;

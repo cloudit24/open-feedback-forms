@@ -306,6 +306,17 @@ def validate_dynamic_value(field, value):
     return v, None
 
 
+def form_is_expired(form):
+    """True once today has reached the form's expiry date — same-day
+    still counts as expired, not "expires later today"."""
+    exp = form and form.get("expiry_date")
+    if not exp:
+        return False
+    if isinstance(exp, str):
+        exp = datetime.strptime(exp, "%Y-%m-%d").date()
+    return exp <= datetime.now().date()
+
+
 def validate_submission(raw, active_fields):
     if raw.get("website"):
         return None, "honeypot"
@@ -590,6 +601,11 @@ class PublicHandler(BaseHandler):
         except Exception as e:
             log("form-fields query failed: %s" % e)
             return self.send_json(500, {"ok": False})
+        if form_is_expired(form):
+            return self.send_json(200, {"ok": True, "expired": True, "fields": [],
+                                        "branding": {"orgName": form.get("org_name") or form.get("name") or ""},
+                                        "languages": {"en": True, "ar": True}, "extraLanguages": [],
+                                        "languageLabels": config_store.load()["settings"].get("language_labels", {})})
         out = [{"id": f["id"], "field_key": f["field_key"], "label_en": f["label_en"],
                 "label_ar": f["label_ar"], "labels_extra": f.get("labels_extra") or {},
                 "field_type": f["field_type"],
@@ -633,6 +649,9 @@ class PublicHandler(BaseHandler):
 
         if not db.is_connected():
             return self.send_json(503, {"ok": False})
+
+        if form_is_expired(db.get_form(self.FORM_ID)):
+            return self.send_json(410, {"ok": False, "error": "this form is no longer accepting responses"})
 
         try:
             active_fields = db.list_fields(self.FORM_ID, active_only=True)
@@ -1304,6 +1323,7 @@ class AdminHandler(BaseHandler):
             "url": "http://%s:%d/" % (HOST, f["port"]),
             "lang_en": f["lang_en"], "lang_ar": f["lang_ar"],
             "enabled_extra_langs": f.get("enabled_extra_langs") or [],
+            "expiry_date": str(f["expiry_date"]) if f.get("expiry_date") else None,
         } for f in forms]
         return self.send_json(200, {"ok": True, "forms": out, "adminPort": ADMIN_PORT})
 
@@ -1331,14 +1351,32 @@ class AdminHandler(BaseHandler):
         if not lang_en and not lang_ar and not extra_langs:
             return self.send_json(400, {"ok": False, "error": "at least one language must stay enabled"})
 
+        err, expiry_date = self._parse_expiry_date(body.get("expiry_date"))
+        if err:
+            return self.send_json(400, {"ok": False, "error": err})
+
         try:
             new_id = db.create_form(name, slug, port, lang_en=lang_en, lang_ar=lang_ar,
-                                    enabled_extra_langs=extra_langs)
+                                    enabled_extra_langs=extra_langs, expiry_date=expiry_date)
         except Exception as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
         FORMS.sync()
         log("form created: %s (port %d)" % (name, port))
         return self.send_json(200, {"ok": True, "id": new_id, "port": port})
+
+    def _parse_expiry_date(self, value):
+        """value: "" / None clears it, "YYYY-MM-DD" sets it. Returns
+        (error, parsed_value_or_None)."""
+        if value in (None, ""):
+            return None, None
+        text = clean(value, 10)
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", text):
+            return "expiry date must be YYYY-MM-DD", None
+        try:
+            datetime.strptime(text, "%Y-%m-%d")
+        except ValueError:
+            return "invalid expiry date", None
+        return None, text
 
     def _forms_visible_to(self, identity, forms=None):
         """The bootstrap account and any applies_to_all_forms role see
@@ -1393,8 +1431,15 @@ class AdminHandler(BaseHandler):
         if not lang_en and not lang_ar and not extra_langs:
             return self.send_json(400, {"ok": False, "error": "at least one language must stay enabled"})
 
+        update_kwargs = {}
+        if "expiry_date" in body:
+            err, expiry_date = self._parse_expiry_date(body.get("expiry_date"))
+            if err:
+                return self.send_json(400, {"ok": False, "error": err})
+            update_kwargs["expiry_date"] = expiry_date
+
         db.update_form(form_id, name=name, port=port, lang_en=lang_en, lang_ar=lang_ar,
-                        enabled_extra_langs=extra_langs)
+                        enabled_extra_langs=extra_langs, **update_kwargs)
         FORMS.sync()
         return self.send_json(200, {"ok": True})
 
@@ -2021,11 +2066,15 @@ def _db_health_check_loop():
 
 
 def _daily_digest_loop():
-    """Sleeps to the next local midnight, sends each digest-enabled form's
-    submission count since the last run, repeats. A day this thread is
-    asleep for (process restarted, machine was off) is simply skipped —
-    not worth the complexity of catching up on a missed digest."""
+    """Sleeps to the next local midnight, then (a) sends each digest-enabled
+    form's submission count since the last run and (b) fires form_expiry
+    for any form whose expiry date has just been reached. Repeats. A day
+    this thread is asleep for (process restarted, machine was off) is
+    simply skipped — not worth the complexity of catching up on a missed
+    digest, though an expiry alert that was missed still fires the next
+    time this loop runs, since form_is_expired() stays true past the day."""
     last_run = datetime.now()
+    already_expiry_alerted = set()
     while True:
         now = datetime.now()
         tomorrow_midnight = datetime(now.year, now.month, now.day) + timedelta(days=1)
@@ -2037,18 +2086,23 @@ def _daily_digest_loop():
         try:
             for form in db.list_forms(active_only=True):
                 rules = db.list_alert_rules(form_id=form["id"], trigger_type="daily_digest", enabled_only=True)
-                if not rules:
-                    continue
-                filters = {"form_id": form["id"], "date_from": last_run.strftime("%Y-%m-%d %H:%M:%S")}
-                _, total = db.list_submissions(filters, page=1, page_size=1)
-                if total == 0:
-                    continue
-                subject = "Daily digest: %s" % form["name"]
-                body = "%d new submission%s since the last digest." % (total, "" if total == 1 else "s")
-                for rule in rules:
-                    notifier.send(rule, subject, body, cfg, log)
+                if rules:
+                    filters = {"form_id": form["id"], "date_from": last_run.strftime("%Y-%m-%d %H:%M:%S")}
+                    _, total = db.list_submissions(filters, page=1, page_size=1)
+                    if total:
+                        subject = "Daily digest: %s" % form["name"]
+                        body = "%d new submission%s since the last digest." % (total, "" if total == 1 else "s")
+                        for rule in rules:
+                            notifier.send(rule, subject, body, cfg, log)
+
+                if form_is_expired(form) and form["id"] not in already_expiry_alerted:
+                    already_expiry_alerted.add(form["id"])
+                    notifier.fire("form_expiry", cfg, log=log, form_id=form["id"],
+                                  subject="Form expired: %s" % form["name"],
+                                  body="This form reached its expiry date (%s) and stopped "
+                                       "accepting responses." % form["expiry_date"])
         except Exception as e:
-            log("daily digest failed: %s" % e)
+            log("daily digest / expiry check failed: %s" % e)
         last_run = datetime.now()
 
 

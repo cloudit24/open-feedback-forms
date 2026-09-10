@@ -15,6 +15,8 @@ UI_STRINGS = {
     "optional": "(optional)", "choose": "Please choose...",
     "setupTitle": "This form isn't ready yet",
     "setupBody": "The club is still setting this up. Please check back shortly.",
+    "expiredTitle": "This form is no longer accepting responses",
+    "expiredBody": "Thanks for your interest — this feedback window has closed.",
     "privacyTitle": "Terms and Conditions",
     "privacyBody": "We're grateful for the time you're taking to share your thoughts with us. {club} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you as one of our fans. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside the club. You're always welcome to ask us to update or delete your information by emailing the club.",
     "consent": "I agree to terms and conditions",

@@ -628,6 +628,10 @@ table.subs tr:last-child td{border-bottom:none}
       <div id="fe-lang-extra-wrap"></div>
       <p class="hint">At least one must stay enabled. With only one enabled, visitors won't see a language switcher at all.</p>
 
+      <label for="fe-expiry" style="margin-top:14px">Expiry date</label>
+      <input type="date" id="fe-expiry">
+      <p class="hint">Optional. Once reached, the public page stops accepting responses. Leave blank for no expiry.</p>
+
       <div class="msg bad" id="form-editor-msg"></div>
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn-outline" id="fe-cancel">Cancel</button>
@@ -942,10 +946,14 @@ function renderForms(){
   STATE.forms.forEach(function(f){
     var row = document.createElement("div");
     row.className = "form-row";
+    var expired = f.expiry_date && f.expiry_date <= new Date().toISOString().slice(0, 10);
     row.innerHTML =
       '<div class="info"><b>' + escapeHtml(f.name) + '</b>' +
       '<div class="meta">port <code>' + f.port + '</code> · ' + escapeHtml(f.url) +
-      ' · <span class="badge ' + (f.listening ? "on" : "off") + '">' + (f.listening ? "listening" : "not listening") + '</span></div></div>';
+      ' · <span class="badge ' + (f.listening ? "on" : "off") + '">' + (f.listening ? "listening" : "not listening") + '</span>' +
+      (f.expiry_date ? ' · <span class="badge ' + (expired ? "req" : "off") + '">' +
+        (expired ? "expired " : "expires ") + escapeHtml(f.expiry_date) + '</span>' : '') +
+      '</div></div>';
     var actions = document.createElement("div");
     actions.className = "actions";
     var view = mkBtn("View", function(){ window.open(f.url, "_blank", "noopener"); });
@@ -1052,6 +1060,7 @@ function openFormEditor(form){
   $("fe-port").value = form ? form.port : "";
   $("fe-lang-en").checked = form ? form.lang_en : true;
   $("fe-lang-ar").checked = form ? form.lang_ar : true;
+  $("fe-expiry").value = (form && form.expiry_date) || "";
   renderFormEditorExtraLangs(form ? (form.enabled_extra_langs || []) : []);
   clearFlash("form-editor-msg");
   show("form-editor-view");
@@ -1096,7 +1105,8 @@ $("fe-save").addEventListener("click", function(){
   var langEn = $("fe-lang-en").checked, langAr = $("fe-lang-ar").checked;
   var extraLangs = collectFormEditorExtraLangs();
   if (!langEn && !langAr && !extraLangs.length){ flash("form-editor-msg", "At least one language must stay enabled."); return; }
-  var payload = { name: name, port: port || undefined, lang_en: langEn, lang_ar: langAr, enabled_extra_langs: extraLangs };
+  var payload = { name: name, port: port || undefined, lang_en: langEn, lang_ar: langAr, enabled_extra_langs: extraLangs,
+                  expiry_date: $("fe-expiry").value || "" };
   var url = STATE.editingFormId ? "/admin/forms/" + STATE.editingFormId + "/update" : "/admin/forms";
   api("POST", url, payload).then(function(res){
     if (res.body.ok){ show("dash-view"); loadForms(); return; }

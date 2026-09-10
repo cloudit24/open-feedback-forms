@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 import mysql.connector
 from mysql.connector import pooling
 
+_UNSET = object()   # distinguishes "not provided" from "explicitly set to None" in optional update params
 _pool = None
 _pool_lock = threading.Lock()
 _last_error = None
@@ -42,6 +43,7 @@ SCHEMA_SQL = [
         subtitle_en   VARCHAR(300) NULL,
         subtitle_ar   VARCHAR(300) NULL,
         enabled_extra_langs_json LONGTEXT NULL,
+        expiry_date   DATE NULL,
         created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
@@ -159,6 +161,7 @@ MIGRATE_SQL = [
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS enabled_extra_langs_json LONGTEXT NULL",
     "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS expiry_date DATE NULL",
 ]
 
 # Ported straight from the old hardcoded index.html, so the form looks and
@@ -575,7 +578,7 @@ def used_ports(exclude_form_id=None):
         conn.close()
 
 
-def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_langs=None):
+def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_langs=None, expiry_date=None):
     """Creates the form with no questions yet — a new form starts blank so
     an admin picks exactly the field keys it needs from the Field keys
     library, rather than inheriting the full default set."""
@@ -584,8 +587,9 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
         cur = conn.cursor()
         extra = json.dumps(enabled_extra_langs) if enabled_extra_langs else None
         cur.execute(
-            "INSERT INTO forms (name, slug, port, active, lang_en, lang_ar, enabled_extra_langs_json) VALUES (%s,%s,%s,1,%s,%s,%s)",
-            (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra))
+            "INSERT INTO forms (name, slug, port, active, lang_en, lang_ar, enabled_extra_langs_json, expiry_date) "
+            "VALUES (%s,%s,%s,1,%s,%s,%s,%s)",
+            (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra, expiry_date))
         new_id = cur.lastrowid
         conn.commit()
         cur.close()
@@ -594,7 +598,8 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
         conn.close()
 
 
-def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabled_extra_langs=None):
+def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabled_extra_langs=None,
+                 expiry_date=_UNSET):
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -609,6 +614,8 @@ def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabl
             sets.append("lang_ar=%s"); params.append(1 if lang_ar else 0)
         if enabled_extra_langs is not None:
             sets.append("enabled_extra_langs_json=%s"); params.append(json.dumps(enabled_extra_langs) if enabled_extra_langs else None)
+        if expiry_date is not _UNSET:
+            sets.append("expiry_date=%s"); params.append(expiry_date)   # None clears it
         if sets:
             params.append(form_id)
             cur.execute("UPDATE forms SET " + ", ".join(sets) + " WHERE id=%s", params)
