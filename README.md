@@ -36,7 +36,7 @@ VERSION                current release version, printed at startup
 ## Run it with Docker (recommended on Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mhdanc58/open-feedback-forms/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh | sh
 ```
 
 Clones the repo, walks you through the database step — a bundled MariaDB

@@ -1,7 +1,7 @@
 #!/bin/sh
 # Open Feedback Forms — one-line installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/mhdanc58/open-feedback-forms/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh | sh
 #
 # Clones the repo (or reuses the current one, if you're already inside it),
 # asks how you want to handle the database, writes .env accordingly, then
@@ -10,7 +10,7 @@
 # never over a script prompt.
 set -e
 
-REPO_URL="https://github.com/mhdanc58/open-feedback-forms.git"
+REPO_URL="https://github.com/cloudit24/open-feedback-forms.git"
 DIR="open-feedback-forms"
 
 command -v docker >/dev/null 2>&1 || { echo "Docker is required: https://docs.docker.com/get-docker/"; exit 1; }

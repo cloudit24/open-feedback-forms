@@ -7,7 +7,7 @@
 FROM python:3.13-slim
 
 LABEL org.opencontainers.image.title="Open Feedback Forms" \
-      org.opencontainers.image.source="https://github.com/mhdanc58/open-feedback-forms" \
+      org.opencontainers.image.source="https://github.com/cloudit24/open-feedback-forms" \
       org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
