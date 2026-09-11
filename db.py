@@ -1376,3 +1376,31 @@ def get_alert_rule(rule_id):
         return row
     finally:
         conn.close()
+
+
+# --------------------------------------------------------------- backup
+
+# Every table the app owns, in an order that restores cleanly (parents
+# before the children that FOREIGN KEY-reference them).
+BACKUP_TABLES = [
+    "field_keys", "forms", "form_fields", "feedback",
+    "admin_roles", "admin_users", "admin_user_forms", "alert_rules",
+]
+
+
+def export_all_tables():
+    """Every row of every app table, keyed by table name — the database half
+    of a full backup (see server.py's get_backup). Plain SELECT * per table
+    rather than mysqldump, since this app never shells out to another
+    binary."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        dump = {}
+        for table in BACKUP_TABLES:
+            cur.execute("SELECT * FROM " + table)
+            dump[table] = cur.fetchall()
+        cur.close()
+        return dump
+    finally:
+        conn.close()

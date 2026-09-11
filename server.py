@@ -42,6 +42,7 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import zipfile
 import zoneinfo
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -799,6 +800,8 @@ class AdminHandler(BaseHandler):
             return self.get_admin_status()
         if path == "/admin/db-settings":
             return self.get_db_settings()
+        if path == "/admin/backup":
+            return self.get_backup()
         if path == "/admin/app-settings":
             return self.get_app_settings()
         if path == "/admin/forms":
@@ -951,6 +954,41 @@ class AdminHandler(BaseHandler):
         d["hasPassword"] = bool(cfg["db"]["password"])
         return self.send_json(200, {"ok": True, "db": d, "connected": db.is_connected(),
                                     "error": db.last_error()})
+
+    def get_backup(self):
+        # Full-admin only: config.json carries the DB password in plain
+        # text, and the zip is everything needed to stand the app back up.
+        if not self.require_bootstrap():
+            return
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            if os.path.isfile(config_store.CONFIG_PATH):
+                zf.write(config_store.CONFIG_PATH, arcname="config.json")
+            uploads = config_store.uploads_dir()
+            if os.path.isdir(uploads):
+                for fname in os.listdir(uploads):
+                    fpath = os.path.join(uploads, fname)
+                    if os.path.isfile(fpath):
+                        zf.write(fpath, arcname="uploads/logos/" + fname)
+            if db.is_connected():
+                try:
+                    dump = db.export_all_tables()
+                    zf.writestr("database.json", json.dumps(dump, indent=2, default=str, ensure_ascii=False))
+                except Exception as e:
+                    zf.writestr("database-export-failed.txt", "Could not export the database: %s" % e)
+            else:
+                zf.writestr("database-export-failed.txt",
+                             "Database was not connected at backup time — nothing was exported.")
+        body = buf.getvalue()
+        stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+        self.send_response(200)
+        self.send_header("Content-Type", "application/zip")
+        self.send_header("Content-Disposition", 'attachment; filename="off-backup-%s.zip"' % stamp)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+        log("backup downloaded by %s" % self.client_ip())
 
     def get_app_settings(self):
         if not self.require_permission("manage_app_settings"):

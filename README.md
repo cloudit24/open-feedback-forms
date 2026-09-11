@@ -134,6 +134,18 @@ by form, date range, status and free-text search, with a **Download as CSV**
 link that respects the current filters. CSV opens correctly in Excel with
 Arabic text intact.
 
+## Backup
+
+**Configuration → Backup** (primary admin account only) downloads one zip
+with everything needed to restore or move the install: `config.json` (DB
+credentials, admin account, session secret, app settings), every uploaded
+logo, and a full export of every database table as `database.json`. Store
+it somewhere private — it contains credentials and personal submission
+data. Routine updates (re-running the installer, `git pull` +
+`docker compose up -d --build`) never touch your existing `.env`,
+`config.json` or database on their own, so this backup is for safekeeping
+and migration, not something you need before every update.
+
 ## What stops abuse
 
 | Layer | What it does |

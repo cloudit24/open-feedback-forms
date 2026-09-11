@@ -164,7 +164,7 @@ table.subs tr:last-child td{border-bottom:none}
 
   <!-- ============ first run: create admin account ============ -->
   <div id="setup-view" class="center hidden">
-    <div class="card">
+    <div class="card" id="setup-account-step">
       <h2>Create the admin account</h2>
       <p class="hint">This is the first time the app has run. Choose a username and password for this admin panel — you'll need them every time you log in.</p>
       <label for="su-user">Username</label>
@@ -174,6 +174,26 @@ table.subs tr:last-child td{border-bottom:none}
       <p class="hint">At least 8 characters.</p>
       <div class="msg bad" id="setup-msg"></div>
       <button class="btn" id="setup-btn" style="margin-top:14px;width:100%">Create account</button>
+    </div>
+    <div class="card hidden" id="setup-db-step">
+      <h2>Connect the database</h2>
+      <p class="hint">Forms, questions and submissions all live in a MariaDB/MySQL database. Create an empty database and a user with rights on it first (CREATE, ALTER, SELECT, INSERT, UPDATE), then enter those details here — or skip and set this up later from Configuration → Database connection.</p>
+      <div class="row">
+        <div><label for="setup-db-host">Host</label><input type="text" id="setup-db-host" placeholder="127.0.0.1"></div>
+        <div style="max-width:110px"><label for="setup-db-port">Port</label><input type="number" id="setup-db-port" placeholder="3306"></div>
+      </div>
+      <div class="row">
+        <div><label for="setup-db-user">User</label><input type="text" id="setup-db-user" autocomplete="off"></div>
+        <div><label for="setup-db-pass">Password</label><input type="password" id="setup-db-pass" autocomplete="new-password"></div>
+      </div>
+      <label for="setup-db-name">Database name</label>
+      <input type="text" id="setup-db-name">
+      <div class="msg" id="setup-db-msg"></div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn-outline" id="setup-db-test-btn" style="flex:1">Test connection</button>
+        <button class="btn" id="setup-db-save-btn" style="flex:1">Save &amp; continue</button>
+      </div>
+      <button class="btn-outline btn-sm" id="setup-db-skip-btn" type="button" style="margin-top:10px;width:100%">Skip for now</button>
     </div>
   </div>
 
@@ -406,6 +426,7 @@ table.subs tr:last-child td{border-bottom:none}
           <button class="subtab" data-subtab="cfgtheme">Appearance</button>
           <button class="subtab" data-subtab="cfgtime">Time</button>
           <button class="subtab" data-subtab="cfgalerts">Alerts</button>
+          <button class="subtab" data-subtab="cfgbackup">Backup</button>
         </div>
 
         <!-- database connection -->
@@ -561,6 +582,14 @@ table.subs tr:last-child td{border-bottom:none}
           <button class="btn-outline btn-sm" id="db-alert-add-btn" type="button" style="margin-top:8px">+ Add a destination</button>
           <div class="msg" id="db-alert-msg" style="margin-top:10px"></div>
           <button class="btn" id="db-alert-save-btn" style="margin-top:6px">Save</button>
+        </div>
+
+        <!-- backup -->
+        <div id="sub-cfgbackup" class="hidden">
+          <h2>Full backup</h2>
+          <p class="hint">Downloads one zip file with everything needed to restore this install: <code>config.json</code> (database credentials, admin account, session secret, app settings), every uploaded logo, and a full export of every database table as <code>database.json</code>. Store it somewhere private — it contains credentials and personal submission data.</p>
+          <p class="hint">Re-running the installer or updating the Docker image never touches your existing configuration or database on its own — this backup is for safekeeping and for moving the install somewhere else, not something you need before a routine update.</p>
+          <a class="btn" id="backup-download-btn" href="/admin/backup" style="display:inline-block;text-decoration:none;margin-top:6px">Download full backup</a>
         </div>
       </div>
     </div>
@@ -895,6 +924,7 @@ function applyPermissionVisibility(){
     if (firstVisible) firstVisible.click();
   }
   document.querySelector('.subtab[data-subtab="cfgdb"]').classList.toggle("hidden", !STATE.isBootstrap);
+  document.querySelector('.subtab[data-subtab="cfgbackup"]').classList.toggle("hidden", !STATE.isBootstrap);
   ["cfglang", "cfgtheme", "cfgtime"].forEach(function(t){
     var btn = document.querySelector('.subtab[data-subtab="' + t + '"]');
     if (btn) btn.classList.toggle("hidden", !hasPermission("manage_app_settings"));
@@ -920,10 +950,54 @@ $("setup-btn").addEventListener("click", function(){
   if (username.length < 3){ flash("setup-msg", "Username needs to be at least 3 characters."); return; }
   if (password.length < 8){ flash("setup-msg", "Password needs to be at least 8 characters."); return; }
   api("POST", "/admin/setup", {username: username, password: password}).then(function(res){
-    if (res.status === 200 && res.body.ok){ boot(); return; }
+    if (res.status === 200 && res.body.ok){ afterAccountCreated(); return; }
     flash("setup-msg", res.body.error || "Could not create the account.");
   });
 });
+
+// The account exists and its session cookie is set — if the database isn't
+// configured yet (a Windows/native run, or Docker with the wizard's "skip"
+// option), ask for it right here instead of dropping the admin into a
+// dashboard with no data source; otherwise (Docker's bundled-db / "connect
+// to mine" options already wrote it) go straight in.
+function afterAccountCreated(){
+  api("GET", "/admin/status").then(function(res){
+    if (res.body && !res.body.dbConfigured){
+      $("setup-account-step").classList.add("hidden");
+      $("setup-db-step").classList.remove("hidden");
+    } else {
+      boot();
+    }
+  });
+}
+function setupDbFormValue(){
+  return {
+    host: $("setup-db-host").value.trim(),
+    port: parseInt($("setup-db-port").value, 10) || 3306,
+    user: $("setup-db-user").value.trim(),
+    password: $("setup-db-pass").value,
+    database: $("setup-db-name").value.trim()
+  };
+}
+$("setup-db-test-btn").addEventListener("click", function(){
+  clearFlash("setup-db-msg");
+  $("setup-db-test-btn").disabled = true;
+  api("POST", "/admin/db-settings/test", setupDbFormValue()).then(function(res){
+    $("setup-db-test-btn").disabled = false;
+    if (res.body.ok) flash("setup-db-msg", "Connection succeeded.", true);
+    else flash("setup-db-msg", res.body.error || "Could not connect.", false);
+  });
+});
+$("setup-db-save-btn").addEventListener("click", function(){
+  clearFlash("setup-db-msg");
+  $("setup-db-save-btn").disabled = true;
+  api("POST", "/admin/db-settings", setupDbFormValue()).then(function(res){
+    $("setup-db-save-btn").disabled = false;
+    if (res.body.ok){ boot(); return; }
+    flash("setup-db-msg", res.body.error || "Could not connect with those settings — nothing was saved.", false);
+  });
+});
+$("setup-db-skip-btn").addEventListener("click", function(){ boot(); });
 
 /* ----------------------------------------------------------- login ---- */
 $("login-btn").addEventListener("click", doLogin);
