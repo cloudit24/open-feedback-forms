@@ -71,23 +71,32 @@ else
         1)
             gen_pw() { python3 -c "import secrets; print(secrets.token_urlsafe(18))" 2>/dev/null || \
                        od -An -tx1 -N18 /dev/urandom | tr -d ' \n'; }
-            DB_PASSWORD=$(gen_pw)
+
+            echo
+            echo "Set up the bundled database:"
+            ask "Database name [open_feedback_forms]: " db_name
+            db_name=${db_name:-open_feedback_forms}
+            ask "Database user [off_app]: " db_user
+            db_user=${db_user:-off_app}
+            ask_secret "Database password (leave blank to generate one): " db_pass
+            [ -n "$db_pass" ] || db_pass=$(gen_pw)
             DB_ROOT_PASSWORD=$(gen_pw)
+
             {
                 echo "COMPOSE_PROFILES=bundled-db"
-                echo "DB_NAME=open_feedback_forms"
-                echo "DB_USER=off_app"
-                echo "DB_PASSWORD=$DB_PASSWORD"
+                echo "DB_NAME=$db_name"
+                echo "DB_USER=$db_user"
+                echo "DB_PASSWORD=$db_pass"
                 echo "DB_ROOT_PASSWORD=$DB_ROOT_PASSWORD"
                 echo "OFF_WAIT_FOR_DB_HOST=db"
                 echo "OFF_WAIT_FOR_DB_PORT=3306"
                 echo "OFF_DB_HOST=db"
                 echo "OFF_DB_PORT=3306"
-                echo "OFF_DB_USER=off_app"
-                echo "OFF_DB_PASSWORD=$DB_PASSWORD"
-                echo "OFF_DB_NAME=open_feedback_forms"
+                echo "OFF_DB_USER=$db_user"
+                echo "OFF_DB_PASSWORD=$db_pass"
+                echo "OFF_DB_NAME=$db_name"
             } >> .env
-            echo "Generated a random database password — saved in .env (keep that file private)."
+            echo "Saved to .env (keep that file private)."
             NEEDS_BOOTSTRAP=1
             ;;
         2)
