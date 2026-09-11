@@ -162,6 +162,14 @@ Run it from inside the checkout that has your `docker-compose.yml` and
 `.env`. Everything up to the confirmation prompt is non-destructive — it
 only tears down and rebuilds after you type `YES`.
 
+If you don't want a backup taken at all, `clean-reset.sh` does the same
+teardown/rebuild with no backup step — otherwise identical, same `YES`
+confirmation required:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/clean-reset.sh | sh
+```
+
 ## What stops abuse
 
 | Layer | What it does |
