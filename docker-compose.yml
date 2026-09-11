@@ -41,7 +41,7 @@ services:
         required: false
 
   db:
-    image: mariadb:11
+    image: mariadb:latest
     restart: unless-stopped
     profiles: ["bundled-db"]
     environment:
