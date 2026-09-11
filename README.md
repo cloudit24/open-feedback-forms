@@ -63,11 +63,23 @@ VERSION                current release version, printed at startup
 curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh | sh
 ```
 
-Clones the repo, walks you through the database step — a bundled MariaDB
-container with a randomly generated password, your own existing database, or
-skip it for now — then builds and starts everything. Open
-http://localhost:8080/admin afterward to create your admin account (always
-done through the web form itself, never over the script).
+Clones the repo, then asks how to handle the database:
+
+1. **Bundled MariaDB container** — asks for a database name, user and
+   password (blank = generated) and runs MariaDB alongside the app.
+2. **MariaDB already installed on this server** — asks for a database name,
+   user and password, creates them on that MariaDB as root (socket auth,
+   `sudo`, or the root password — whichever works), makes sure MariaDB
+   listens beyond `127.0.0.1` so the container can reach it, and points the
+   app at it via `host.docker.internal`.
+3. **A database you already created**, here or on another host — asks for
+   host, port, name, user and password.
+4. **Skip** — set it up later from Configuration → Database connection.
+
+It then builds and starts everything, and confirms the app actually reached
+the database before saying "done". Open http://localhost:8080/admin
+afterward to create your admin account (always done through the web form
+itself, never over the script).
 
 Already have the repo cloned? Run `./install.sh` from inside it instead of
 piping the one-liner — it detects the existing checkout and reuses it. See
@@ -77,7 +89,9 @@ when you choose the bundled-database option).
 
 **To update an existing install**, re-run the same one-liner (or
 `./install.sh` from inside the checkout) — it pulls the latest code and
-rebuilds the containers. `.env` and your database are untouched. Or by hand:
+rebuilds the containers. `.env` and your database are untouched, unless you
+answer **y** to "Run the database wizard again?" (the old `.env` is kept as
+a `.env.bak.*` copy). Or by hand:
 
 ```bash
 cd open-feedback-forms

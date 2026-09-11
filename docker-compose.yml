@@ -35,6 +35,11 @@ services:
       OFF_DB_NAME: "${OFF_DB_NAME:-}"
     volumes:
       - off_data:/data
+    # Lets the container reach a MariaDB installed on the host itself as
+    # host.docker.internal — Docker Desktop provides this name on its own,
+    # Linux only does with this mapping.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       db:
         condition: service_healthy

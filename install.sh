@@ -6,14 +6,15 @@
 # First run: clones the repo, asks how you want to handle the database,
 # writes .env, then builds and starts the containers. Every run after that:
 # pulls the latest code and rebuilds — .env, config.json and the database
-# are never touched. The admin account is always created afterward through
-# the web UI, never over a script prompt.
+# are never touched unless you say so at the prompt. The admin account is
+# always created afterward through the web UI, never over a script prompt.
 set -e
 
 REPO_URL="https://github.com/cloudit24/open-feedback-forms.git"
 DIR="open-feedback-forms"
 
 die() { echo "$*" >&2; exit 1; }
+as_root() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi; }
 
 command -v docker >/dev/null 2>&1 || die "Docker is required: https://docs.docker.com/get-docker/"
 docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required (bundled with recent Docker Desktop/Engine)."
@@ -72,6 +73,17 @@ ask_required() {
         echo "  (required)" >/dev/tty
     done
 }
+# Database/user names go into SQL and .env — letters, digits and _ only.
+ask_ident() {
+    while :; do
+        ask "$1" "$2"
+        eval "_v=\${$2:-$3}"
+        case "$_v" in
+            *[!A-Za-z0-9_]*) echo "  (letters, digits and _ only)" >/dev/tty ;;
+            *) eval "$2=\$_v"; return 0 ;;
+        esac
+    done
+}
 gen_pw() {
     python3 -c "import secrets; print(secrets.token_urlsafe(18))" 2>/dev/null ||
         od -An -tx1 -N18 /dev/urandom | tr -d ' \n'
@@ -86,28 +98,111 @@ env_set() {
 "
 }
 
-# ---- database wizard (first run only) ----------------------------------------
+# ---- MariaDB already installed on this server --------------------------------
+# Creates the database + user there and points the container at it. Inside a
+# container "localhost" is the container itself, so the host is reached as
+# host.docker.internal (docker-compose.yml maps that to the host's gateway).
+
+# Run SQL as MariaDB root: as this user if that already works (root with
+# unix-socket auth), else via sudo, else with the root password.
+sql_root() {
+    if [ -z "$SQL_ROOT" ]; then
+        CLI=$(command -v mariadb || command -v mysql || true)
+        [ -n "$CLI" ] || die "No mariadb/mysql client found on this server — is MariaDB installed here? (Otherwise choose 'Connect to a database I already have'.)"
+        if "$CLI" -uroot -e "SELECT 1" >/dev/null 2>&1; then
+            SQL_ROOT="$CLI -uroot"
+        elif [ "$(id -u)" != 0 ] && sudo -n "$CLI" -uroot -e "SELECT 1" >/dev/null 2>&1; then
+            SQL_ROOT="sudo -n $CLI -uroot"
+        elif [ "$(id -u)" != 0 ] && [ "$TTY" = 1 ] && sudo -v && sudo "$CLI" -uroot -e "SELECT 1" >/dev/null 2>&1; then
+            SQL_ROOT="sudo $CLI -uroot"
+        else
+            ask_secret "MariaDB root password: " root_pw
+            MYSQL_PWD="$root_pw"; export MYSQL_PWD
+            "$CLI" -uroot -e "SELECT 1" >/dev/null 2>&1 || die "Could not log in to MariaDB as root with that password."
+            SQL_ROOT="$CLI -uroot"
+        fi
+    fi
+    $SQL_ROOT
+}
+
+create_local_db() {   # name user password
+    # Inside an SQL string only \ and ' are special; ' is already refused.
+    esc_pw=$(printf '%s' "$3" | sed 's/\\/\\\\/g')
+    echo "Creating database '$1' and user '$2' on this server's MariaDB..."
+    sql_root <<SQL
+CREATE DATABASE IF NOT EXISTS \`$1\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS '$2'@'%' IDENTIFIED BY '$esc_pw';
+ALTER USER '$2'@'%' IDENTIFIED BY '$esc_pw';
+GRANT ALL PRIVILEGES ON \`$1\`.* TO '$2'@'%';
+FLUSH PRIVILEGES;
+SQL
+    echo "Database ready."
+}
+
+# Debian/Ubuntu ship MariaDB bound to 127.0.0.1 only — unreachable from a
+# container. Detect that and offer to fix it.
+ensure_db_reachable() {
+    command -v ss >/dev/null 2>&1 || return 0
+    listens=$(ss -ltnH 2>/dev/null | awk '$4 ~ /:3306$/ {print $4}')
+    if [ -z "$listens" ]; then
+        echo "Note: nothing is listening on port 3306 — if MariaDB has 'skip-networking' set, the container won't reach it."
+        return 0
+    fi
+    printf '%s\n' "$listens" | grep -qvE '^(127\.0\.0\.1|\[::1\]):' && return 0
+
+    CNF=/etc/mysql/mariadb.conf.d/50-server.cnf
+    echo
+    echo "MariaDB only listens on 127.0.0.1, so the app container can't reach it."
+    if [ "$TTY" = 1 ] && [ -f "$CNF" ]; then
+        ask "Set 'bind-address = 0.0.0.0' in $CNF and restart MariaDB now? [Y/n]: " yn
+        case "$yn" in
+            [nN]*) ;;
+            *)
+                as_root sed -i 's/^[[:space:]]*bind-address[[:space:]]*=.*/bind-address = 0.0.0.0/' "$CNF"
+                if grep -q '^bind-address = 0.0.0.0' "$CNF"; then
+                    as_root systemctl restart mariadb && echo "MariaDB restarted." && return 0
+                fi
+                ;;
+        esac
+    fi
+    echo "Fix by hand: set 'bind-address = 0.0.0.0' in MariaDB's server config (usually $CNF),"
+    echo "restart MariaDB, and make sure your firewall only allows port 3306 from Docker."
+}
+
+# ---- database wizard ---------------------------------------------------------
 NEEDS_BOOTSTRAP=0
-FIRST_RUN=0
+RUN_WIZARD=1
 if [ -f .env ]; then
-    echo ".env already exists — keeping it. (Delete it to run the database wizard again.)"
-else
-    FIRST_RUN=1
+    RUN_WIZARD=0
+    if [ "$TTY" = 1 ]; then
+        ask ".env already exists. Run the database wizard again? [y/N]: " redo
+        case "$redo" in
+            [yY]*)
+                cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
+                echo "Old .env kept as a .env.bak.* copy."
+                RUN_WIZARD=1 ;;
+            *) echo "Keeping .env." ;;
+        esac
+    else
+        echo ".env already exists — keeping it."
+    fi
+fi
+
+if [ "$RUN_WIZARD" = 1 ]; then
     echo
     echo "Database setup:"
     echo "  1) Install a bundled MariaDB container for me (easiest)"
-    echo "  2) Connect to a database I already have"
-    echo "  3) Skip for now — I'll set it up later from the admin panel"
-    ask "Choose [1/2/3]: " db_choice
+    echo "  2) Use the MariaDB already installed on this server — create the database and user for me"
+    echo "  3) Connect to a database I already have (already created, here or elsewhere)"
+    echo "  4) Skip for now — I'll set it up later from the admin panel"
+    ask "Choose [1/2/3/4]: " db_choice
 
     case "$db_choice" in
         1)
             echo
-            ask "Database name [open_feedback_forms]: " db_name
-            ask "Database user [off_app]: " db_user
+            ask_ident "Database name [open_feedback_forms]: " db_name open_feedback_forms
+            ask_ident "Database user [off_app]: " db_user off_app
             ask_secret "Database password (blank = generate one): " db_pass
-            db_name=${db_name:-open_feedback_forms}
-            db_user=${db_user:-off_app}
             [ -n "$db_pass" ] || db_pass=$(gen_pw)
 
             env_set COMPOSE_PROFILES bundled-db
@@ -126,6 +221,25 @@ else
             ;;
         2)
             echo
+            ask_ident "Database name [open_feedback_forms]: " db_name open_feedback_forms
+            ask_ident "Database user [off_app]: " db_user off_app
+            ask_secret "Database password (blank = generate one): " db_pass
+            [ -n "$db_pass" ] || db_pass=$(gen_pw)
+            case "$db_pass" in *"'"*) die "Sorry — the password can't contain a single quote (')." ;; esac
+
+            create_local_db "$db_name" "$db_user" "$db_pass"
+            ensure_db_reachable
+
+            env_set OFF_DB_HOST host.docker.internal
+            env_set OFF_DB_PORT 3306
+            env_set OFF_DB_USER "$db_user"
+            env_set OFF_DB_PASSWORD "$db_pass"
+            env_set OFF_DB_NAME "$db_name"
+            NEEDS_BOOTSTRAP=1
+            ;;
+        3)
+            echo
+            echo "(If the database is on this same server, use host.docker.internal as the host.)"
             ask_required "Database host: " db_host
             ask "Port [3306]: " db_port
             ask_required "Database name: " db_name
@@ -163,8 +277,29 @@ fi
 
 ADMIN_PORT=$(sed -n "s/^ADMIN_PORT=//p" .env | tr -d "'\"" | tail -n 1)
 URL="http://localhost:${ADMIN_PORT:-8080}/admin"
+
+# Don't just say "done" — confirm the app actually reached the database.
+DB_OK=0
+if [ "$NEEDS_BOOTSTRAP" = 1 ] && command -v curl >/dev/null 2>&1; then
+    printf "Checking the database connection"
+    i=0
+    while [ $i -lt 20 ]; do
+        case "$(curl -fs "$URL/status" 2>/dev/null || true)" in
+            *'"dbConnected": true'*) DB_OK=1; break ;;
+        esac
+        printf "."; sleep 1; i=$((i + 1))
+    done
+    echo
+    if [ "$DB_OK" = 1 ]; then
+        echo "Database connected."
+    else
+        echo "The app is up but hasn't reached the database yet. See why with:  docker compose logs app"
+        echo "(For a MariaDB on this server: it must listen on more than 127.0.0.1 — see the note above.)"
+    fi
+fi
+
 echo
-if [ "$FIRST_RUN" = 0 ]; then
+if [ "$RUN_WIZARD" = 0 ]; then
     echo "Updated. $URL"
 elif [ "$NEEDS_BOOTSTRAP" = 1 ]; then
     echo "Done. Open $URL to create your admin account."
