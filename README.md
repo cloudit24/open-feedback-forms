@@ -146,6 +146,22 @@ data. Routine updates (re-running the installer, `git pull` +
 `config.json` or database on their own, so this backup is for safekeeping
 and migration, not something you need before every update.
 
+## Starting completely over (Docker)
+
+If a Docker install ends up broken in a way a normal update can't fix,
+`hard-reset.sh` backs up `config.json`, uploaded logos and (for the bundled
+MariaDB option) a full SQL dump into `./backup/<timestamp>/`, asks for an
+explicit `YES` confirmation, then runs `docker compose down -v` (deleting
+every container **and volume** for the project) and rebuilds from scratch:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/hard-reset.sh | sh
+```
+
+Run it from inside the checkout that has your `docker-compose.yml` and
+`.env`. Everything up to the confirmation prompt is non-destructive — it
+only tears down and rebuilds after you type `YES`.
+
 ## What stops abuse
 
 | Layer | What it does |
