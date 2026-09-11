@@ -1,26 +1,26 @@
 #!/bin/sh
-# Open Feedback Forms — remove everything, no backup, no confirmation.
+# Open Feedback Forms — remove the whole install. No backup, no prompt.
 #
 #   curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/clean.sh | sh
 #
-# Runs `docker compose down -v` immediately (deletes every container AND
-# volume for this project — every form, submission and admin account,
-# permanently) and stops there. Nothing is rebuilt or started back up,
-# nothing is backed up, nothing is asked before it happens — only run this
-# when you're sure.
-#
-# Use hard-reset.sh instead if you want a backup taken before the wipe.
+# Stops and deletes everything Docker holds for this project, permanently:
+# containers, networks, volumes (config.json, uploads, the bundled database
+# — every form, submission and admin account) and the built images. Nothing
+# is rebuilt. The checkout itself — this folder, .env, any backup/ — is left
+# alone. Use hard-reset.sh instead if you want a backup taken first.
 set -e
 
-command -v docker >/dev/null 2>&1 || { echo "Docker is required: https://docs.docker.com/get-docker/"; exit 1; }
-docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required."; exit 1; }
-[ -f "./docker-compose.yml" ] || {
-    echo "No docker-compose.yml in the current directory."
-    echo "cd into your open-feedback-forms checkout first, then re-run this script."
-    exit 1
-}
+die() { echo "$*" >&2; exit 1; }
 
-docker compose down -v
+command -v docker >/dev/null 2>&1 || die "Docker is required: https://docs.docker.com/get-docker/"
+docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required."
+[ -f ./docker-compose.yml ] || die "No docker-compose.yml here — cd into your open-feedback-forms checkout first."
+
+# --remove-orphans also catches the bundled db container when the profile
+# that owns it isn't active in .env; --rmi all drops the images too (an image
+# another project still uses is left in place, with a warning).
+docker compose down -v --remove-orphans --rmi all
 
 echo
-echo "Removed — every container and volume for this project is gone."
+echo "Removed — every container, volume and image for this project is gone."
+echo "This folder (including .env and any backup/) was left untouched."
