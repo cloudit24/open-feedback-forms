@@ -162,9 +162,8 @@ Run it from inside the checkout that has your `docker-compose.yml` and
 `.env`. Everything up to the confirmation prompt is non-destructive — it
 only tears down and rebuilds after you type `YES`.
 
-If you don't want a backup or a confirmation prompt at all, `clean.sh` does
-the same teardown/rebuild immediately, no questions asked — only use this
-when you're sure:
+If you just want everything gone — no backup, no rebuild, no confirmation
+— `clean.sh` runs `docker compose down -v` and stops there:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/clean.sh | sh
