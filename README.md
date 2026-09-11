@@ -148,6 +148,28 @@ by form, date range, status and free-text search, with a **Download as CSV**
 link that respects the current filters. CSV opens correctly in Excel with
 Arabic text intact.
 
+## Passwords
+
+- **Your own:** anyone signed in, the primary admin included, uses
+  **Change password** at the top right of the admin panel (current password
+  required).
+- **Someone else's:** anyone with the *manage users* permission uses
+  **Reset password** on that user in Administration → Users.
+- **Locked out** (e.g. the primary admin, which nobody else can reset):
+
+  ```bash
+  docker compose exec app python reset_password.py <username>
+  ```
+
+  Outside Docker: `python reset_password.py <username>`. Run it without a
+  username to list every account. The password is typed at the prompt, never
+  passed on the command line.
+
+Changing or resetting a password from the admin panel signs that account out
+on every other browser. The command-line reset can't reach the running app's
+sessions, so follow it with `docker compose restart app` if the account may
+be signed in somewhere it shouldn't be.
+
 ## Backup
 
 **Configuration → Backup** (primary admin account only) downloads one zip

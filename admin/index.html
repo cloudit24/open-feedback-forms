@@ -219,6 +219,7 @@ table.subs tr:last-child td{border-bottom:none}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn-outline btn-sm" id="theme-btn" aria-label="Switch theme">Dark</button>
+        <button class="btn-outline btn-sm" id="password-btn">Change password</button>
         <button class="btn-outline btn-sm" id="logout-btn">Log out</button>
       </div>
     </div>
@@ -639,6 +640,9 @@ table.subs tr:last-child td{border-bottom:none}
         <h2 style="margin-top:26px">Roles &amp; users (Administration tab)</h2>
         <p class="hint">Beyond the one primary admin account, you can create any number of additional users, each with a custom <b>role</b> — a checklist of permissions (view dashboard, view/export submissions, edit questions, edit branding, manage settings, manage alerts, ...) that either applies to every form or only to whichever forms that user is individually assigned. <b>Clone</b> on an existing user copies its role and form assignments as a starting point for a new one. See <code>docs/ROLES_AND_PERMISSIONS.md</code> in the repo for the full model.</p>
 
+        <h2 style="margin-top:26px">Passwords</h2>
+        <p class="hint">Anyone signed in can change their own password with <b>Change password</b> at the top right — including the primary admin, which has no other way to change it. Anyone allowed to manage users can set a new password for another user with <b>Reset password</b> in Administration → Users. Either way, that account is signed out on every other browser. Locked out of the primary admin? On the server run <code>docker compose exec app python reset_password.py &lt;username&gt;</code> (or <code>python reset_password.py &lt;username&gt;</code> without Docker); leave the username off to list every account.</p>
+
         <h2 style="margin-top:26px">Alerts</h2>
         <p class="hint">Configuration → Alerts holds the shared SMTP server and Telegram bot used to send every alert, plus the one global "database disconnected" alert. Each form's own Alerts panel then picks a destination for any of three triggers: a new submission, a daily digest, and that form reaching its expiry date — add as many rules as you need, mixing channels and triggers freely.</p>
 
@@ -727,6 +731,27 @@ table.subs tr:last-child td{border-bottom:none}
       <div style="display:flex;gap:10px;margin-top:16px">
         <button class="btn-outline" id="au-cancel">Cancel</button>
         <button class="btn" id="au-save">Save user</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ change own password / reset another user's ============ -->
+  <div id="password-view" class="hidden">
+    <div class="card" style="max-width:420px;margin:0 auto">
+      <h2 id="pw-title">Change your password</h2>
+      <p class="hint" id="pw-hint"></p>
+      <div id="pw-current-wrap">
+        <label for="pw-current">Current password</label>
+        <input type="password" id="pw-current" autocomplete="current-password">
+      </div>
+      <label for="pw-new">New password</label>
+      <input type="password" id="pw-new" autocomplete="new-password" placeholder="at least 8 characters">
+      <label for="pw-confirm">Repeat new password</label>
+      <input type="password" id="pw-confirm" autocomplete="new-password">
+      <div class="msg" id="pw-msg"></div>
+      <div style="display:flex;gap:10px;margin-top:16px">
+        <button class="btn-outline" id="pw-cancel">Cancel</button>
+        <button class="btn" id="pw-save">Save password</button>
       </div>
     </div>
   </div>
@@ -859,7 +884,7 @@ function api(method, url, body){
 
 function show(id){
   ["setup-view","login-view","dash-view","editor-view","form-editor-view","key-editor-view",
-   "role-editor-view","admin-user-editor-view"].forEach(function(v){
+   "role-editor-view","admin-user-editor-view","password-view"].forEach(function(v){
     $(v).classList.toggle("hidden", v !== id);
   });
 }
@@ -2415,8 +2440,9 @@ function renderAdminUsers(){
     actions.className = "actions";
     var edit = mkBtn("Edit", function(){ openAdminUserEditor(u); });
     var clone = mkBtn("Clone", function(){ openAdminUserEditor(null, u); });
+    var reset = mkBtn("Reset password", function(){ openPasswordView(u); });
     var del = mkBtn("Delete", function(){ deleteAdminUser(u); });
-    [edit, clone, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    [edit, clone, reset, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
     row.appendChild(actions);
     box.appendChild(row);
   });
@@ -2500,6 +2526,54 @@ $("au-save").addEventListener("click", function(){
     if (res.body.ok){ show("dash-view"); document.querySelector('.tab[data-tab="administration"]').click();
       document.querySelector('.subtab[data-subtab="adminusers"]').click(); return; }
     flash("admin-user-editor-msg", res.body.error || "Could not save this user.");
+  });
+});
+
+/* -------------------------------------------------------- passwords --- */
+// One panel, two uses: changing your own password (needs the current one),
+// or someone with manage_users setting a new one for another user (no
+// current password — that's the point of a reset). Either way the server
+// signs that account out everywhere else.
+var pwTarget = null;   // null = own account, otherwise the user being reset
+function openPasswordView(user){
+  pwTarget = user || null;
+  $("pw-title").textContent = user ? 'Reset password for "' + user.username + '"' : "Change your password";
+  $("pw-hint").textContent = user
+    ? "Sets a new password and signs this user out everywhere. Let them know the new password yourself."
+    : "You'll stay signed in here, and be signed out on every other browser and device.";
+  $("pw-current-wrap").classList.toggle("hidden", !!user);
+  ["pw-current", "pw-new", "pw-confirm"].forEach(function(id){ $(id).value = ""; });
+  clearFlash("pw-msg");
+  $("pw-save").disabled = false;
+  show("password-view");
+  $(user ? "pw-new" : "pw-current").focus();
+}
+function closePasswordView(){
+  show("dash-view");
+  if (pwTarget){
+    document.querySelector('.tab[data-tab="administration"]').click();
+    document.querySelector('.subtab[data-subtab="adminusers"]').click();
+  }
+}
+$("password-btn").addEventListener("click", function(){ openPasswordView(null); });
+$("pw-cancel").addEventListener("click", closePasswordView);
+$("pw-save").addEventListener("click", function(){
+  clearFlash("pw-msg");
+  var next = $("pw-new").value;
+  if (next.length < 8){ flash("pw-msg", "The new password needs at least 8 characters."); return; }
+  if (next !== $("pw-confirm").value){ flash("pw-msg", "The two new passwords don't match."); return; }
+  $("pw-save").disabled = true;
+  var req = pwTarget
+    ? api("POST", "/admin/users/" + pwTarget.id + "/update", {password: next})
+    : api("POST", "/admin/account/password", {current_password: $("pw-current").value, new_password: next});
+  req.then(function(res){
+    if (!res.body.ok){
+      $("pw-save").disabled = false;
+      flash("pw-msg", res.body.error || "Could not change the password.");
+      return;
+    }
+    flash("pw-msg", "Password updated.", true);
+    setTimeout(closePasswordView, 900);
   });
 });
 

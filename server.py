@@ -193,6 +193,17 @@ def drop_session(token):
         _sessions.pop(token, None)
 
 
+def drop_sessions_for(kind, key, keep_token=None):
+    """Sign one account out everywhere, e.g. after its password changes.
+    `key` is the username for the bootstrap account, user_id for a DB user."""
+    field = "username" if kind == "bootstrap" else "user_id"
+    with _sessions_lock:
+        for token in [t for t, s in _sessions.items()
+                      if t != keep_token and s["identity"]["kind"] == kind
+                      and s["identity"].get(field) == key]:
+            del _sessions[token]
+
+
 # --------------------------------------------------------------- validation
 
 def clean(value, limit):
@@ -393,6 +404,10 @@ class BaseHandler(BaseHTTPRequestHandler):
         if SESSION_COOKIE not in c:
             return None
         return session_identity(c[SESSION_COOKIE].value)
+
+    def current_token(self):
+        c = self.cookies()
+        return c[SESSION_COOKIE].value if SESSION_COOKIE in c else None
 
     def admin_user(self):
         identity = self.admin_identity()
@@ -845,6 +860,7 @@ class AdminHandler(BaseHandler):
             "/admin/setup": self.post_admin_setup,
             "/admin/login": self.post_admin_login,
             "/admin/logout": self.post_admin_logout,
+            "/admin/account/password": self.post_account_password,
             "/admin/db-settings/test": self.post_db_test,
             "/admin/db-settings": self.post_db_settings,
             "/admin/app-settings": self.post_app_settings,
@@ -1917,6 +1933,9 @@ class AdminHandler(BaseHandler):
             password_hash, salt = config_store.hash_password(body["password"])
         db.update_admin_user(user_id, role_id=role_id, active=active, form_ids=form_ids,
                              password_hash=password_hash, salt=salt)
+        if password_hash:
+            drop_sessions_for("db", user_id, keep_token=self.current_token())
+            log("password reset for admin user %s by %s" % (existing["username"], self.admin_user()))
         return self.send_json(200, {"ok": True})
 
     def post_admin_user_delete(self, user_id):
@@ -2120,6 +2139,42 @@ class AdminHandler(BaseHandler):
             drop_session(c[SESSION_COOKIE].value)
         cookie = "%s=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" % SESSION_COOKIE
         return self.send_json(200, {"ok": True}, cookie_header=cookie)
+
+    def post_account_password(self):
+        # Any signed-in account changing its own password. For the primary
+        # (config.json) admin this is the only in-app way — nobody else can
+        # reset that account; reset_password.py covers a lockout.
+        identity = self.admin_identity()
+        if not identity:
+            return self.send_json(401, {"ok": False, "error": "not authenticated"})
+        if not rate_ok(self.client_ip(), "password", 20):
+            return self.send_json(429, {"ok": False, "error": "too many attempts, try later"})
+        body = self.read_json_body() or {}
+        current = body.get("current_password") or ""
+        new = body.get("new_password") or ""
+        if len(new) < 8:
+            return self.send_json(400, {"ok": False, "error": "new password must be at least 8 characters"})
+
+        if identity["kind"] == "bootstrap":
+            cfg = config_store.load()
+            admin = cfg["admin"]
+            if not config_store.verify_password(current, admin["password_hash"], admin["salt"]):
+                return self.send_json(400, {"ok": False, "error": "current password is incorrect"})
+            admin["password_hash"], admin["salt"] = config_store.hash_password(new)
+            config_store.save(cfg)
+            drop_sessions_for("bootstrap", identity["username"], keep_token=self.current_token())
+        else:
+            if not db.is_connected():
+                return self.send_json(503, {"ok": False, "error": "database not connected"})
+            user = db.get_admin_user_by_username(identity["username"])
+            if not user or not config_store.verify_password(current, user["password_hash"], user["salt"]):
+                return self.send_json(400, {"ok": False, "error": "current password is incorrect"})
+            pw_hash, salt = config_store.hash_password(new)
+            db.update_admin_user(user["id"], password_hash=pw_hash, salt=salt)
+            drop_sessions_for("db", user["id"], keep_token=self.current_token())
+
+        log("password changed by %s" % identity["username"])
+        return self.send_json(200, {"ok": True})
 
 
 # --------------------------------------------------------------------- main
