@@ -14,7 +14,7 @@ WORKDIR /app
 
 RUN pip install --no-cache-dir "mysql-connector-python>=9.0" "tzdata>=2024.1"
 
-COPY server.py db.py config_store.py translate_client.py ui_strings.py VERSION ./
+COPY server.py db.py config_store.py translate_client.py ui_strings.py notifier.py VERSION ./
 COPY public/ ./public/
 COPY admin/ ./admin/
 COPY docker/entrypoint.sh docker/bootstrap.py ./docker/
