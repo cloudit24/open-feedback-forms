@@ -175,14 +175,25 @@ RUN_WIZARD=1
 if [ -f .env ]; then
     RUN_WIZARD=0
     if [ "$TTY" = 1 ]; then
-        ask ".env already exists. Run the database wizard again? [y/N]: " redo
-        case "$redo" in
-            [yY]*)
-                cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
-                echo "Old .env kept as a .env.bak.* copy."
-                RUN_WIZARD=1 ;;
-            *) echo "Keeping .env." ;;
-        esac
+        # Default depends on what the last run actually left behind: an .env
+        # with no database in it means the wizard was skipped (or an older
+        # installer never asked) — then re-running it is the obvious next
+        # step, so that's the default. If a database IS in there, keep it
+        # unless told otherwise.
+        prev_host=$(sed -n "s/^OFF_DB_HOST=//p" .env | tr -d "'\"" | tail -n 1)
+        if [ -n "$prev_host" ]; then
+            ask ".env already has a database ($prev_host). Run the database wizard again? [y/N]: " redo
+            case "$redo" in [yY]*) RUN_WIZARD=1 ;; esac
+        else
+            ask ".env exists but has no database configured. Run the database wizard now? [Y/n]: " redo
+            case "$redo" in [nN]*) ;; *) RUN_WIZARD=1 ;; esac
+        fi
+        if [ "$RUN_WIZARD" = 1 ]; then
+            cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
+            echo "Old .env kept as a .env.bak.* copy."
+        else
+            echo "Keeping .env."
+        fi
     else
         echo ".env already exists — keeping it."
     fi
@@ -278,24 +289,33 @@ fi
 ADMIN_PORT=$(sed -n "s/^ADMIN_PORT=//p" .env | tr -d "'\"" | tail -n 1)
 URL="http://localhost:${ADMIN_PORT:-8080}/admin"
 
-# Don't just say "done" — confirm the app actually reached the database.
-DB_OK=0
-if [ "$NEEDS_BOOTSTRAP" = 1 ] && command -v curl >/dev/null 2>&1; then
-    printf "Checking the database connection"
+# Don't just say "done" — ask the running app what state it's actually in.
+DB_STATE=unknown
+if command -v curl >/dev/null 2>&1; then
+    printf "Checking the app"
     i=0
     while [ $i -lt 20 ]; do
-        case "$(curl -fs "$URL/status" 2>/dev/null || true)" in
-            *'"dbConnected": true'*) DB_OK=1; break ;;
+        status=$(curl -fs "$URL/status" 2>/dev/null || true)
+        case "$status" in
+            *'"dbConnected": true'*)   DB_STATE=connected; break ;;
+            *'"dbConfigured": false'*) DB_STATE=unconfigured; break ;;
+            *'"dbConfigured": true'*)  DB_STATE=unreachable ;;   # keep trying — it may still be starting
         esac
         printf "."; sleep 1; i=$((i + 1))
     done
     echo
-    if [ "$DB_OK" = 1 ]; then
-        echo "Database connected."
-    else
-        echo "The app is up but hasn't reached the database yet. See why with:  docker compose logs app"
-        echo "(For a MariaDB on this server: it must listen on more than 127.0.0.1 — see the note above.)"
-    fi
+    case "$DB_STATE" in
+        connected)
+            echo "Database connected." ;;
+        unconfigured)
+            echo "The app is running but has NO database configured."
+            echo "Re-run this script and pick a database option, or set it in $URL → Configuration → Database connection." ;;
+        unreachable)
+            echo "The app is up and has a database configured, but can't reach it. See why with:  docker compose logs app"
+            echo "(For a MariaDB on this server: it must listen on more than 127.0.0.1 — see the note above.)" ;;
+        *)
+            echo "The app isn't answering on $URL yet. Check:  docker compose ps   and   docker compose logs app" ;;
+    esac
 fi
 
 echo
