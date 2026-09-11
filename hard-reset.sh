@@ -1,7 +1,7 @@
 #!/bin/sh
 # Open Feedback Forms — backup-first hard reset.
 #
-#   curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/hard-reset.sh | sh
+#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/hard-reset.sh)"
 #
 # Backs up config.json, uploaded logos, and (if the bundled MariaDB
 # container is in use) a full SQL dump into ./backup/<timestamp>/ — THEN

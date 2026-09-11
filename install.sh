@@ -1,7 +1,7 @@
 #!/bin/sh
 # Open Feedback Forms — one-line installer and updater.
 #
-#   curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh | sh
+#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh)"
 #
 # First run: clones the repo, asks how you want to handle the database,
 # writes .env, then builds and starts the containers. Every run after that:
@@ -282,7 +282,9 @@ docker compose up -d --build --remove-orphans
 
 if [ "$NEEDS_BOOTSTRAP" = 1 ]; then
     echo "Saving the database connection to config.json..."
-    docker compose run --rm app python docker/bootstrap.py
+    # `compose run` attaches stdin by default — under `curl | sh` that IS
+    # this script, and it would swallow the rest of it. Give it nothing.
+    docker compose run --rm -T app python docker/bootstrap.py </dev/null
     docker compose restart app
 fi
 

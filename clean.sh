@@ -1,7 +1,7 @@
 #!/bin/sh
 # Open Feedback Forms — remove the whole install. No backup, no prompt.
 #
-#   curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/clean.sh | sh
+#   sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/clean.sh)"
 #
 # Stops and deletes everything Docker holds for this project, permanently:
 # containers, networks, volumes (config.json, uploads, the bundled database

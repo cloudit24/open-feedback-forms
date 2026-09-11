@@ -60,7 +60,7 @@ VERSION                current release version, printed at startup
 ## Run it with Docker (recommended on Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh | sh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh)"
 ```
 
 Clones the repo, then asks how to handle the database:
@@ -169,7 +169,7 @@ explicit `YES` confirmation, then runs `docker compose down -v` (deleting
 every container **and volume** for the project) and rebuilds from scratch:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/hard-reset.sh | sh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/hard-reset.sh)"
 ```
 
 Run it from inside the checkout that has your `docker-compose.yml` and
@@ -180,7 +180,7 @@ If you just want everything gone — no backup, no rebuild, no confirmation
 — `clean.sh` runs `docker compose down -v` and stops there:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/clean.sh | sh
+sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/clean.sh)"
 ```
 
 ## What stops abuse
