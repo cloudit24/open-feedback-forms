@@ -78,7 +78,9 @@ HAS_DB_DATA=0;  vol_exists "${PROJECT}_off_db_data" && HAS_DB_DATA=1
 # script's own next lines. Always talk to the terminal directly. With no
 # terminal at all (CI / unattended), every prompt answers "" so the wizard
 # takes its defaults and skips the database.
-if [ -r /dev/tty ]; then
+# /dev/tty exists even with no terminal attached (cron, `ssh` without -t,
+# automation) and then fails to open — test by actually opening it.
+if ( : </dev/tty ) 2>/dev/null; then
     TTY=1
     ask() { printf "%s" "$1" >/dev/tty; read -r "$2" </dev/tty; }
     ask_secret() {
@@ -275,22 +277,14 @@ Existing database data was found (volume ${PROJECT}_off_db_data), but no .env an
 no saved settings to rebuild it from. Stopping without changing anything, so the
 existing data is safe. Restore your .env into $(pwd), then run this again."
 
-if [ -f .env ]; then
-    if [ -n "$(env_get OFF_DB_HOST)" ] || [ "$HAS_DB_DATA" = 1 ]; then
-        MODE=update
-    elif [ "$TTY" = 1 ]; then
-        # Installed earlier with the database skipped, and no bundled
-        # database data exists — setting one up now can't overwrite anything.
-        ask "Installed, but no database is configured yet. Set one up now? [Y/n]: " yn
-        case "$yn" in [nN]*) MODE=update ;; *) MODE=configure ;; esac
-    else
-        MODE=update
-    fi
-fi
+# An existing install is only ever updated — no questions. Whether a database
+# is set up can't be judged from .env: one connected through the admin panel
+# lives only in config.json. The status check at the end reports the real
+# state from the running app.
+[ -f .env ] && MODE=update
 
 NEEDS_BOOTSTRAP=0
-if [ "$MODE" = new ] || [ "$MODE" = configure ]; then
-    [ -f .env ] && cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
+if [ "$MODE" = new ]; then
     echo
     echo "Database setup:"
     echo "  1) Install a bundled MariaDB container for me (easiest)"
@@ -411,7 +405,7 @@ if command -v curl >/dev/null 2>&1; then
             echo "Database connected." ;;
         unconfigured)
             echo "The app is running but has NO database configured."
-            echo "Set it in $URL → Configuration → Database connection, or re-run this script." ;;
+            echo "Set it in $URL → Configuration → Database connection." ;;
         unreachable)
             echo "The app is up and has a database configured, but can't reach it. See why with:  docker compose logs app"
             echo "(For a MariaDB on this server: it must listen on more than 127.0.0.1 — see the note above.)" ;;

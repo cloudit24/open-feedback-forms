@@ -55,10 +55,14 @@ services:
     restart: unless-stopped
     profiles: ["bundled-db"]
     environment:
-      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:?set in .env — install.sh generates this}"
+      # Set in .env by install.sh when the bundled database is chosen. Not
+      # marked required (:?) on purpose: Compose checks every service's
+      # variables even when its profile is off, so that would stop installs
+      # that use their own MariaDB, or none yet, from starting at all.
+      MARIADB_ROOT_PASSWORD: "${DB_ROOT_PASSWORD:-}"
       MARIADB_DATABASE: "${DB_NAME:-open_feedback_forms}"
       MARIADB_USER: "${DB_USER:-off_app}"
-      MARIADB_PASSWORD: "${DB_PASSWORD:?set in .env — install.sh generates this}"
+      MARIADB_PASSWORD: "${DB_PASSWORD:-}"
       # mariadb:latest can move to a new major version on an update; this runs
       # MariaDB's own upgrade step on the existing data (after backing up its
       # system tables) instead of starting with warnings.
