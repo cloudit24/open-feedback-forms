@@ -14,6 +14,7 @@
 set -e
 
 REPO_URL="https://github.com/cloudit24/open-feedback-forms.git"
+SCRIPT_URL="https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh"
 DIR="open-feedback-forms"
 DEFAULT_PROJECT="open-feedback-forms"
 KEEP_BACKUPS=5
@@ -22,9 +23,95 @@ die() { echo "$*" >&2; exit 1; }
 as_root() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi; }
 vol_exists() { docker volume inspect "$1" >/dev/null 2>&1; }
 env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tr -d "'\"" | tail -n 1; }
+can_tty() { ( : </dev/tty ) 2>/dev/null; }
+# git refuses a checkout owned by another user ("dubious ownership") — the
+# normal situation after sudo. Trust this one folder for this command only.
+git_here() { git -c safe.directory="$(pwd)" "$@"; }
 
-command -v docker >/dev/null 2>&1 || die "Docker is required: https://docs.docker.com/get-docker/"
-docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required (bundled with recent Docker Desktop/Engine)."
+# ---- self-repair ------------------------------------------------------------------
+# Fixed here instead of stopping with an error: no permission to use Docker,
+# files left owned by root by an earlier sudo run, Docker/Compose/git missing,
+# Docker not running, Docker installed as a snap, and (further down) the app
+# unable to use its own data folder.
+
+# Run this same script again under sudo — at most once.
+rerun_as_root() {
+    [ "$(id -u)" = 0 ] && return 1
+    [ -n "${OFF_RERUN:-}" ] && return 1
+    command -v sudo >/dev/null 2>&1 || return 1
+    echo "$1 — running again with sudo..."
+    if [ -f "$0" ] && grep -q "Open Feedback Forms" "$0" 2>/dev/null; then
+        exec sudo env OFF_RERUN=1 sh "$0"
+    fi
+    script=$(curl -fsSL "$SCRIPT_URL" 2>/dev/null || wget -qO- "$SCRIPT_URL" 2>/dev/null) || return 1
+    exec sudo env OFF_RERUN=1 sh -c "$script"
+}
+
+pkg_install() {
+    if command -v apt-get >/dev/null 2>&1; then
+        as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@"
+    elif command -v dnf >/dev/null 2>&1; then as_root dnf install -y -q "$@"
+    elif command -v yum >/dev/null 2>&1; then as_root yum install -y -q "$@"
+    elif command -v apk >/dev/null 2>&1; then as_root apk add --no-cache "$@"
+    else return 1
+    fi
+}
+
+if ! command -v docker >/dev/null 2>&1; then
+    [ "$(id -u)" = 0 ] || rerun_as_root "Docker isn't installed, and installing it needs root" ||
+        die "Docker is required: https://docs.docker.com/get-docker/"
+    if can_tty; then
+        printf "Docker isn't installed. Install it now (official script from get.docker.com)? [Y/n]: " >/dev/tty
+        read -r yn </dev/tty
+        case "$yn" in [nN]*) die "Docker is required: https://docs.docker.com/get-docker/" ;; esac
+    fi
+    echo "Installing Docker..."
+    curl -fsSL https://get.docker.com | sh || die "Installing Docker failed — install it by hand: https://docs.docker.com/get-docker/"
+fi
+
+tries=0
+while ! docker info >/dev/null 2>&1; do
+    tries=$((tries + 1))
+    err=$(docker info 2>&1 || true)
+    case "$err" in
+        *[Pp]ermission\ denied*)
+            rerun_as_root "This user isn't allowed to use Docker" ||
+                die "No permission to use Docker. Run this with sudo, or allow your user once with:
+  sudo usermod -aG docker $(id -un)   (then log out and back in)" ;;
+    esac
+    [ "$tries" -le 2 ] || die "Docker isn't working:
+$err"
+    [ "$(id -u)" = 0 ] || rerun_as_root "Docker isn't running, and starting it needs root" ||
+        die "Docker isn't running. Start it with: sudo systemctl start docker"
+    echo "Docker isn't running — starting it..."
+    systemctl start docker 2>/dev/null || service docker start 2>/dev/null || snap start docker 2>/dev/null || true
+    sleep 5
+done
+
+if ! docker compose version >/dev/null 2>&1; then
+    echo "Docker Compose v2 is missing — installing it..."
+    pkg_install docker-compose-plugin >/dev/null 2>&1 || true
+    docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required: https://docs.docker.com/compose/install/linux/"
+fi
+if ! command -v git >/dev/null 2>&1; then
+    echo "git isn't installed — installing it..."
+    pkg_install git >/dev/null 2>&1 || true
+    command -v git >/dev/null 2>&1 || die "git is required: https://git-scm.com/downloads"
+fi
+
+# Docker installed as a snap may only use folders under /home, even with sudo.
+SNAP_DOCKER=0
+case "$(readlink -f "$(command -v docker)" 2>/dev/null)" in /snap/*) SNAP_DOCKER=1 ;; esac
+# Under sudo, the person's own home — not /root.
+USER_HOME=$HOME
+if [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    USER_HOME=$(eval echo "~$SUDO_USER")
+fi
+# SELinux (Fedora/RHEL) blocks containers from folders it hasn't labelled.
+MNT_RW=""
+if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null)" = Enforcing ]; then
+    MNT_RW=":z"
+fi
 
 # ---- find an existing install -------------------------------------------------
 # Checked in order: the current directory; the folder Docker recorded for this
@@ -35,7 +122,7 @@ find_existing() {
     wd=$(docker ps -a --filter "label=com.docker.compose.project=$DEFAULT_PROJECT" \
             --format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null | head -n 1)
     if [ -n "$wd" ] && [ -f "$wd/docker-compose.yml" ]; then echo "$wd"; return; fi
-    for d in "./$DIR" "$HOME/$DIR"; do
+    for d in "./$DIR" "$HOME/$DIR" "$USER_HOME/$DIR"; do
         if [ -f "$d/docker-compose.yml" ] && [ -f "$d/server.py" ]; then (cd "$d" && pwd); return; fi
     done
 }
@@ -44,14 +131,31 @@ PULL_OK=1
 EXISTING_DIR=$(find_existing)
 if [ -n "$EXISTING_DIR" ]; then
     cd "$EXISTING_DIR"
+    # Files an earlier sudo run left owned by root can't be changed by this
+    # user (git pull, .env, old backups) — the classic "Permission denied".
+    if [ "$(id -u)" != 0 ] && [ -n "$(find . ! -user "$(id -u)" 2>/dev/null | head -n 1)" ]; then
+        rerun_as_root "Some files in $EXISTING_DIR belong to another user (usually an earlier sudo run)" ||
+            die "Some files in $EXISTING_DIR belong to another user. Fix with: sudo chown -R $(id -un) \"$EXISTING_DIR\""
+    fi
     echo "Found Open Feedback Forms in $EXISTING_DIR — pulling latest code..."
-    if command -v git >/dev/null 2>&1 && [ -d .git ]; then
-        git pull --ff-only || PULL_OK=0
+    if [ -d .git ]; then
+        git_here pull --ff-only || PULL_OK=0
     else
         PULL_OK=0
     fi
+    if [ "$SNAP_DOCKER" = 1 ]; then
+        case "$(pwd)/" in /home/*) ;; *) echo "WARNING: Docker is installed as a snap, which can only use folders under /home — this install is in $(pwd)." ;; esac
+    fi
 else
-    command -v git >/dev/null 2>&1 || die "git is required: https://git-scm.com/downloads"
+    if [ "$SNAP_DOCKER" = 1 ]; then
+        case "$(pwd)/" in
+            /home/*) ;;
+            *)
+                case "$USER_HOME/" in /home/*) target=$USER_HOME ;; *) target=/home ;; esac
+                echo "Docker is installed as a snap, which can only use folders under /home — installing into $target instead of $(pwd)."
+                mkdir -p "$target" && cd "$target" ;;
+        esac
+    fi
     [ -e "$DIR" ] && die "./$DIR exists but isn't an Open Feedback Forms checkout — move it aside and re-run."
     git clone "$REPO_URL" "$DIR"
     cd "$DIR"
@@ -250,7 +354,7 @@ backup_before_update() {
     mkdir -p "$dest"
     echo "Safety backup -> $dest"
     if vol_exists "${PROJECT}_off_data"; then
-        docker run --rm -v "${PROJECT}_off_data":/from:ro -v "$(pwd)/$dest":/to alpine \
+        docker run --rm -v "${PROJECT}_off_data":/from:ro -v "$(pwd)/$dest":/to$MNT_RW alpine \
             sh -c "mkdir -p /to/off_data && cp -a /from/. /to/off_data/ && chown -R $(id -u):$(id -g) /to" \
             && echo "  settings + uploads saved" \
             || echo "  WARNING: could not copy settings/uploads (continuing — the update doesn't touch them)"
@@ -386,20 +490,37 @@ ADMIN_PORT=$(env_get ADMIN_PORT)
 URL="http://localhost:${ADMIN_PORT:-8080}/admin"
 
 # Don't just say "done" — ask the running app what state it's actually in.
-DB_STATE=unknown
-if command -v curl >/dev/null 2>&1; then
+check_app() {
+    DB_STATE=unknown
     printf "Checking the app"
     i=0
     while [ $i -lt 30 ]; do
         status=$(curl -fs "$URL/status" 2>/dev/null || true)
         case "$status" in
-            *'"dbConnected": true'*)   DB_STATE=connected; break ;;
-            *'"dbConfigured": false'*) DB_STATE=unconfigured; break ;;
+            *'"dbConnected": true'*)   DB_STATE=connected; return 0 ;;
+            *'"dbConfigured": false'*) DB_STATE=unconfigured; return 0 ;;
             *'"dbConfigured": true'*)  DB_STATE=unreachable ;;   # keep trying — it may still be starting
         esac
         printf "."; sleep 1; i=$((i + 1))
     done
     echo
+}
+# The app runs as an unprivileged user; if its data folder ended up owned by
+# root (e.g. restored or edited by hand as root) it can't read or write it.
+fix_data_permissions() {
+    docker compose logs --tail 100 app 2>/dev/null | grep -qiE "permission denied|PermissionError" || return 1
+    echo "The app can't use its data folder — fixing permissions..."
+    docker compose run --rm -T --no-deps -u 0 --entrypoint sh app \
+        -c 'chown -R offuser:offuser /data && chmod -R u+rwX /data' </dev/null >/dev/null 2>&1 || return 1
+    docker compose restart app >/dev/null 2>&1
+}
+DB_STATE=unknown
+if command -v curl >/dev/null 2>&1; then
+    check_app; echo
+    case "$DB_STATE" in
+        connected|unconfigured) ;;
+        *) if fix_data_permissions; then check_app; echo; fi ;;
+    esac
     case "$DB_STATE" in
         connected)
             echo "Database connected." ;;
@@ -412,6 +533,12 @@ if command -v curl >/dev/null 2>&1; then
         *)
             echo "The app isn't answering on $URL yet. Check:  docker compose ps   and   docker compose logs app" ;;
     esac
+fi
+
+# Run under sudo from someone's home folder: hand the folder back to them, so
+# editing .env or re-running without sudo doesn't hit "Permission denied".
+if [ "$(id -u)" = 0 ] && [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ]; then
+    case "$(pwd)/" in "$USER_HOME"/*) chown -R "$SUDO_USER:$(id -g "$SUDO_USER")" . 2>/dev/null || true ;; esac
 fi
 
 echo

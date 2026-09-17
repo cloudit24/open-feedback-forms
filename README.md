@@ -111,6 +111,19 @@ git pull
 docker compose up -d --build
 ```
 
+**Problems the installer fixes by itself** (so does `clean.sh` and
+`hard-reset.sh` where they apply), instead of stopping with an error:
+
+- no permission to use Docker, or files left owned by root by an earlier
+  `sudo` run: it runs itself again with `sudo`, then hands the folder back
+  to your user;
+- Docker not running: starts it. Docker, Compose or git missing: installs
+  them (Docker after asking, if there's a terminal);
+- git refusing the folder under `sudo` ("dubious ownership");
+- the app unable to read or write its own data folder: fixes permissions;
+- Docker installed as a snap: installs under `/home`, the only place snap
+  Docker can use.
+
 ## Run it on Windows
 
 ```powershell

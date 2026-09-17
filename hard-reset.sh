@@ -13,13 +13,45 @@
 # current directory.
 set -e
 
-command -v docker >/dev/null 2>&1 || { echo "Docker is required: https://docs.docker.com/get-docker/"; exit 1; }
-docker compose version >/dev/null 2>&1 || { echo "Docker Compose v2 is required."; exit 1; }
-[ -f "./docker-compose.yml" ] || {
-    echo "No docker-compose.yml in the current directory."
-    echo "cd into your open-feedback-forms checkout first, then re-run this script."
-    exit 1
+SCRIPT_URL="https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/hard-reset.sh"
+die() { echo "$*" >&2; exit 1; }
+
+# Run this same script again under sudo — at most once.
+rerun_as_root() {
+    [ "$(id -u)" = 0 ] && return 1
+    [ -n "${OFF_RERUN:-}" ] && return 1
+    command -v sudo >/dev/null 2>&1 || return 1
+    echo "$1 — running again with sudo..."
+    if [ -f "$0" ] && grep -q "Open Feedback Forms" "$0" 2>/dev/null; then
+        exec sudo env OFF_RERUN=1 sh "$0"
+    fi
+    script=$(curl -fsSL "$SCRIPT_URL" 2>/dev/null || wget -qO- "$SCRIPT_URL" 2>/dev/null) || return 1
+    exec sudo env OFF_RERUN=1 sh -c "$script"
 }
+
+command -v docker >/dev/null 2>&1 || die "Docker is required: https://docs.docker.com/get-docker/"
+if ! docker info >/dev/null 2>&1; then
+    case "$(docker info 2>&1 || true)" in
+        *[Pp]ermission\ denied*) rerun_as_root "This user isn't allowed to use Docker" || die "No permission to use Docker — run this with sudo." ;;
+        *) [ "$(id -u)" = 0 ] || rerun_as_root "Docker isn't running" || die "Docker isn't running. Start it with: sudo systemctl start docker"
+           systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true; sleep 5
+           docker info >/dev/null 2>&1 || die "Docker isn't working: $(docker info 2>&1 | tail -n 2)" ;;
+    esac
+fi
+docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required."
+
+# Find the install from any folder, the same way install.sh does.
+if ! { [ -f ./docker-compose.yml ] && [ -f ./server.py ]; }; then
+    user_home=$HOME
+    [ -n "${SUDO_USER:-}" ] && [ "$SUDO_USER" != root ] && user_home=$(eval echo "~$SUDO_USER")
+    wd=$(docker ps -a --filter "label=com.docker.compose.project=open-feedback-forms" \
+            --format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null | head -n 1)
+    for d in "$wd" "./open-feedback-forms" "$HOME/open-feedback-forms" "$user_home/open-feedback-forms"; do
+        if [ -n "$d" ] && [ -f "$d/docker-compose.yml" ] && [ -f "$d/server.py" ]; then cd "$d"; break; fi
+    done
+fi
+[ -f ./docker-compose.yml ] || die "No Open Feedback Forms install found — run install.sh first."
+echo "Install found in $(pwd)"
 
 STAMP=$(date +%Y%m%d-%H%M%S)
 BACKUP_DIR="./backup/$STAMP"
@@ -74,7 +106,7 @@ echo "for this project — every form, submission and admin account, permanently
 echo "then rebuild and start fresh."
 echo
 
-if [ -r /dev/tty ]; then
+if ( : </dev/tty ) 2>/dev/null; then
     printf "Type YES to continue, anything else to abort: " > /dev/tty
     read -r CONFIRM < /dev/tty
 else
