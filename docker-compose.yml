@@ -7,6 +7,11 @@
 # `docker compose up` by hand with no bundled-db profile just starts the app,
 # which you then point at your own MariaDB from the admin panel's Database tab.
 
+# Fixed project name: volumes are always open-feedback-forms_off_data and
+# open-feedback-forms_off_db_data, whatever the folder is called — so an
+# update from a re-cloned or renamed folder still finds the existing data.
+name: open-feedback-forms
+
 services:
   app:
     build: .
@@ -54,6 +59,10 @@ services:
       MARIADB_DATABASE: "${DB_NAME:-open_feedback_forms}"
       MARIADB_USER: "${DB_USER:-off_app}"
       MARIADB_PASSWORD: "${DB_PASSWORD:?set in .env — install.sh generates this}"
+      # mariadb:latest can move to a new major version on an update; this runs
+      # MariaDB's own upgrade step on the existing data (after backing up its
+      # system tables) instead of starting with warnings.
+      MARIADB_AUTO_UPGRADE: "1"
     volumes:
       - off_db_data:/var/lib/mysql
     healthcheck:

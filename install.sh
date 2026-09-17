@@ -1,45 +1,77 @@
 #!/bin/sh
-# Open Feedback Forms — one-line installer and updater.
+# Open Feedback Forms — one-line installer AND updater.
 #
 #   sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh)"
 #
-# First run: clones the repo, asks how you want to handle the database,
-# writes .env, then builds and starts the containers. Every run after that:
-# pulls the latest code and rebuilds — .env, config.json and the database
-# are never touched unless you say so at the prompt. The admin account is
-# always created afterward through the web UI, never over a script prompt.
+# The same link works both ways, from any directory:
+#   - No install on this server yet -> clone, ask the database questions,
+#     build and start.
+#   - Already installed -> find it (wherever it lives), take a safety backup,
+#     pull the latest code and rebuild. .env, config.json, uploads and the
+#     database are kept exactly as they are; no questions are asked.
+# The admin account is always created through the web UI, never over a
+# script prompt.
 set -e
 
 REPO_URL="https://github.com/cloudit24/open-feedback-forms.git"
 DIR="open-feedback-forms"
+DEFAULT_PROJECT="open-feedback-forms"
+KEEP_BACKUPS=5
 
 die() { echo "$*" >&2; exit 1; }
 as_root() { if [ "$(id -u)" = 0 ]; then "$@"; else sudo "$@"; fi; }
+vol_exists() { docker volume inspect "$1" >/dev/null 2>&1; }
+env_get() { sed -n "s/^$1=//p" .env 2>/dev/null | tr -d "'\"" | tail -n 1; }
 
 command -v docker >/dev/null 2>&1 || die "Docker is required: https://docs.docker.com/get-docker/"
 docker compose version >/dev/null 2>&1 || die "Docker Compose v2 is required (bundled with recent Docker Desktop/Engine)."
 
-# ---- get the code ----------------------------------------------------------
-# Already inside a checkout? Reuse it. Otherwise clone (or reuse ./$DIR).
-# Either way an existing checkout is pulled to latest — re-running this
-# one-liner is how you update.
-pull() {
-    command -v git >/dev/null 2>&1 || { echo "git not found — using the code already here."; return 0; }
-    git pull --ff-only || echo "Could not fast-forward — pull manually, then re-run this script."
+# ---- find an existing install -------------------------------------------------
+# Checked in order: the current directory; the folder Docker recorded for this
+# project's containers (so running the link from a different directory still
+# finds it); ./open-feedback-forms; ~/open-feedback-forms.
+find_existing() {
+    if [ -f ./server.py ] && [ -f ./docker-compose.yml ]; then pwd; return; fi
+    wd=$(docker ps -a --filter "label=com.docker.compose.project=$DEFAULT_PROJECT" \
+            --format '{{.Label "com.docker.compose.project.working_dir"}}' 2>/dev/null | head -n 1)
+    if [ -n "$wd" ] && [ -f "$wd/docker-compose.yml" ]; then echo "$wd"; return; fi
+    for d in "./$DIR" "$HOME/$DIR"; do
+        if [ -f "$d/docker-compose.yml" ] && [ -f "$d/server.py" ]; then (cd "$d" && pwd); return; fi
+    done
 }
-if [ -f ./server.py ] && [ -f ./docker-compose.yml ]; then
-    echo "Existing checkout — pulling latest changes..."
-    pull
+
+PULL_OK=1
+EXISTING_DIR=$(find_existing)
+if [ -n "$EXISTING_DIR" ]; then
+    cd "$EXISTING_DIR"
+    echo "Found Open Feedback Forms in $EXISTING_DIR — pulling latest code..."
+    if command -v git >/dev/null 2>&1 && [ -d .git ]; then
+        git pull --ff-only || PULL_OK=0
+    else
+        PULL_OK=0
+    fi
 else
     command -v git >/dev/null 2>&1 || die "git is required: https://git-scm.com/downloads"
-    if [ -d "$DIR" ]; then
-        echo "$DIR already exists — pulling latest changes..."
-        (cd "$DIR" && pull)
-    else
-        git clone "$REPO_URL" "$DIR"
-    fi
+    [ -e "$DIR" ] && die "./$DIR exists but isn't an Open Feedback Forms checkout — move it aside and re-run."
+    git clone "$REPO_URL" "$DIR"
     cd "$DIR"
 fi
+
+# Compose names volumes <project>_off_data / <project>_off_db_data. The
+# project is pinned to "open-feedback-forms" in docker-compose.yml, but an
+# older install may have run from a folder with another name — keep using
+# that install's volumes rather than starting empty ones.
+PROJECT=$(env_get COMPOSE_PROJECT_NAME)
+[ -n "$PROJECT" ] || PROJECT=$(sed -n 's/^name:[[:space:]]*//p' docker-compose.yml | head -n 1)
+[ -n "$PROJECT" ] || PROJECT=$DEFAULT_PROJECT
+PIN_PROJECT=""
+BASE=$(basename "$(pwd)")
+if [ "$BASE" != "$PROJECT" ] && vol_exists "${BASE}_off_data" && ! vol_exists "${PROJECT}_off_data"; then
+    PROJECT=$BASE
+    PIN_PROJECT=$BASE
+fi
+HAS_APP_DATA=0; vol_exists "${PROJECT}_off_data" && HAS_APP_DATA=1
+HAS_DB_DATA=0;  vol_exists "${PROJECT}_off_db_data" && HAS_DB_DATA=1
 
 # ---- prompting --------------------------------------------------------------
 # Under `curl | sh`, stdin IS the script — a plain `read` would eat the
@@ -56,9 +88,11 @@ if [ -r /dev/tty ]; then
         stty echo </dev/tty 2>/dev/null
         echo >/dev/tty
     }
-    # Ctrl-C in the middle of a password prompt must not leave the
-    # terminal with echo switched off.
-    trap 'stty echo </dev/tty 2>/dev/null' EXIT INT TERM
+    # Ctrl-C in the middle of a password prompt must not leave the terminal
+    # with echo switched off. INT/TERM still have to stop the script — a trap
+    # that doesn't exit would let the install carry on after Ctrl-C.
+    trap 'stty echo </dev/tty 2>/dev/null || true' EXIT
+    trap 'exit 130' INT TERM
 else
     TTY=0
     ask() { eval "$2=''"; }
@@ -169,37 +203,94 @@ ensure_db_reachable() {
     echo "restart MariaDB, and make sure your firewall only allows port 3306 from Docker."
 }
 
-# ---- database wizard ---------------------------------------------------------
-NEEDS_BOOTSTRAP=0
-RUN_WIZARD=1
+# ---- existing data, lost .env ------------------------------------------------
+# The database volume exists but .env doesn't (checkout deleted or moved).
+# Starting the wizard here would write NEW database passwords that don't match
+# the existing database. config.json in the app volume already holds the real
+# connection details, so rebuild .env from it instead.
+recover_env() {
+    vol_exists "${PROJECT}_off_data" || return 1
+    echo "Existing data found but no .env — rebuilding .env from the saved settings..."
+    recovered=$(docker run --rm -i -v "${PROJECT}_off_data":/data:ro python:3.13-slim python - <<'PY'
+import json, secrets, sys
+try:
+    with open("/data/config.json", encoding="utf-8") as f:
+        d = json.load(f).get("db") or {}
+except Exception:
+    sys.exit(1)
+out = {}
+if d.get("host"):
+    out.update(OFF_DB_HOST=d["host"], OFF_DB_PORT=str(d.get("port") or 3306),
+               OFF_DB_USER=d.get("user", ""), OFF_DB_PASSWORD=d.get("password", ""),
+               OFF_DB_NAME=d.get("database", ""))
+    if d["host"] == "db":
+        # MariaDB ignores these once its data exists; they only need to be
+        # present. The real user/password/database come from config.json.
+        out.update(COMPOSE_PROFILES="bundled-db", DB_NAME=d.get("database", ""),
+                   DB_USER=d.get("user", ""), DB_PASSWORD=d.get("password", ""),
+                   DB_ROOT_PASSWORD=secrets.token_urlsafe(18),
+                   OFF_WAIT_FOR_DB_HOST="db", OFF_WAIT_FOR_DB_PORT="3306")
+for k, v in out.items():
+    if "'" in v:
+        sys.exit(2)
+    print("%s='%s'" % (k, v))
+PY
+    ) || return 1
+    { cat .env.example; [ -n "$recovered" ] && printf "%s\n" "$recovered"; } > .env
+    echo "Rebuilt .env from config.json."
+}
+
+# ---- safety backup before an update ----------------------------------------------
+# Updating never deletes data, but a copy costs seconds and makes any surprise
+# recoverable. Keeps the newest $KEEP_BACKUPS; older ones are removed.
+backup_before_update() {
+    dest="backup/pre-update-$(date +%Y%m%d-%H%M%S)"
+    mkdir -p "$dest"
+    echo "Safety backup -> $dest"
+    if vol_exists "${PROJECT}_off_data"; then
+        docker run --rm -v "${PROJECT}_off_data":/from:ro -v "$(pwd)/$dest":/to alpine \
+            sh -c "mkdir -p /to/off_data && cp -a /from/. /to/off_data/ && chown -R $(id -u):$(id -g) /to" \
+            && echo "  settings + uploads saved" \
+            || echo "  WARNING: could not copy settings/uploads (continuing — the update doesn't touch them)"
+    fi
+    if [ -n "$(docker compose ps -q --status running db 2>/dev/null)" ]; then
+        if docker compose exec -T db sh -c \
+                'exec mariadb-dump -u"$MARIADB_USER" -p"$MARIADB_PASSWORD" --single-transaction "$MARIADB_DATABASE"' \
+                </dev/null >"$dest/database.sql" 2>"$dest/database-dump.log"; then
+            rm -f "$dest/database-dump.log"
+            echo "  database saved"
+        else
+            echo "  WARNING: database dump failed, see $dest/database-dump.log (continuing — the update doesn't touch the database)"
+        fi
+    fi
+    ls -1d backup/pre-update-* 2>/dev/null | sort -r | tail -n +$((KEEP_BACKUPS + 1)) |
+        while read -r old; do rm -rf "$old"; done
+}
+
+# ---- decide: new install, or update --------------------------------------------
+MODE=new
+[ ! -f .env ] && [ "$HAS_APP_DATA" = 1 ] && recover_env || true
+[ ! -f .env ] && [ "$HAS_DB_DATA" = 1 ] && die "
+Existing database data was found (volume ${PROJECT}_off_db_data), but no .env and
+no saved settings to rebuild it from. Stopping without changing anything, so the
+existing data is safe. Restore your .env into $(pwd), then run this again."
+
 if [ -f .env ]; then
-    RUN_WIZARD=0
-    if [ "$TTY" = 1 ]; then
-        # Default depends on what the last run actually left behind: an .env
-        # with no database in it means the wizard was skipped (or an older
-        # installer never asked) — then re-running it is the obvious next
-        # step, so that's the default. If a database IS in there, keep it
-        # unless told otherwise.
-        prev_host=$(sed -n "s/^OFF_DB_HOST=//p" .env | tr -d "'\"" | tail -n 1)
-        if [ -n "$prev_host" ]; then
-            ask ".env already has a database ($prev_host). Run the database wizard again? [y/N]: " redo
-            case "$redo" in [yY]*) RUN_WIZARD=1 ;; esac
-        else
-            ask ".env exists but has no database configured. Run the database wizard now? [Y/n]: " redo
-            case "$redo" in [nN]*) ;; *) RUN_WIZARD=1 ;; esac
-        fi
-        if [ "$RUN_WIZARD" = 1 ]; then
-            cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
-            echo "Old .env kept as a .env.bak.* copy."
-        else
-            echo "Keeping .env."
-        fi
+    if [ -n "$(env_get OFF_DB_HOST)" ] || [ "$HAS_DB_DATA" = 1 ]; then
+        MODE=update
+    elif [ "$TTY" = 1 ]; then
+        # Installed earlier with the database skipped, and no bundled
+        # database data exists — setting one up now can't overwrite anything.
+        ask "Installed, but no database is configured yet. Set one up now? [Y/n]: " yn
+        case "$yn" in [nN]*) MODE=update ;; *) MODE=configure ;; esac
     else
-        echo ".env already exists — keeping it."
+        MODE=update
     fi
 fi
 
-if [ "$RUN_WIZARD" = 1 ]; then
+NEEDS_BOOTSTRAP=0
+if [ "$MODE" = new ] || [ "$MODE" = configure ]; then
+    [ -f .env ] && cp .env ".env.bak.$(date +%Y%m%d-%H%M%S)"
     echo
     echo "Database setup:"
     echo "  1) Install a bundled MariaDB container for me (easiest)"
@@ -270,12 +361,21 @@ if [ "$RUN_WIZARD" = 1 ]; then
     esac
 
     # Written in one go, only once every answer is in — an aborted wizard
-    # never leaves a half-written .env behind for the next run to "keep".
+    # never leaves a half-written .env behind.
     { cat .env.example; printf "%s" "$ENV_EXTRA"; } > .env
     echo "Saved .env (keep that file private — it holds the database password)."
+else
+    echo "Existing install — updating only. Your forms, submissions, settings and database are kept."
+    backup_before_update
+fi
+
+if [ -n "$PIN_PROJECT" ] && [ -z "$(env_get COMPOSE_PROJECT_NAME)" ]; then
+    printf "COMPOSE_PROJECT_NAME='%s'\n" "$PIN_PROJECT" >> .env
 fi
 
 # ---- build & start -----------------------------------------------------------
+# `up --build` replaces containers only; named volumes (the data) are never
+# removed by it.
 echo
 echo "Building and starting containers..."
 docker compose up -d --build --remove-orphans
@@ -288,7 +388,7 @@ if [ "$NEEDS_BOOTSTRAP" = 1 ]; then
     docker compose restart app
 fi
 
-ADMIN_PORT=$(sed -n "s/^ADMIN_PORT=//p" .env | tr -d "'\"" | tail -n 1)
+ADMIN_PORT=$(env_get ADMIN_PORT)
 URL="http://localhost:${ADMIN_PORT:-8080}/admin"
 
 # Don't just say "done" — ask the running app what state it's actually in.
@@ -296,7 +396,7 @@ DB_STATE=unknown
 if command -v curl >/dev/null 2>&1; then
     printf "Checking the app"
     i=0
-    while [ $i -lt 20 ]; do
+    while [ $i -lt 30 ]; do
         status=$(curl -fs "$URL/status" 2>/dev/null || true)
         case "$status" in
             *'"dbConnected": true'*)   DB_STATE=connected; break ;;
@@ -311,7 +411,7 @@ if command -v curl >/dev/null 2>&1; then
             echo "Database connected." ;;
         unconfigured)
             echo "The app is running but has NO database configured."
-            echo "Re-run this script and pick a database option, or set it in $URL → Configuration → Database connection." ;;
+            echo "Set it in $URL → Configuration → Database connection, or re-run this script." ;;
         unreachable)
             echo "The app is up and has a database configured, but can't reach it. See why with:  docker compose logs app"
             echo "(For a MariaDB on this server: it must listen on more than 127.0.0.1 — see the note above.)" ;;
@@ -321,10 +421,19 @@ if command -v curl >/dev/null 2>&1; then
 fi
 
 echo
-if [ "$RUN_WIZARD" = 0 ]; then
-    echo "Updated. $URL"
-elif [ "$NEEDS_BOOTSTRAP" = 1 ]; then
-    echo "Done. Open $URL to create your admin account."
-else
-    echo "Done. Open $URL to create your admin account and connect the database."
-fi
+case "$MODE" in
+    update)
+        if [ "$PULL_OK" = 1 ]; then
+            echo "Updated. Existing data kept. $URL"
+        else
+            echo "Rebuilt, but the code was NOT updated: git couldn't fast-forward in $(pwd)"
+            echo "(usually a file there was edited by hand — check with: git -C \"$(pwd)\" status)."
+            echo "Existing data kept. $URL"
+        fi ;;
+    *)
+        if [ "$NEEDS_BOOTSTRAP" = 1 ]; then
+            echo "Done. Open $URL to create your admin account."
+        else
+            echo "Done. Open $URL to create your admin account and connect the database."
+        fi ;;
+esac

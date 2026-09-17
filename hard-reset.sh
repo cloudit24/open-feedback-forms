@@ -29,7 +29,10 @@ echo "Backing up to $BACKUP_DIR ..."
 
 # config.json + uploaded logos live on the off_data volume — copy them out
 # via a throwaway container rather than assuming a bind mount.
-VOL_DATA="$(basename "$(pwd)")_off_data"
+PROJECT=$(sed -n "s/^COMPOSE_PROJECT_NAME=//p" .env 2>/dev/null | tr -d "'\"" | tail -n 1)
+[ -n "$PROJECT" ] || PROJECT=$(sed -n 's/^name:[[:space:]]*//p' docker-compose.yml | head -n 1)
+[ -n "$PROJECT" ] || PROJECT=$(basename "$(pwd)")
+VOL_DATA="${PROJECT}_off_data"
 if docker volume inspect "$VOL_DATA" >/dev/null 2>&1; then
     mkdir -p "$BACKUP_DIR/off_data"
     docker run --rm -v "$VOL_DATA":/from -v "$(pwd)/$BACKUP_DIR/off_data":/to alpine \

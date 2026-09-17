@@ -87,11 +87,23 @@ piping the one-liner — it detects the existing checkout and reuses it. See
 `docker-compose.yml` for the two services (`app`, and `db` — only started
 when you choose the bundled-database option).
 
-**To update an existing install**, re-run the same one-liner (or
-`./install.sh` from inside the checkout) — it pulls the latest code and
-rebuilds the containers. `.env` and your database are untouched, unless you
-answer **y** to "Run the database wizard again?" (the old `.env` is kept as
-a `.env.bak.*` copy). Or by hand:
+**To update an existing install**, run the same one-liner again, from any
+directory. The installer works out whether this server already has Open
+Feedback Forms (it checks the current folder, the folder Docker recorded for
+the running containers, then `./open-feedback-forms` and
+`~/open-feedback-forms`), and if so it only updates:
+
+- takes a safety backup first into `backup/pre-update-<time>/` (settings,
+  uploads, and a database dump for the bundled MariaDB; the newest 5 are
+  kept),
+- pulls the latest code and rebuilds the containers,
+- never asks the database questions and never changes `.env`,
+  `config.json`, uploads or the database.
+
+If `.env` has gone missing but the data is still there, it rebuilds `.env`
+from the saved settings instead of writing new passwords over the existing
+database. If it can't, it stops without changing anything. Or update by
+hand:
 
 ```bash
 cd open-feedback-forms
