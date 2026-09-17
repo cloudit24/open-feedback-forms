@@ -15,6 +15,7 @@ import smtplib
 import urllib.error
 import urllib.request
 from email.message import EmailMessage
+from email.utils import formataddr
 
 import db
 
@@ -26,7 +27,11 @@ def deliver_email(smtp_cfg, to_addr, subject, body):
     test, which needs the real reason. Alerts go through send_email()."""
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = smtp_cfg.get("from") or smtp_cfg.get("user") or "noreply@localhost"
+    from_addr = smtp_cfg.get("from") or smtp_cfg.get("user") or "noreply@localhost"
+    # One line only (a newline would be header injection); formataddr quotes
+    # the name and encodes non-ASCII, e.g. an Arabic club name.
+    from_name = " ".join((smtp_cfg.get("from_name") or "").split())
+    msg["From"] = formataddr((from_name, from_addr)) if from_name else from_addr
     msg["To"] = to_addr
     msg.set_content(body)
     port = int(smtp_cfg.get("port") or 587)

@@ -81,7 +81,7 @@ _DEFAULT = {
         # Shared infra credentials for alert_rules (see db.py) — one SMTP
         # server and one Telegram bot for the whole app; each alert rule
         # only needs to say *where* to send, not *how*.
-        "smtp": {"host": "", "port": 587, "user": "", "password": "", "from": "", "use_tls": True},
+        "smtp": {"host": "", "port": 587, "user": "", "password": "", "from": "", "from_name": "", "use_tls": True},
         "telegram": {"bot_token": ""},
         # Unlike form-scoped alert rules (in MariaDB — see db.py's
         # alert_rules table), this list has to live here: it's the alert

@@ -564,8 +564,11 @@ table.subs tr:last-child td{border-bottom:none}
             <div><label for="smtp-user">Username</label><input type="text" id="smtp-user"></div>
             <div><label for="smtp-pass">Password</label><input type="password" id="smtp-pass" placeholder="(leave blank to keep the saved one)"></div>
           </div>
-          <label for="smtp-from">From address</label>
-          <input type="text" id="smtp-from" placeholder="alerts@example.com">
+          <div class="row">
+            <div><label for="smtp-from-name">From name</label><input type="text" id="smtp-from-name" placeholder="Sunrise Sports Club"></div>
+            <div><label for="smtp-from">From address</label><input type="text" id="smtp-from" placeholder="alerts@example.com"></div>
+          </div>
+          <p class="hint" style="margin-top:4px">The name is what people see as the sender in their inbox, instead of just the address.</p>
           <div class="check-row"><input type="checkbox" id="smtp-tls" checked><label for="smtp-tls" style="margin:0">Use STARTTLS</label></div>
           <div class="msg" id="smtp-msg" style="margin-top:10px"></div>
           <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
@@ -2424,12 +2427,30 @@ function loadAdminUsers(){
   api("GET", "/admin/users").then(function(res){
     if (res.status !== 200) return;
     STATE.adminUsers = res.body.users;
+    STATE.primaryAdmin = res.body.primary;
     renderAdminUsers();
   });
 }
 function renderAdminUsers(){
   var box = $("admin-users-list");
   box.innerHTML = "";
+  if (STATE.primaryAdmin){
+    // The owner account from first-run setup: full access, and deliberately
+    // not editable or deletable here, so nobody can lock the owner out.
+    var prow = document.createElement("div");
+    prow.className = "form-row";
+    prow.innerHTML = '<div class="info"><b>' + escapeHtml(STATE.primaryAdmin.username) + '</b> <span class="badge">primary admin</span>' +
+      '<div class="meta">Full access &middot; all forms &middot; created at first setup, can\'t be edited or deleted</div></div>';
+    if (STATE.isBootstrap){
+      var pactions = document.createElement("div");
+      pactions.className = "actions";
+      var pw = mkBtn("Change password", function(){ openPasswordView(null); });
+      pw.className = "btn-outline btn-sm";
+      pactions.appendChild(pw);
+      prow.appendChild(pactions);
+    }
+    box.appendChild(prow);
+  }
   STATE.adminUsers.forEach(function(u){
     var row = document.createElement("div");
     row.className = "form-row";
@@ -2451,7 +2472,7 @@ function renderAdminUsers(){
     box.appendChild(row);
   });
   if (!STATE.adminUsers.length){
-    box.innerHTML = '<p class="hint">No users yet — add one below.</p>';
+    box.insertAdjacentHTML("beforeend", '<p class="hint">No other users yet — add one below.</p>');
   }
 }
 function deleteAdminUser(u){
@@ -2591,6 +2612,7 @@ function loadAlertSettings(){
     $("smtp-pass").value = "";
     $("smtp-pass").placeholder = res.body.smtp.hasPassword ? "(leave blank to keep the saved one)" : "";
     $("smtp-from").value = res.body.smtp.from || "";
+    $("smtp-from-name").value = res.body.smtp.from_name || "";
     $("smtp-tls").checked = !!res.body.smtp.use_tls;
     $("telegram-token").value = "";
     $("telegram-token").placeholder = res.body.telegram.hasBotToken ? "(leave blank to keep the saved one)" : "leave blank for none";
@@ -2603,7 +2625,8 @@ function smtpFormValue(){
   return {
     host: $("smtp-host").value.trim(), port: parseInt($("smtp-port").value, 10) || 587,
     user: $("smtp-user").value.trim(), password: $("smtp-pass").value,
-    from: $("smtp-from").value.trim(), use_tls: $("smtp-tls").checked,
+    from: $("smtp-from").value.trim(), from_name: $("smtp-from-name").value.trim(),
+    use_tls: $("smtp-tls").checked,
   };
 }
 $("smtp-test-btn").addEventListener("click", function(){

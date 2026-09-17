@@ -1232,7 +1232,8 @@ class AdminHandler(BaseHandler):
         smtp_cfg = {
             "host": host, "port": port, "user": clean(s.get("user"), 200),
             "password": s.get("password") or saved.get("password", ""),
-            "from": clean(s.get("from"), 200), "use_tls": bool(s.get("use_tls", True)),
+            "from": clean(s.get("from"), 200), "from_name": clean(s.get("from_name"), 120),
+            "use_tls": bool(s.get("use_tls", True)),
         }
         try:
             notifier.deliver_email(smtp_cfg, to_addr, "Open Feedback Forms — SMTP test",
@@ -1258,7 +1259,8 @@ class AdminHandler(BaseHandler):
                 "host": clean(s.get("host"), 200), "port": int(s.get("port") or 587),
                 "user": clean(s.get("user"), 200),
                 "password": s.get("password") or existing.get("password", ""),   # blank = keep saved
-                "from": clean(s.get("from"), 200), "use_tls": bool(s.get("use_tls", True)),
+                "from": clean(s.get("from"), 200), "from_name": clean(s.get("from_name"), 120),
+                "use_tls": bool(s.get("use_tls", True)),
             }
         if "telegram" in body:
             t = body["telegram"] or {}
@@ -1916,7 +1918,11 @@ class AdminHandler(BaseHandler):
             return
         if not db.is_connected():
             return self.send_json(503, {"ok": False, "error": "database not connected"})
-        return self.send_json(200, {"ok": True, "users": db.list_admin_users()})
+        # The primary (config.json) admin isn't a row in admin_users, but it
+        # is an account people sign in with, so the list shows it too.
+        primary = config_store.load()["admin"].get("username") or None
+        return self.send_json(200, {"ok": True, "users": db.list_admin_users(),
+                                    "primary": {"username": primary} if primary else None})
 
     def post_admin_user_create(self):
         if not self.require_permission("manage_users"):
