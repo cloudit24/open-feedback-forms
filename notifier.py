@@ -21,24 +21,29 @@ import db
 _TIMEOUT = 10
 
 
-def send_email(smtp_cfg, to_addr, subject, body, log=lambda msg: None):
-    host = (smtp_cfg or {}).get("host")
-    if not host or not to_addr:
-        return False
+def deliver_email(smtp_cfg, to_addr, subject, body):
+    """Send one email, raising on any failure — for the admin panel's SMTP
+    test, which needs the real reason. Alerts go through send_email()."""
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = smtp_cfg.get("from") or smtp_cfg.get("user") or "noreply@localhost"
     msg["To"] = to_addr
     msg.set_content(body)
+    port = int(smtp_cfg.get("port") or 587)
+    cls = smtplib.SMTP_SSL if port == 465 else smtplib.SMTP
+    with cls(smtp_cfg["host"], port, timeout=_TIMEOUT) as server:
+        if smtp_cfg.get("use_tls") and port != 465:
+            server.starttls()
+        if smtp_cfg.get("user"):
+            server.login(smtp_cfg["user"], smtp_cfg.get("password") or "")
+        server.send_message(msg)
+
+
+def send_email(smtp_cfg, to_addr, subject, body, log=lambda msg: None):
+    if not (smtp_cfg or {}).get("host") or not to_addr:
+        return False
     try:
-        port = int(smtp_cfg.get("port") or 587)
-        cls = smtplib.SMTP_SSL if port == 465 else smtplib.SMTP
-        with cls(host, port, timeout=_TIMEOUT) as server:
-            if smtp_cfg.get("use_tls") and port != 465:
-                server.starttls()
-            if smtp_cfg.get("user"):
-                server.login(smtp_cfg["user"], smtp_cfg.get("password") or "")
-            server.send_message(msg)
+        deliver_email(smtp_cfg, to_addr, subject, body)
         return True
     except Exception as e:
         log("email alert failed (%s): %s" % (to_addr, e))

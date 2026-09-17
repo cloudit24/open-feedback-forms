@@ -568,7 +568,11 @@ table.subs tr:last-child td{border-bottom:none}
           <input type="text" id="smtp-from" placeholder="alerts@example.com">
           <div class="check-row"><input type="checkbox" id="smtp-tls" checked><label for="smtp-tls" style="margin:0">Use STARTTLS</label></div>
           <div class="msg" id="smtp-msg" style="margin-top:10px"></div>
-          <button class="btn" id="smtp-save-btn">Save SMTP settings</button>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
+            <button class="btn" id="smtp-save-btn">Save SMTP settings</button>
+            <div style="flex:1;min-width:200px"><label for="smtp-test-to" style="margin-top:0">Send a test email to</label><input type="email" id="smtp-test-to" placeholder="you@example.com"></div>
+            <button class="btn-outline" id="smtp-test-btn">Send test email</button>
+          </div>
 
           <h2 style="margin-top:26px">Telegram</h2>
           <p class="hint">Create a bot with <a href="https://t.me/BotFather" target="_blank" rel="noopener">@BotFather</a> and paste its token here — each alert rule then only needs the destination chat id.</p>
@@ -2595,13 +2599,26 @@ function loadAlertSettings(){
     clearFlash("smtp-msg"); clearFlash("telegram-msg"); clearFlash("db-alert-msg");
   });
 }
-$("smtp-save-btn").addEventListener("click", function(){
-  clearFlash("smtp-msg");
-  var payload = { smtp: {
+function smtpFormValue(){
+  return {
     host: $("smtp-host").value.trim(), port: parseInt($("smtp-port").value, 10) || 587,
     user: $("smtp-user").value.trim(), password: $("smtp-pass").value,
     from: $("smtp-from").value.trim(), use_tls: $("smtp-tls").checked,
-  }};
+  };
+}
+$("smtp-test-btn").addEventListener("click", function(){
+  clearFlash("smtp-msg");
+  $("smtp-test-btn").disabled = true;
+  flash("smtp-msg", "Sending…", true);
+  api("POST", "/admin/alert-settings/test-smtp", { smtp: smtpFormValue(), to: $("smtp-test-to").value.trim() }).then(function(res){
+    $("smtp-test-btn").disabled = false;
+    if (res.body.ok) flash("smtp-msg", "Test email sent — check the inbox (and spam folder).", true);
+    else flash("smtp-msg", "Test failed — " + (res.body.error || "could not send."));
+  });
+});
+$("smtp-save-btn").addEventListener("click", function(){
+  clearFlash("smtp-msg");
+  var payload = { smtp: smtpFormValue() };
   api("POST", "/admin/alert-settings", payload).then(function(res){
     if (res.body.ok){ flash("smtp-msg", "Saved.", true); loadAlertSettings(); return; }
     flash("smtp-msg", res.body.error || "Could not save SMTP settings.");

@@ -874,6 +874,7 @@ class AdminHandler(BaseHandler):
             "/admin/roles": self.post_role_create,
             "/admin/users": self.post_admin_user_create,
             "/admin/alert-settings": self.post_alert_settings,
+            "/admin/alert-settings/test-smtp": self.post_smtp_test,
             "/admin/alert-rules": self.post_alert_rule_create,
         }
         if path in routes:
@@ -1207,6 +1208,41 @@ class AdminHandler(BaseHandler):
         telegram["bot_token"] = ""
         return self.send_json(200, {"ok": True, "smtp": smtp, "telegram": telegram,
                                     "dbDisconnectedAlerts": cfg["settings"].get("db_disconnected_alerts", [])})
+
+    def post_smtp_test(self):
+        # Tests the values as typed in the form, before saving; a blank
+        # password means the saved one, same as Save.
+        if not self.require_permission("manage_global_alerts"):
+            return
+        if not rate_ok(self.client_ip(), "smtp_test", 10):
+            return self.send_json(429, {"ok": False, "error": "too many test emails, try again later"})
+        body = self.read_json_body() or {}
+        s = body.get("smtp") if isinstance(body.get("smtp"), dict) else {}
+        to_addr = clean(body.get("to"), 200)
+        if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", to_addr):
+            return self.send_json(400, {"ok": False, "error": "enter a valid email address to send the test to"})
+        host = clean(s.get("host"), 200)
+        if not host:
+            return self.send_json(400, {"ok": False, "error": "enter the SMTP host first"})
+        saved = config_store.load()["settings"].get("smtp", {})
+        try:
+            port = int(s.get("port") or 587)
+        except (TypeError, ValueError):
+            return self.send_json(400, {"ok": False, "error": "port must be a number"})
+        smtp_cfg = {
+            "host": host, "port": port, "user": clean(s.get("user"), 200),
+            "password": s.get("password") or saved.get("password", ""),
+            "from": clean(s.get("from"), 200), "use_tls": bool(s.get("use_tls", True)),
+        }
+        try:
+            notifier.deliver_email(smtp_cfg, to_addr, "Open Feedback Forms — SMTP test",
+                                   "This is a test email from Open Feedback Forms.\n\n"
+                                   "If you can read this, the SMTP settings work and email alerts will be delivered.")
+        except Exception as e:
+            log("smtp test to %s failed: %s" % (to_addr, e))
+            return self.send_json(200, {"ok": False, "error": "%s: %s" % (type(e).__name__, e)})
+        log("smtp test email sent to %s by %s" % (to_addr, self.admin_user()))
+        return self.send_json(200, {"ok": True})
 
     def post_alert_settings(self):
         if not self.require_permission("manage_global_alerts"):
