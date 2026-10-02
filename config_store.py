@@ -59,11 +59,14 @@ _DEFAULT = {
     "session_secret": "",
     "settings": {
         "timezone": "UTC", "ntp_server": "pool.ntp.org",
+        # Asks GitHub for the latest published version, so the owner is told
+        # when an update exists. Nothing is sent about this install.
+        "update_check": True,
         "language_labels": {
             "en": {"name": "English", "dir": "ltr"},
             "ar": {"name": "Arabic", "dir": "rtl"},
         },
-        "admin_theme": {"primary": "#FFEC01", "text": "#0B0B0B"},
+        "admin_theme": {"primary": "#0B5273", "text": "#1F2B33"},
         # Cache of the public page's fixed UI text (Submit, error messages...)
         # per language added beyond the built-in en/ar pair — see
         # translate_client.py / ui_strings.py. en/ar never appear here, they
@@ -119,6 +122,12 @@ def load():
             if key not in cfg["settings"]:
                 cfg["settings"][key] = json.loads(json.dumps(default))
                 changed = True
+        # The admin panel moved to the house design. An install still on the
+        # old default colours follows; one with colours someone actually
+        # chose is left exactly as it is.
+        if cfg["settings"].get("admin_theme") == {"primary": "#FFEC01", "text": "#0B0B0B"}:
+            cfg["settings"]["admin_theme"] = json.loads(json.dumps(_DEFAULT["settings"]["admin_theme"]))
+            changed = True
         if not cfg.get("session_secret"):
             cfg["session_secret"] = secrets.token_hex(32)
             changed = True

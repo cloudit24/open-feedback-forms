@@ -6,24 +6,34 @@
 <meta name="robots" content="noindex">
 <title>Open Feedback Forms — Admin</title>
 <style>
+/* Follows the house admin design standard: soft grey-blue page, white cards
+   with a thin border and rounded corners, small grey uppercase section
+   titles, pill buttons, one blue for actions, gold only for the current tab,
+   red only for alerts and deleting. Works in light and dark.
+   --yellow/--yellow-deep/--on-yellow are the brand colour slots (named from
+   the original theme); Configuration → Appearance overrides them. */
 :root{
-  --yellow:#FFEC01; --yellow-deep:#E0CF00; --on-yellow:#0B0B0B;
-  --ink:#0B0B0B; --ink-soft:#3A3A38;
-  --bg:#F4F6F9; --card:#FFFFFF; --line:#DCE2EA; --muted:#5A6675;
-  --err:#C62828; --ok:#1B7F3B; --focus:#0B0B0B;
-  --radius:12px;
+  --yellow:#0B5273; --yellow-deep:#084560; --on-yellow:#FFFFFF;
+  --accent:#C9A84C;
+  --header-bg:#084560; --bar-bg:#0B5273; --bar-fg:#E6F1F7;
+  --ink:#1F2B33; --ink-soft:#44555F;
+  --bg:#F4F7F9; --card:#FFFFFF; --line:#E3E9EE; --muted:#5B6B75;
+  --err:#C62828; --ok:#2E7D32; --focus:rgba(11,82,115,.45);
+  --radius:10px; --radius-sm:8px;
   color-scheme:light;
 }
 /* System preference applies unless the admin picks a theme explicitly (data-theme). Also
    flips color-scheme, so native controls (the datetime-local calendar popup, scrollbars)
    render with dark chrome instead of a light popup stranded on a dark page. */
 @media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){ --bg:#0B0B0B; --card:#141414; --line:#2A2A28; --ink:#F5F5F3; --ink-soft:#C9C9C7;
-         --muted:#8F8F8C; --focus:#FFEC01; color-scheme:dark; }
+  :root:not([data-theme="light"]){ --bg:#121517; --card:#1E2226; --line:#2E343A; --ink:#E8EEF2; --ink-soft:#C2CCD3;
+         --muted:#9AA7B0; --header-bg:#0F2A38; --bar-bg:#13384B; --err:#FF6B6B; --ok:#66BB6A;
+         --focus:rgba(124,192,227,.5); color-scheme:dark; }
 }
 :root[data-theme="dark"]{
-  --bg:#0B0B0B; --card:#141414; --line:#2A2A28; --ink:#F5F5F3; --ink-soft:#C9C9C7;
-  --muted:#8F8F8C; --focus:#FFEC01;
+  --bg:#121517; --card:#1E2226; --line:#2E343A; --ink:#E8EEF2; --ink-soft:#C2CCD3;
+  --muted:#9AA7B0; --header-bg:#0F2A38; --bar-bg:#13384B; --err:#FF6B6B; --ok:#66BB6A;
+  --focus:rgba(124,192,227,.5);
   color-scheme:dark;
 }
 :root[data-theme="light"]{ color-scheme:light; }
@@ -37,26 +47,34 @@ body{
   .card{padding:26px 28px}
   .card h2{font-size:17.5px}
 }
-.wrap{max-width:1240px;margin:0 auto;padding:32px 32px 80px}
-.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:24px}
-.top h1{font-size:22px;margin:0;font-weight:700}
-.top .sub{color:var(--muted);font-size:14px;margin-top:2px}
+.wrap{max-width:1240px;margin:0 auto;padding:0 32px 80px}
+/* Header and shortcuts bar run edge to edge: the negative margins reach the
+   page padding, and the spread shadow paints the rest of the viewport
+   (clipped vertically so it only widens, never bleeds up or down). */
+.top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin:0 -32px;padding:14px 32px;background:var(--header-bg);color:#fff;
+  box-shadow:0 0 0 100vmax var(--header-bg);clip-path:inset(0 -100vmax)}
+.top h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+.top .sub{color:rgba(255,255,255,.75);font-size:13px;margin-top:2px}
+.top .btn-outline{color:#fff;border-color:rgba(255,255,255,.35);background:transparent}
+.top .btn-outline:hover{border-color:#fff;background:rgba(255,255,255,.08)}
 button{font-family:inherit;cursor:pointer}
 .btn{
-  background:var(--yellow);color:var(--on-yellow);border:none;border-radius:8px;
-  padding:9px 16px;font-size:14px;font-weight:700;
+  background:var(--yellow);color:var(--on-yellow);border:none;border-radius:20px;
+  padding:9px 18px;font-size:13px;font-weight:700;
 }
 .btn:hover{background:var(--yellow-deep)}
 .btn:disabled{opacity:.5;cursor:not-allowed}
 .btn-outline{
-  background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:8px;
-  padding:8px 15px;font-size:14px;font-weight:600;
+  background:transparent;color:var(--ink);border:1px solid var(--line);border-radius:20px;
+  padding:8px 16px;font-size:13px;font-weight:600;
 }
-.btn-outline:hover{border-color:var(--yellow)}
+.btn-outline:hover{border-color:var(--yellow);color:var(--yellow)}
 .btn-danger{color:var(--err);border-color:var(--err)}
-.btn-sm{padding:5px 10px;font-size:12.5px}
+.btn-danger:hover{border-color:var(--err);color:var(--err);background:rgba(198,40,40,.08)}
+.btn-sm{padding:5px 12px;font-size:12.5px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px}
-.card h2{margin:0 0 14px;font-size:16px}
+.card h2{margin:0 0 14px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
 label{display:block;font-size:13px;font-weight:600;margin:12px 0 5px}
 label:first-child{margin-top:0}
 input[type=text],input[type=password],input[type=number],input[type=email],input[type=datetime-local],select,textarea{
@@ -64,7 +82,7 @@ input[type=text],input[type=password],input[type=number],input[type=email],input
   background:var(--card);border:1px solid var(--line);border-radius:8px;
 }
 input[type=datetime-local]{accent-color:var(--yellow);color-scheme:inherit}
-input:focus,select:focus,textarea:focus{outline:2px solid var(--focus);outline-offset:1px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--yellow);box-shadow:0 0 0 3px var(--focus)}
 textarea{resize:vertical;min-height:70px}
 .hint{color:var(--muted);font-size:12px;margin-top:4px}
 .row{display:flex;gap:12px;flex-wrap:wrap}
@@ -91,18 +109,21 @@ textarea{resize:vertical;min-height:70px}
 .opts-list{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px}
 .opt-row{display:flex;gap:6px;margin-bottom:6px}
 .opt-row input{flex:1}
-.tabs{display:flex;gap:4px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;margin:0 -32px 22px;padding:0 32px;background:var(--bar-bg);
+  border-bottom:1px solid rgba(255,255,255,.08);
+  box-shadow:0 0 0 100vmax var(--bar-bg);clip-path:inset(0 -100vmax)}
 .tab{
-  padding:9px 16px;font-size:14px;font-weight:600;border:none;background:none;color:var(--muted);
-  border-bottom:2px solid transparent;margin-bottom:-1px;
+  padding:10px 14px;font-size:13px;font-weight:600;border:none;background:none;color:var(--bar-fg);
+  border-bottom:2px solid transparent;
 }
-.tab.active{color:var(--ink);border-bottom-color:var(--yellow)}
+.tab:hover{color:#fff}
+.tab.active{color:#fff;border-bottom-color:var(--accent)}
 .subtabs{display:flex;gap:4px;margin:18px 0 16px;border-bottom:1px solid var(--line)}
 .subtab{
   padding:7px 14px;font-size:13.5px;font-weight:600;border:none;background:none;color:var(--muted);
   border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;cursor:pointer;
 }
-.subtab.active{color:var(--ink);border-bottom-color:var(--yellow)}
+.subtab.active{color:var(--ink);border-bottom-color:var(--accent)}
 .fd-header{display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:16px}
 .fd-header h2{margin:0;font-size:19px}
 .fd-header .actions{display:flex;gap:6px;flex-wrap:wrap}
@@ -111,8 +132,14 @@ textarea{resize:vertical;min-height:70px}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
 .status-dot.on{background:var(--ok)}
 .status-dot.off{background:var(--err)}
-a.csv-link{color:var(--ink);font-size:13.5px;text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:8px 14px;font-weight:600}
-a.csv-link:hover{border-color:var(--yellow)}
+a.csv-link{color:var(--ink);font-size:13px;text-decoration:none;border:1px solid var(--line);border-radius:20px;padding:8px 16px;font-weight:600}
+a.csv-link:hover{border-color:var(--yellow);color:var(--yellow)}
+.fd-header h2{font-size:20px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--ink)}
+@media (max-width:640px){
+  .wrap{padding:0 16px 60px}
+  .top{margin:0 -16px;padding:12px 16px}
+  .tabs{margin:0 -16px 18px;padding:0 16px}
+}
 .form-row{display:flex;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid var(--line)}
 .form-row:last-child{border-bottom:none}
 .form-row .info{flex:1;min-width:0}
@@ -157,6 +184,16 @@ table.subs tr:last-child td{border-bottom:none}
 .breakdown-row .bar-fill{height:100%;background:var(--yellow)}
 .breakdown-row .count{width:40px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
 .key-editor-list{border:1px solid var(--line);border-radius:8px;padding:10px;margin-top:6px;max-height:260px;overflow-y:auto}
+.update-banner{display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;justify-content:space-between;
+  background:var(--card);border:1px solid var(--line);border-left:4px solid var(--accent);
+  border-radius:var(--radius);padding:14px 16px;margin-bottom:16px}
+.update-banner .info{flex:1;min-width:260px}
+.update-banner b{font-size:14.5px}
+.update-banner ul{margin:8px 0 0;padding-inline-start:20px;font-size:13px;color:var(--ink-soft)}
+.update-banner li{margin-bottom:3px}
+.update-banner code{display:block;margin-top:4px;padding:8px 10px;background:var(--bg);border:1px solid var(--line);
+  border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre}
+.update-banner .actions{display:flex;gap:8px;align-items:center}
 </style>
 </head>
 <body>
@@ -221,6 +258,20 @@ table.subs tr:last-child td{border-bottom:none}
         <button class="btn-outline btn-sm" id="theme-btn" aria-label="Switch theme">Dark</button>
         <button class="btn-outline btn-sm" id="password-btn">Change password</button>
         <button class="btn-outline btn-sm" id="logout-btn">Log out</button>
+      </div>
+    </div>
+
+    <!-- shown to the owner account when a newer version is published -->
+    <div id="update-banner" class="update-banner hidden">
+      <div class="info">
+        <b id="update-title">An update is available</b>
+        <ul id="update-notes"></ul>
+        <p class="hint">Update by running this on the server — your forms, submissions and settings are kept:</p>
+        <code id="update-cmd">sh -c "$(curl -fsSL https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/install.sh)"</code>
+      </div>
+      <div class="actions">
+        <a class="btn-outline btn-sm" id="update-notes-link" target="_blank" rel="noopener" href="https://github.com/cloudit24/open-feedback-forms/blob/main/CHANGELOG.md">Full list</a>
+        <button class="btn-outline btn-sm" id="update-later">Not now</button>
       </div>
     </div>
 
@@ -521,14 +572,14 @@ table.subs tr:last-child td{border-bottom:none}
               <label for="theme-primary">Primary color</label>
               <div style="display:flex;gap:8px">
                 <input type="color" id="theme-primary-picker" style="width:44px;padding:2px">
-                <input type="text" id="theme-primary" placeholder="#FFEC01">
+                <input type="text" id="theme-primary" placeholder="#0B5273">
               </div>
             </div>
             <div>
               <label for="theme-text">Text color (light mode only)</label>
               <div style="display:flex;gap:8px">
                 <input type="color" id="theme-text-picker" style="width:44px;padding:2px">
-                <input type="text" id="theme-text" placeholder="#0B0B0B">
+                <input type="text" id="theme-text" placeholder="#1F2B33">
               </div>
             </div>
           </div>
@@ -546,6 +597,8 @@ table.subs tr:last-child td{border-bottom:none}
 
           <label for="ntp-server" style="margin-top:18px">NTP server</label>
           <input type="text" id="ntp-server" placeholder="pool.ntp.org">
+          <div class="check-row"><input type="checkbox" id="update-check-on" checked><label for="update-check-on" style="margin:0">Tell me when a new version is available</label></div>
+          <p class="hint" style="margin-top:0">Asks GitHub for the latest published version once every few hours, and shows what it fixes. Nothing about this install is sent.</p>
           <p class="hint">Reference only — a Python web app can't set the operating system's clock. Point this machine's own NTP client at this server so its clock (and every timestamp this app records) stays accurate.</p>
 
           <div class="msg" id="time-msg"></div>
@@ -906,7 +959,7 @@ var STATE = { fields: [], editingId: null, forms: [], currentFormId: null,
               editingFormId: null, subsPage: 1, library: [], editingKeyId: null,
               timezone: "UTC",
               languageLabels: { en: { name: "English", dir: "ltr" }, ar: { name: "Arabic", dir: "rtl" } },
-              adminTheme: { primary: "#FFEC01", text: "#0B0B0B" }, translateApiKey: "",
+              adminTheme: { primary: "#0B5273", text: "#1F2B33" }, translateApiKey: "",
               isBootstrap: true, permissions: "all", allowedForms: "all",
               roles: [], adminUsers: [], permissionKeys: [], editingRoleId: null, editingAdminUserId: null };
 
@@ -941,6 +994,7 @@ function boot(){
     renderStatus(s);
     if (STATE.isBootstrap) loadDbSettings();
     if (s.dbConnected){ loadForms(); loadFieldLibrary(); loadDashboard(); loadAppSettings(true); }
+    if (STATE.isBootstrap) checkForUpdate();
   });
 }
 
@@ -2088,11 +2142,13 @@ function loadAppSettings(quiet){
     }
     sel.value = STATE.timezone;
     $("ntp-server").value = res.body.settings.ntp_server || "";
+    $("update-check-on").checked = res.body.settings.update_check !== false;
   });
 }
 $("time-save-btn").addEventListener("click", function(){
   clearFlash("time-msg");
-  var payload = { timezone: $("tz-select").value, ntp_server: $("ntp-server").value.trim() };
+  var payload = { timezone: $("tz-select").value, ntp_server: $("ntp-server").value.trim(),
+                  update_check: $("update-check-on").checked };
   api("POST", "/admin/app-settings", payload).then(function(res){
     if (res.body.ok){
       flash("time-msg", "Saved.", true);
@@ -2286,13 +2342,13 @@ function relativeLuminance(hex){
 }
 function applyAdminTheme(theme){
   var root = document.documentElement.style;
-  var primary = (theme && theme.primary) || "#FFEC01";
+  var primary = (theme && theme.primary) || "#0B5273";
   root.setProperty("--yellow", primary);
   root.setProperty("--yellow-deep", darken(primary, 0.12));
   root.setProperty("--on-yellow", relativeLuminance(primary) > 0.45 ? "#0B0B0B" : "#FFFFFF");
   // Text color only applies in light mode — dark mode keeps its own fixed
   // light-on-dark ink so a dark custom color can't make the page unreadable.
-  var text = (theme && theme.text) || "#0B0B0B";
+  var text = (theme && theme.text) || "#1F2B33";
   if (effectiveTheme() === "light"){
     root.setProperty("--ink", text);
     root.setProperty("--focus", text);
@@ -2553,6 +2609,34 @@ $("au-save").addEventListener("click", function(){
     flash("admin-user-editor-msg", res.body.error || "Could not save this user.");
   });
 });
+
+/* ----------------------------------------------------- update check --- */
+// Owner account only. "Not now" hides this one version until the next one
+// comes out; Configuration → Time turns the check off for good.
+function checkForUpdate(){
+  api("GET", "/admin/update-check").then(function(res){
+    var u = res.body || {};
+    if (!u.updateAvailable) return;
+    var skipped = null;
+    try { skipped = localStorage.getItem("offSkipUpdate"); } catch(e){}
+    if (skipped === u.latest) return;
+    $("update-title").textContent = "Version " + u.latest + " is available — you have " + u.current;
+    var list = $("update-notes");
+    list.innerHTML = "";
+    (u.notes || []).forEach(function(n){
+      var li = document.createElement("li");
+      li.textContent = n;
+      list.appendChild(li);
+    });
+    list.classList.toggle("hidden", !(u.notes || []).length);
+    if (u.changelogUrl) $("update-notes-link").href = u.changelogUrl;
+    $("update-later").onclick = function(){
+      try { localStorage.setItem("offSkipUpdate", u.latest); } catch(e){}
+      $("update-banner").classList.add("hidden");
+    };
+    $("update-banner").classList.remove("hidden");
+  });
+}
 
 /* -------------------------------------------------------- passwords --- */
 // One panel, two uses: changing your own password (needs the current one),

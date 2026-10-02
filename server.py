@@ -75,6 +75,15 @@ def _read_version():
 
 VERSION = _read_version()
 
+# Update check: the published VERSION and CHANGELOG on the project's main
+# branch. Only ever read, only for the owner account, and switchable off
+# (Configuration → Time → "Check for updates").
+UPDATE_VERSION_URL = "https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/VERSION"
+UPDATE_CHANGELOG_URL = "https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/CHANGELOG.md"
+UPDATE_CACHE_TTL = 6 * 3600
+_update_cache = {"at": 0, "latest": "", "notes": []}
+_update_lock = threading.Lock()
+
 HOST = os.environ.get("HOST", "127.0.0.1")
 ADMIN_PORT = int(os.environ.get("ADMIN_PORT", os.environ.get("PORT", "8080")))
 DEFAULT_FORM_PORT = int(os.environ.get("FORM_PORT", "8081"))
@@ -191,6 +200,62 @@ def session_identity(token):
 def drop_session(token):
     with _sessions_lock:
         _sessions.pop(token, None)
+
+
+def version_tuple(text):
+    """"1.12.3" -> (1, 12, 3). Anything unparseable sorts lowest, so a
+    mangled download can never look like a newer release."""
+    parts = []
+    for piece in (text or "").strip().split(".")[:3]:
+        digits = "".join(c for c in piece if c.isdigit())
+        parts.append(int(digits) if digits else 0)
+    while len(parts) < 3:
+        parts.append(0)
+    return tuple(parts)
+
+
+def changelog_notes(markdown, current):
+    """The bullet lines of every release newer than the one running."""
+    notes, keep = [], False
+    for line in (markdown or "").splitlines():
+        if line.startswith("## "):
+            keep = version_tuple(line[3:]) > version_tuple(current)
+            continue
+        if keep:
+            stripped = line.strip()
+            if stripped.startswith("- "):
+                notes.append(stripped[2:].strip())
+            elif notes and stripped and not stripped.startswith("#"):
+                notes[-1] += " " + stripped          # a bullet wrapped onto the next line
+    return notes[:12]
+
+
+def fetch_update_info():
+    """Latest published version + what it changes. Cached, fail-soft: any
+    network trouble just means "no update known", never an error page."""
+    with _update_lock:
+        if time.time() - _update_cache["at"] < UPDATE_CACHE_TTL and _update_cache["latest"]:
+            return _update_cache["latest"], _update_cache["notes"]
+    latest, notes = "", []
+    try:
+        req = urllib.request.Request(UPDATE_VERSION_URL, headers={"User-Agent": "OpenFeedbackForms/%s" % VERSION})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            latest = resp.read(64).decode("utf-8", "replace").strip()
+    except Exception as e:
+        log("update check failed: %s" % e)
+        return "", []
+    if version_tuple(latest) > version_tuple(VERSION):
+        # A missing or unreadable changelog still leaves a usable "there's a
+        # new version" message — only the list of changes goes missing.
+        try:
+            req = urllib.request.Request(UPDATE_CHANGELOG_URL, headers={"User-Agent": "OpenFeedbackForms/%s" % VERSION})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                notes = changelog_notes(resp.read(20000).decode("utf-8", "replace"), VERSION)
+        except Exception as e:
+            log("update changelog fetch failed: %s" % e)
+    with _update_lock:
+        _update_cache.update(at=time.time(), latest=latest, notes=notes)
+    return latest, notes
 
 
 def drop_sessions_for(kind, key, keep_token=None):
@@ -841,6 +906,8 @@ class AdminHandler(BaseHandler):
             return self.get_db_settings()
         if path == "/admin/backup":
             return self.get_backup()
+        if path == "/admin/update-check":
+            return self.get_update_check()
         if path == "/admin/app-settings":
             return self.get_app_settings()
         if path == "/admin/forms":
@@ -982,7 +1049,7 @@ class AdminHandler(BaseHandler):
             "allowedForms": allowed_forms,
             # Safe to expose pre-login (just colors) — the login/setup
             # screens need it too, not only the dashboard behind auth.
-            "adminTheme": cfg["settings"].get("admin_theme", {"primary": "#FFEC01", "text": "#0B0B0B"}),
+            "adminTheme": cfg["settings"].get("admin_theme", {"primary": "#0B5273", "text": "#1F2B33"}),
             "version": VERSION,
         })
 
@@ -995,6 +1062,22 @@ class AdminHandler(BaseHandler):
         d["hasPassword"] = bool(cfg["db"]["password"])
         return self.send_json(200, {"ok": True, "db": d, "connected": db.is_connected(),
                                     "error": db.last_error()})
+
+    def get_update_check(self):
+        # Owner account only: it's the one that would run the update, and it
+        # keeps this outbound request off everyone else's screen.
+        if not self.require_bootstrap():
+            return
+        cfg = config_store.load()
+        if not cfg["settings"].get("update_check", True):
+            return self.send_json(200, {"ok": True, "enabled": False, "current": VERSION})
+        latest, notes = fetch_update_info()
+        return self.send_json(200, {
+            "ok": True, "enabled": True, "current": VERSION, "latest": latest,
+            "updateAvailable": bool(latest) and version_tuple(latest) > version_tuple(VERSION),
+            "notes": notes,
+            "changelogUrl": "https://github.com/cloudit24/open-feedback-forms/blob/main/CHANGELOG.md",
+        })
 
     def get_backup(self):
         # Full-admin only: config.json carries the DB password in plain
@@ -1057,13 +1140,15 @@ class AdminHandler(BaseHandler):
         if theme is not None:
             if not isinstance(theme, dict):
                 return self.send_json(400, {"ok": False, "error": "invalid admin theme"})
-            primary = clean(theme.get("primary"), 7) or "#FFEC01"
-            text = clean(theme.get("text"), 7) or "#0B0B0B"
+            primary = clean(theme.get("primary"), 7) or "#0B5273"
+            text = clean(theme.get("text"), 7) or "#1F2B33"
             if not re.match(r"^#[0-9a-fA-F]{6}$", primary) or not re.match(r"^#[0-9a-fA-F]{6}$", text):
                 return self.send_json(400, {"ok": False, "error": "colors must be a 6-digit hex code, like #FFEC01"})
             cfg["settings"]["admin_theme"] = {"primary": primary, "text": text}
         if "translate_api_key" in body:
             cfg["settings"]["translate_api_key"] = clean(body.get("translate_api_key"), 200)
+        if "update_check" in body:
+            cfg["settings"]["update_check"] = bool(body.get("update_check"))
         cfg["settings"]["timezone"] = tz
         cfg["settings"]["ntp_server"] = ntp
         config_store.save(cfg)
