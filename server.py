@@ -488,6 +488,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
         if cookie_header:
             self.send_header("Set-Cookie", cookie_header)
         self.end_headers()
@@ -513,6 +514,21 @@ class BaseHandler(BaseHTTPRequestHandler):
         v = self.query().get(name)
         return v[0] if v else default
 
+    def is_https(self):
+        """True when the visitor reached us over HTTPS. Behind a Cloudflare
+        Tunnel or any reverse proxy the connection to this app is plain HTTP,
+        so the proxy's header is what tells us."""
+        proto = (self.headers.get("X-Forwarded-Proto") or "").split(",")[0].strip().lower()
+        return proto == "https" or (self.headers.get("X-Forwarded-Ssl") or "").lower() == "on"
+
+    def session_cookie(self, token, max_age):
+        # Secure only when the visit came over HTTPS — setting it always would
+        # break a plain-HTTP install on a LAN, where the browser would drop it.
+        flags = "Path=/; HttpOnly; SameSite=Strict"
+        if self.is_https():
+            flags += "; Secure"
+        return "%s=%s; %s; Max-Age=%d" % (SESSION_COOKIE, token, flags, max_age)
+
     def security_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
         self.send_header("X-Frame-Options", "DENY")
@@ -531,6 +547,7 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_response(code)
         self.send_header("Content-Type", "text/plain; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
+        self.send_header("X-Content-Type-Options", "nosniff")
         self.end_headers()
         self.wfile.write(body)
 
@@ -561,6 +578,13 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "max-age=300" if cache else "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        # An uploaded file is never trusted content. An SVG can carry script,
+        # which would otherwise run on this site's own origin when the image
+        # URL is opened directly: this CSP allows nothing at all, and sandbox
+        # strips scripting even in browsers that ignore the rest.
+        self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+        self.send_header("X-Frame-Options", "DENY")
         self.end_headers()
         self.wfile.write(body)
 
@@ -2132,7 +2156,7 @@ class AdminHandler(BaseHandler):
         cfg["admin"] = {"username": username, "password_hash": pw_hash, "salt": salt}
         config_store.save(cfg)
         token = create_session({"kind": "bootstrap", "username": username})
-        cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (SESSION_COOKIE, token, SESSION_TTL)
+        cookie = self.session_cookie(token, SESSION_TTL)
         log("admin account created: %s" % username)
         return self.send_json(200, {"ok": True}, cookie_header=cookie)
 
@@ -2149,7 +2173,7 @@ class AdminHandler(BaseHandler):
         if (admin["username"] and username == admin["username"] and
                 config_store.verify_password(password, admin["password_hash"], admin["salt"])):
             token = create_session({"kind": "bootstrap", "username": username})
-            cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (SESSION_COOKIE, token, SESSION_TTL)
+            cookie = self.session_cookie(token, SESSION_TTL)
             log("admin login: %s" % username)
             return self.send_json(200, {"ok": True}, cookie_header=cookie)
 
@@ -2168,7 +2192,7 @@ class AdminHandler(BaseHandler):
                 "form_ids": "all" if db_user["role_applies_to_all_forms"] else set(db_user["form_ids"]),
             }
             token = create_session(identity)
-            cookie = "%s=%s; Path=/; HttpOnly; SameSite=Strict; Max-Age=%d" % (SESSION_COOKIE, token, SESSION_TTL)
+            cookie = self.session_cookie(token, SESSION_TTL)
             log("admin login: %s" % username)
             return self.send_json(200, {"ok": True}, cookie_header=cookie)
 
@@ -2179,7 +2203,7 @@ class AdminHandler(BaseHandler):
         c = self.cookies()
         if SESSION_COOKIE in c:
             drop_session(c[SESSION_COOKIE].value)
-        cookie = "%s=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0" % SESSION_COOKIE
+        cookie = self.session_cookie("", 0)
         return self.send_json(200, {"ok": True}, cookie_header=cookie)
 
     def post_account_password(self):

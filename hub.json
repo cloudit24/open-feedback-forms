@@ -1,0 +1,7 @@
+{
+  "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
+  "status": "Live on a client server; installer updates an existing install without touching its data; secrets now owner-only, session cookie Secure over HTTPS",
+  "next": "Watch the next client update run and confirm it ends with 'Database connected.'",
+  "url": "http://localhost:8080/admin",
+  "updated_by": "Claude, 2026-10-03"
+}

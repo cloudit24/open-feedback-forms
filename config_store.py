@@ -106,6 +106,7 @@ def load():
             return cfg
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             cfg = json.load(f)
+        _restrict(CONFIG_PATH)       # repair a file left readable by others
         # keep older configs usable if a field gets added later
         changed = False
         for key, default in _DEFAULT.items():
@@ -126,11 +127,26 @@ def load():
         return cfg
 
 
+def _restrict(path):
+    """Owner-only. This file holds the database password, the admin password
+    hash and the session secret, so other accounts on the same server have no
+    business reading it. No-op on Windows, which ignores POSIX modes."""
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
 def _write(cfg):
     tmp = CONFIG_PATH + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
+    # Created with the restrictive mode from the start — writing first and
+    # tightening after would leave the secrets readable in between.
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
         json.dump(cfg, f, indent=2)
+    _restrict(tmp)
     os.replace(tmp, CONFIG_PATH)                 # atomic on Windows too
+    _restrict(CONFIG_PATH)                       # also fixes an older, loose file
 
 
 def save(cfg):
