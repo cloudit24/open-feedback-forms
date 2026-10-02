@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "Live on a client server; installer updates an existing install without touching its data; secrets now owner-only, session cookie Secure over HTTPS",
-  "next": "Watch the next client update run and confirm it ends with 'Database connected.'",
+  "status": "v1.2.0 released: admin panel now uses the house admin design, and the owner is told in-panel when a new version is published",
+  "next": "On the client server, run the install link once to move it to 1.2.0 and see the new look",
   "url": "http://localhost:8080/admin",
   "updated_by": "Claude, 2026-10-03"
 }
