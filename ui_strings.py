@@ -28,6 +28,7 @@ UI_STRINGS = {
     "errShort": "Please write at least 10 characters.",
     "errSelect": "Please make a choice.",
     "errRating": "Please give a rating.",
+    "scaleLow": "Not likely", "scaleHigh": "Extremely likely",
     "errConsent": "You need to agree before we can accept your feedback.",
     "errFix": "Please check the highlighted fields and try again.",
     "errNet": "We could not send your feedback. Please check your connection and try again.",

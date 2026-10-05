@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.8.0 built locally and tested: form title, styled description, fonts, text size; not pushed yet",
-  "next": "Review, then push and tag 1.8.0; then Prompt 3 (rating questions as tap buttons)",
+  "status": "v1.9.0 built locally and tested: ratings and choices as tap buttons (stars, faces, scales, grid); not pushed yet",
+  "next": "Review, then push and tag 1.9.0; then Prompt 4 (layout: steps / one question at a time)",
   "url": "http://localhost:8800/admin",
   "updated_by": "Claude, 2026-10-05"
 }

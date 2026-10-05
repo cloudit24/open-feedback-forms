@@ -63,6 +63,7 @@ SCHEMA_SQL = [
         labels_extra_json LONGTEXT NULL,
         field_type    ENUM('text','email','tel','textarea','select','rating','checkbox','date') NOT NULL,
         options_json  LONGTEXT NULL,
+        display_style VARCHAR(20) NULL,
         required      TINYINT(1) NOT NULL DEFAULT 0,
         sort_order    INT NOT NULL DEFAULT 0,
         active        TINYINT(1) NOT NULL DEFAULT 1,
@@ -181,6 +182,9 @@ MIGRATE_SQL = [
     "UPDATE forms SET description_en=REPLACE(REPLACE(REPLACE(subtitle_en,'&','&amp;'),'<','&lt;'),'>','&gt;') WHERE description_en IS NULL AND subtitle_en IS NOT NULL AND subtitle_en<>''",
     "UPDATE forms SET description_ar=REPLACE(REPLACE(REPLACE(subtitle_ar,'&','&amp;'),'<','&lt;'),'>','&gt;') WHERE description_ar IS NULL AND subtitle_ar IS NOT NULL AND subtitle_ar<>''",
     "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
+    # How a rating / dropdown question is shown (1.9.0): stars, faces, numbers,
+    # scale, buttons or grid. NULL = exactly as before (stars / a dropdown).
+    "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS display_style VARCHAR(20) NULL",
     "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS expiry_date DATE NULL",
     # 'date' questions (added in 1.3.0) — widening the list keeps every
@@ -301,6 +305,15 @@ DEFAULT_FIELDS = [
     ("feedback_message",     "What's the one thing we could improve?", "ما الشيء الوحيد الذي يمكننا تحسينه؟", "textarea", None,                    0),
     ("marketing_optin",      "Yes, keep me updated with news and offers.", "نعم، أرغب في إبقائي على اطلاع بالأخبار والعروض.", "checkbox", None, 0),
 ]
+
+# How the template questions are shown on a form made from a template (not the
+# stored default for old forms, which stay NULL). Anything not listed = NULL.
+TEMPLATE_DISPLAY_STYLES = {
+    "nps": "scale",
+    "overall_satisfaction": "stars",
+    "event_overall": "stars", "product_overall": "stars",
+    "emp_overall": "stars", "web_overall": "stars",
+}
 
 # Questions that belong in the catalog but are not put on a brand-new form,
 # because the form's built-in top section already asks for them. An admin can
@@ -882,9 +895,10 @@ def add_template_fields(cur, form_id, tpl):
         _k, en, ar, ftype, options, required = row
         cur.execute(
             """INSERT INTO form_fields
-               (form_id, field_key, label_en, label_ar, field_type, options_json, required, sort_order, active)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,1)""",
-            (form_id, key, en, ar, ftype, options, required, n))
+               (form_id, field_key, label_en, label_ar, field_type, options_json, required, sort_order, active,
+                display_style)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,1,%s)""",
+            (form_id, key, en, ar, ftype, options, required, n, TEMPLATE_DISPLAY_STYLES.get(key)))
         n += 1
     return n
 
@@ -956,9 +970,9 @@ def clone_form(source_id, name, slug, port):
         cur.execute(
             """INSERT INTO form_fields
                    (form_id, field_key, label_en, label_ar, labels_extra_json, field_type,
-                    options_json, required, sort_order, active)
+                    options_json, required, sort_order, active, display_style)
                SELECT %s, field_key, label_en, label_ar, labels_extra_json, field_type,
-                      options_json, required, sort_order, active
+                      options_json, required, sort_order, active, display_style
                  FROM form_fields WHERE form_id=%s""",
             (new_id, source_id))
         copied_fields = cur.rowcount
@@ -1136,12 +1150,12 @@ def create_field(form_id, data):
         (next_order,) = cur.fetchone()
         cur.execute(
             """INSERT INTO form_fields (form_id, field_key, label_en, label_ar, labels_extra_json, field_type,
-                   options_json, required, sort_order, active)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,1)""",
+                   options_json, required, sort_order, active, display_style)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s)""",
             (form_id, data["field_key"], data["label_en"], data["label_ar"],
              json.dumps(data["labels_extra"]) if data.get("labels_extra") else None, data["field_type"],
              json.dumps(data["options"]) if data.get("options") else None,
-             1 if data.get("required") else 0, next_order))
+             1 if data.get("required") else 0, next_order, data.get("display_style")))
         conn.commit()
         new_id = cur.lastrowid
         cur.close()
@@ -1154,13 +1168,18 @@ def update_field(field_id, data):
     conn = _conn()
     try:
         cur = conn.cursor()
-        cur.execute(
-            """UPDATE form_fields SET label_en=%s, label_ar=%s, labels_extra_json=%s, field_type=%s,
-                   options_json=%s, required=%s WHERE id=%s""",
-            (data["label_en"], data["label_ar"],
-             json.dumps(data["labels_extra"]) if data.get("labels_extra") else None, data["field_type"],
-             json.dumps(data["options"]) if data.get("options") else None,
-             1 if data.get("required") else 0, field_id))
+        sql = """UPDATE form_fields SET label_en=%s, label_ar=%s, labels_extra_json=%s, field_type=%s,
+                   options_json=%s, required=%s"""
+        params = [data["label_en"], data["label_ar"],
+                  json.dumps(data["labels_extra"]) if data.get("labels_extra") else None, data["field_type"],
+                  json.dumps(data["options"]) if data.get("options") else None,
+                  1 if data.get("required") else 0]
+        # Only touched when the caller says so (the auto-translate job rewrites
+        # labels and must not wipe the chosen style).
+        if "display_style" in data:
+            sql += ", display_style=%s"
+            params.append(data["display_style"])
+        cur.execute(sql + " WHERE id=%s", params + [field_id])
         conn.commit()
         cur.close()
     finally:

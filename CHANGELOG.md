@@ -3,6 +3,26 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.9.0
+
+- New: rating and multiple-choice questions can be tapped instead of picked
+  from a dropdown. Under Edit field, "Shown as" now offers: Stars, Faces (five
+  drawn faces), Number buttons (1-5), a Number scale (0-10, 1-10 or 1-5, with
+  "Not likely / Extremely likely" under a 0-10 scale), Choice buttons (for
+  questions with up to 6 answers) and a Grid. A small preview shows what
+  visitors will see.
+- Grid: neighbouring questions with the same answers (for example the
+  Excellent to Very poor ones) become one table. On a phone each question
+  turns into its own card.
+- The buttons work with the keyboard (arrow keys, Space or Enter), have
+  spoken labels, flip correctly in Arabic, follow the form's font, text size,
+  light or dark look and main colour, and show the usual red message when a
+  required one is missed.
+- Answers are saved exactly as before, so exports and old results are
+  unchanged. Old forms keep their dropdowns and stars until you change them.
+- New forms made from a template now use the 0-10 scale for the recommend
+  question and Stars for the overall rating.
+
 ## 1.8.0
 
 - New: every form has its own title and description, written separately in

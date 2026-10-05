@@ -449,6 +449,20 @@ def validate_core(raw, require_core=True):
     return rec, None
 
 
+# How a rating or dropdown question can be shown (see public/index.html).
+# NULL/empty = the original look (stars / a dropdown).
+DISPLAY_STYLES = {
+    "rating": ("stars", "faces", "numbers"),
+    "select": ("buttons", "scale", "grid"),
+}
+
+
+def clean_display_style(field_type, value):
+    """The style to store for this question type, or None (the original look)."""
+    value = (value or "").strip() if isinstance(value, str) else ""
+    return value if value in DISPLAY_STYLES.get(field_type, ()) else None
+
+
 def validate_dynamic_value(field, value):
     """One admin-defined field. Returns (clean_value, error_or_None)."""
     ftype = field["field_type"]
@@ -876,6 +890,7 @@ class PublicRoutes:
         out = [{"id": f["id"], "field_key": f["field_key"], "label_en": f["label_en"],
                 "label_ar": f["label_ar"], "labels_extra": f.get("labels_extra") or {},
                 "field_type": f["field_type"],
+                "display_style": clean_display_style(f["field_type"], f.get("display_style")),
                 "options": f["options"], "required": f["required"]} for f in fields]
         branding = {
             "orgName": (form and (form.get("org_name") or form.get("name"))) or "",
@@ -2279,6 +2294,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "label_ar": lib_entry["label_ar"], "labels_extra": lib_entry.get("labels_extra") or {},
             "field_type": lib_entry["field_type"],
             "options": lib_entry["options"], "required": bool(body.get("required")),
+            "display_style": clean_display_style(lib_entry["field_type"], body.get("display_style")),
         }
         try:
             new_id = db.create_field(form_id, payload)
@@ -2297,6 +2313,8 @@ class AdminHandler(PublicRoutes, BaseHandler):
         if err:
             return self.send_json(400, {"ok": False, "error": err})
         body["labels_extra"] = clean_labels_extra(body.get("labels_extra"))
+        if "display_style" in body:
+            body["display_style"] = clean_display_style(body.get("field_type"), body.get("display_style"))
         try:
             db.update_field(field_id, body)
         except Exception as e:
@@ -2357,6 +2375,9 @@ class AdminHandler(PublicRoutes, BaseHandler):
             for o in opts:
                 if not isinstance(o, dict) or not o.get("value") or not (o.get("label_en") or o.get("label_ar")):
                     return "every option needs a value and an English or Arabic label"
+        style = body.get("display_style")
+        if style and clean_display_style(body.get("field_type"), style) is None:
+            return "that display style does not fit this question type"
         return None
 
     # ---- roles & users ----------------------------------------------------

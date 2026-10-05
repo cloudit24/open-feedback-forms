@@ -269,6 +269,61 @@ input[type=text],input[type=email],input[type=tel],input[type=date],select,texta
 @media (max-width:600px){ .card-head h1{ font-size:calc(20px*var(--fs)); } .card-head .desc{ font-size:calc(14px*var(--fs)); } }
 @media (max-width:380px){ .card-head h1{ font-size:calc(18.5px*var(--fs)); } }
 
+/* ---------- tap-button questions (faces, numbers, scales, choices, grids) ----------
+   Sizes use --fs and the form font; colours use the same tokens as the rest of
+   the form, so light, dark and the form's primary colour all carry through. */
+.choices{display:flex;flex-wrap:wrap;gap:8px}
+.cbtn{
+  font:inherit;font-size:calc(15px*var(--fs));line-height:1.25;color:var(--ink);
+  min-height:calc(46px*var(--fs));min-width:calc(46px*var(--fs));padding:.5em 1em;
+  background:var(--card);border:1.5px solid var(--line);border-radius:12px;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;text-align:center;
+  transition:background .12s,border-color .12s,transform .1s;-webkit-tap-highlight-color:transparent;
+}
+.cbtn:hover{border-color:var(--yellow)}
+.cbtn:active{transform:scale(.97)}
+.cbtn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.cbtn[aria-checked="true"]{background:var(--yellow);border-color:var(--yellow);color:var(--on-yellow);font-weight:700}
+.invalid .cbtn{border-color:var(--err)}
+.scale{display:flex;flex-wrap:wrap;gap:6px}
+.scale .cbtn{flex:1 1 calc(40px*var(--fs));min-width:calc(40px*var(--fs));padding:.5em .2em}
+.scale-ends{display:flex;justify-content:space-between;gap:12px;margin-top:6px;font-size:calc(12.5px*var(--fs));color:var(--muted)}
+.faces{display:flex;flex-wrap:wrap;gap:8px}
+.faces .cbtn{padding:.35em;border-radius:50%;color:var(--muted)}
+.faces .cbtn svg{width:calc(34px*var(--fs));height:calc(34px*var(--fs));display:block}
+.faces .cbtn:hover{color:var(--ink)}
+.faces .cbtn[aria-checked="true"]{color:var(--on-yellow)}
+.mgrid{margin-bottom:18px}
+.mgrid .field{margin-bottom:0}
+.mhead,.mrow{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);align-items:center;gap:12px}
+.mhead{font-size:calc(12.5px*var(--fs));color:var(--muted);text-align:center;padding-bottom:6px;border-bottom:1px solid var(--line)}
+.mrow{padding:6px 0;border-bottom:1px solid var(--line)}
+.mrow:last-of-type{border-bottom:0}
+.mcols,.mcells{display:grid;grid-template-columns:repeat(var(--cols),minmax(0,1fr));gap:4px}
+.mq{font-size:calc(14px*var(--fs));font-weight:600;overflow-wrap:anywhere}
+.mrow .err{grid-column:1 / -1;margin:0 0 4px}
+.gcell{border:0;background:none;min-height:calc(44px*var(--fs));padding:0;border-radius:10px}
+.gcell:hover{border-color:transparent}
+.gcell[aria-checked="true"]{background:none}
+.gdot{width:calc(22px*var(--fs));height:calc(22px*var(--fs));border:2px solid var(--line);border-radius:50%;display:block;background:var(--card);transition:background .12s,border-color .12s}
+.gcell:hover .gdot{border-color:var(--yellow)}
+.gcell[aria-checked="true"] .gdot{background:var(--yellow);border-color:var(--yellow);box-shadow:inset 0 0 0 3px var(--card)}
+.invalid .gdot{border-color:var(--err)}
+.gtxt{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+@media (max-width:600px){
+  .cbtn{min-height:48px}
+  .mhead{display:none}
+  .mrow{grid-template-columns:1fr;gap:8px;padding:12px 0}
+  .mcells{display:flex;flex-wrap:wrap;gap:6px}
+  .gcell{border:1.5px solid var(--line);background:var(--card);padding:.5em .9em;font-size:calc(14px*var(--fs))}
+  .gcell:hover{border-color:var(--yellow)}
+  .gcell[aria-checked="true"]{background:var(--yellow);border-color:var(--yellow)}
+  .gdot{display:none}
+  .gtxt{position:static;width:auto;height:auto;overflow:visible;clip:auto;white-space:normal}
+  .mgrid .mrow{border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px}
+}
+@media (max-width:420px){ .faces{gap:6px} .faces .cbtn svg{width:calc(30px*var(--fs));height:calc(30px*var(--fs))} }
+
 /* iOS Safari: disable the blue tap-flash on buttons and labels */
 button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
 </style>
@@ -404,6 +459,7 @@ var T = {
     errShort:"Please write at least 10 characters.",
     errSelect:"Please make a choice.",
     errRating:"Please give a rating.",
+    scaleLow:"Not likely", scaleHigh:"Extremely likely",
     errConsent:"You need to agree before we can accept your feedback.",
     errFix:"Please check the highlighted fields and try again.",
     errNet:"We could not send your feedback. Please check your connection and try again.",
@@ -437,6 +493,7 @@ var T = {
     errShort:"الرجاء كتابة 10 أحرف على الأقل.",
     errSelect:"الرجاء الاختيار.",
     errRating:"الرجاء إضافة تقييم.",
+    scaleLow:"غير محتمل", scaleHigh:"محتمل جدًا",
     errConsent:"يجب الموافقة قبل أن نتمكن من استلام ملاحظتك.",
     errFix:"يرجى مراجعة الحقول المحددة والمحاولة مرة أخرى.",
     errNet:"تعذر إرسال ملاحظتك. يرجى التحقق من الاتصال والمحاولة مرة أخرى.",
@@ -465,6 +522,7 @@ var FIELDS = [];               /* admin-configured fields, fetched from the serv
 // only its own questions instead (Manage -> "Ask for name and email").
 var ASK_CORE = true;
 var ratingValues = {};         /* field_key -> 1..5, for any 'rating' fields */
+var choiceValues = {};         /* field_key -> option value, for dropdowns shown as buttons */
 function $(id){ return document.getElementById(id); }
 
 /* ------------------------- theme ------------------------------ */
@@ -716,7 +774,17 @@ function renderDynamicFields(){
   var box = $("dynamic-fields");
   box.innerHTML = "";
 
-  FIELDS.forEach(function(f){
+  for (var fi = 0; fi < FIELDS.length; fi++){
+    var f = FIELDS[fi];
+    if (effectiveStyle(f) === "grid"){
+      // A run of neighbouring grid questions with the same answers becomes
+      // one table.
+      var run = [f];
+      while (fi + 1 < FIELDS.length && effectiveStyle(FIELDS[fi + 1]) === "grid" &&
+             optionSig(FIELDS[fi + 1]) === optionSig(f)){ run.push(FIELDS[++fi]); }
+      box.appendChild(buildGrid(run));
+      continue;
+    }
     var wrap = document.createElement("div");
     wrap.className = "field";
     wrap.id = fieldWrapId(f);
@@ -737,6 +805,13 @@ function renderDynamicFields(){
       CODES.forEach(function(c){ code.appendChild(new Option(c, c)); });
       code.value = "+971";
 
+    } else if (effectiveStyle(f) === "buttons" || effectiveStyle(f) === "scale"){
+      wrap.innerHTML = groupLabelHtml(f) +
+        '<div id="' + fieldInputId(f) + '"></div>' +
+        '<p class="err">' + escapeHtml(T[lang].errSelect) + '</p>';
+      box.appendChild(wrap);
+      buildChoiceField(f, $(fieldInputId(f)), effectiveStyle(f));
+
     } else if (f.field_type === "select"){
       wrap.innerHTML = labelHtml + '<select id="' + fieldInputId(f) + '"></select>' +
         '<p class="err">' + escapeHtml(T[lang].errSelect) + '</p>';
@@ -746,6 +821,14 @@ function renderDynamicFields(){
       (f.options || []).forEach(function(o){
         sel.appendChild(new Option(optionLabel(o), o.value));
       });
+
+    } else if (effectiveStyle(f) === "faces" || effectiveStyle(f) === "numbers"){
+      wrap.innerHTML = groupLabelHtml(f) +
+        '<div id="' + fieldInputId(f) + '"></div>' +
+        '<p class="rating-word" id="' + fieldInputId(f) + '_word"></p>' +
+        '<p class="err">' + escapeHtml(T[lang].errRating) + '</p>';
+      box.appendChild(wrap);
+      buildRatingButtons(f, $(fieldInputId(f)), effectiveStyle(f));
 
     } else if (f.field_type === "rating"){
       wrap.innerHTML =
@@ -796,7 +879,7 @@ function renderDynamicFields(){
       box.appendChild(wrap);
     }
 
-  });
+  }
 }
 
 function escapeHtml(s){
@@ -839,6 +922,152 @@ function setRating(f, n){
   clearErr(fieldWrapId(f));
 }
 
+/* ------------------- tap-button questions -------------------
+   Faces, number rows, 0-10 scales, choice buttons and grids. Each group is a
+   real radio group: role="radiogroup" with role="radio" buttons, one tab stop
+   (arrow keys move and select, Space/Enter select, Home/End jump). Answers go
+   into the same maps and are posted in the same format as the old controls. */
+function effectiveStyle(f){
+  var st = f.display_style, n = (f.options || []).length;
+  if (f.field_type === "rating") return (st === "faces" || st === "numbers") ? st : null;
+  if (f.field_type !== "select" || !n) return null;
+  if (st === "buttons") return n <= 6 ? "buttons" : null;      /* too many to tap: dropdown */
+  if (st === "scale") return n <= 11 ? "scale" : null;
+  if (st === "grid") return (n >= 2 && n <= 7) ? "grid" : null;
+  return null;
+}
+function optionSig(f){ return (f.options || []).map(function(o){ return o.value; }).join("|"); }
+function groupLabelHtml(f){
+  return '<label id="' + fieldInputId(f) + '_label">' + escapeHtml(fieldLabel(f)) +
+    (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') + '</label>';
+}
+
+/* items: [{value, label (spoken), html, cls}]. state[key] holds the chosen value. */
+function buildRadioGroup(box, labelId, items, state, key, onPick){
+  box.setAttribute("role", "radiogroup");
+  box.setAttribute("aria-labelledby", labelId);
+  var btns = [];
+  function paint(){
+    var cur = state[key], chosen = -1;
+    items.forEach(function(it, i){ if (cur != null && String(it.value) === String(cur)) chosen = i; });
+    btns.forEach(function(b, i){
+      b.setAttribute("aria-checked", i === chosen ? "true" : "false");
+      b.tabIndex = (i === chosen || (chosen < 0 && i === 0)) ? 0 : -1;
+    });
+  }
+  function pick(i, focus){
+    state[key] = items[i].value;
+    paint();
+    if (focus) btns[i].focus();
+    onPick(items[i]);
+  }
+  items.forEach(function(it, i){
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "cbtn " + (it.cls || "");
+    b.setAttribute("role", "radio");
+    b.setAttribute("aria-label", it.label);
+    b.innerHTML = it.html;
+    b.addEventListener("click", function(){ pick(i, false); });
+    b.addEventListener("keydown", function(e){
+      var rtl = document.documentElement.dir === "rtl", to = -1, n = btns.length;
+      switch (e.key){
+        case "ArrowRight": to = rtl ? i - 1 : i + 1; break;
+        case "ArrowLeft":  to = rtl ? i + 1 : i - 1; break;
+        case "ArrowDown":  to = i + 1; break;
+        case "ArrowUp":    to = i - 1; break;
+        case "Home": to = 0; break;
+        case "End":  to = n - 1; break;
+        case "Enter": e.preventDefault(); pick(i, false); return;   /* Enter selects, never submits */
+        default: return;
+      }
+      e.preventDefault();
+      pick((to + n) % n, true);
+    });
+    btns.push(b);
+    box.appendChild(b);
+  });
+  paint();
+}
+
+function buildChoiceField(f, box, style){
+  var items = (f.options || []).map(function(o){
+    var label = optionLabel(o);
+    return {value: o.value, label: label, html: escapeHtml(style === "scale" ? o.value : label)};
+  });
+  box.className = style === "scale" ? "scale" : "choices";
+  buildRadioGroup(box, fieldInputId(f) + "_label", items, choiceValues, f.field_key, function(){ clearErr(fieldWrapId(f)); });
+  if (style === "scale" && items.length === 11 && items[0].value === "0" && items[10].value === "10"){
+    var ends = document.createElement("div");
+    ends.className = "scale-ends";
+    ends.setAttribute("aria-hidden", "true");
+    ends.innerHTML = "<span>" + escapeHtml(T[lang].scaleLow) + "</span><span>" + escapeHtml(T[lang].scaleHigh) + "</span>";
+    box.parentNode.insertBefore(ends, box.nextSibling);
+  }
+}
+
+var FACE_MOUTHS = ["M7 17.5Q12 12 17 17.5", "M8 16.5Q12 14 16 16.5", "M8.5 15.5H15.5",
+                   "M8 14Q12 17.5 16 14", "M7 13.5Q12 20 17 13.5"];
+function faceSvg(n){
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="10"/><circle cx="9" cy="9.5" r="1" fill="currentColor" stroke="none"/>' +
+    '<circle cx="15" cy="9.5" r="1" fill="currentColor" stroke="none"/><path d="' + FACE_MOUTHS[n - 1] + '"/></svg>';
+}
+function buildRatingButtons(f, box, style){
+  var items = [];
+  for (var n = 1; n <= 5; n++){
+    items.push({value: n, cls: style === "faces" ? "face" : "",
+                label: style === "faces" ? (T[lang].words[n] || (n + " / 5")) : (n + " / 5"),
+                html: style === "faces" ? faceSvg(n) : String(n)});
+  }
+  box.className = style === "faces" ? "faces" : "scale";
+  var word = $(fieldInputId(f) + "_word");
+  function showWord(){ word.textContent = ratingValues[f.field_key] ? (T[lang].words[ratingValues[f.field_key]] || "") : ""; }
+  buildRadioGroup(box, fieldInputId(f) + "_label", items, ratingValues, f.field_key, function(){
+    showWord(); clearErr(fieldWrapId(f));
+  });
+  showWord();
+}
+
+/* Several questions with the same answers, one table. Wide screens: a grid of
+   dots under column headings. Phones: each question becomes a card of buttons
+   (CSS only; the markup is the same). */
+function buildGrid(run){
+  var opts = run[0].options, cols = opts.length;
+  var g = document.createElement("div");
+  g.className = "mgrid";
+  g.style.setProperty("--cols", cols);
+  var head = document.createElement("div");
+  head.className = "mhead";
+  head.setAttribute("aria-hidden", "true");
+  head.innerHTML = "<span></span><div class='mcols'>" + opts.map(function(o){
+    return "<span>" + escapeHtml(optionLabel(o)) + "</span>"; }).join("") + "</div>";
+  g.appendChild(head);
+  run.forEach(function(f){
+    var row = document.createElement("div");
+    row.className = "field mrow";
+    row.id = fieldWrapId(f);
+    row.innerHTML = '<div class="mq" id="' + fieldInputId(f) + '_label">' + escapeHtml(fieldLabel(f)) +
+      (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') + '</div>' +
+      '<div class="mcells" id="' + fieldInputId(f) + '"></div>' +
+      '<p class="err">' + escapeHtml(T[lang].errSelect) + '</p>';
+    g.appendChild(row);
+    var items = opts.map(function(o){
+      var label = optionLabel(o);
+      return {value: o.value, cls: "gcell", label: label,
+              html: '<span class="gdot"></span><span class="gtxt">' + escapeHtml(label) + '</span>'};
+    });
+    buildRadioGroup(row.querySelector(".mcells"), fieldInputId(f) + "_label", items, choiceValues, f.field_key,
+      function(){ clearErr(fieldWrapId(f)); });
+  });
+  return g;
+}
+
+/* the answer of a dropdown-type question, however it is shown */
+function selectValue(f){
+  return effectiveStyle(f) ? (choiceValues[f.field_key] || "") : $(fieldInputId(f)).value;
+}
+
 /* ------------------------ validation ------------------------- */
 function setErr(id){ var el = $(id); if (el) el.classList.add("invalid"); }
 function clearErr(id){ var el = $(id); if (el) el.classList.remove("invalid"); }
@@ -875,7 +1104,7 @@ function checkDynamicField(f){
     clearErr(wrapId); return true;
   }
   if (f.field_type === "select"){
-    var v = $(fieldInputId(f)).value;
+    var v = selectValue(f);
     if (f.required && !v){ setErr(wrapId); return false; }
     clearErr(wrapId); return true;
   }
@@ -925,6 +1154,7 @@ function collectDynamicValue(f){
     var code = $(fieldInputId(f) + "_code");
     return num ? (code.value + num) : "";
   }
+  if (f.field_type === "select") return selectValue(f);
   return $(fieldInputId(f)).value.trim();
 }
 
@@ -944,6 +1174,8 @@ function submit(e){
       ok = false;
       if (!firstBadEl){
         var el = $(fieldInputId(f));
+        // a tap-button group: focus its one tab stop
+        if (el && el.getAttribute("role") === "radiogroup") el = el.querySelector('[role="radio"][tabindex="0"]');
         firstBadEl = el || $(fieldWrapId(f));
       }
     }
@@ -1037,7 +1269,7 @@ function init(){
 
   $("again").addEventListener("click", function(){
     $("form").reset();
-    ratingValues = {};
+    ratingValues = {}; choiceValues = {};
     renderDynamicFields();
     banner("");
     $("consentErr").style.display = "none";
