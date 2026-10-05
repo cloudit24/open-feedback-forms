@@ -81,6 +81,17 @@ button{font-family:inherit;cursor:pointer}
 .sd-a.empty{color:var(--muted);font-style:italic}
 table.subs tbody tr{cursor:pointer}
 table.subs tbody tr:hover td{background:rgba(0,0,0,.03)}
+#dash-view.editing > div[id^="tab-"]{display:none !important}
+.fe-wrap{max-width:860px;margin:0 auto}
+.fe-head{display:flex;align-items:center;gap:12px;margin:4px 0 14px}
+.fe-head h2{margin:0;font-size:20px;text-transform:none;letter-spacing:0;color:var(--ink)}
+.fe-sec h3{margin:0 0 4px;font-size:15px}
+.fe-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0 16px}
+.fe-inline{display:flex;gap:18px;flex-wrap:wrap}
+.fe-inline .check-row{margin:0}
+.fe-help{margin-top:10px}
+.fe-help summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-soft)}
+.fe-actions{position:sticky;bottom:0;background:var(--bg);padding:12px 0;border-top:1px solid var(--line);z-index:5}
 .card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .card-top h2{margin:0}
 .card-top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -504,7 +515,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
             <div class="actions">
               <button class="btn-outline btn-sm" id="fd-view">View</button>
               <button class="btn-outline btn-sm" id="fd-subs">Submissions</button>
-              <button class="btn-outline btn-sm" id="fd-edit">Manage</button>
+              <button class="btn-outline btn-sm" id="fd-edit">Settings</button>
               <button class="btn-outline btn-sm" id="fd-toggle">Disable</button>
             </div>
           </div>
@@ -958,7 +969,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
         <p class="hint">Deleting a field key here only removes it from the catalog going forward; forms that already added it keep their existing questions and past submissions untouched.</p>
 
         <h2 style="margin-top:26px">Forms &amp; branding</h2>
-        <p class="hint">Each form is its own listener on its own port, with its own logo, colors, title and description, questions and expiry date — set these from a form's <b>Edit</b> button (Questions/Branding/Alerts) and <b>Manage</b> button (name, port, languages, expiry). Point one reverse proxy or Cloudflare Tunnel hostname at each form's port to publish it. A disabled form moves to <b>Archived forms</b> at the bottom of the Forms tab — restore it any time, or permanently delete it (and everything it collected) once you're sure.</p>
+        <p class="hint">Each form is its own listener on its own port, with its own logo, colors, title and description, questions and expiry date — set these from a form's <b>Questions &amp; design</b> button (questions, branding, alerts) and <b>Settings</b> button (name, address, languages, open and close dates, webhooks). Point one reverse proxy or Cloudflare Tunnel hostname at each form's port to publish it. A disabled form moves to <b>Archived forms</b> at the bottom of the Forms tab — restore it any time, or permanently delete it (and everything it collected) once you're sure.</p>
 
         <h2 style="margin-top:26px">Languages</h2>
         <p class="hint">Every form supports English and Arabic out of the box. Configuration → Language Labels lets you rename either one and add further languages — new ones are auto-translated via the free LibreTranslate API where possible (add an API key there for real translation instead of blank placeholders), and every label stays editable afterward. A form only offers the languages its own Language Labels checkboxes have enabled.</p>
@@ -1136,61 +1147,91 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
     </div>
   </div>
 
-  <!-- ============ form editor (simple inline panel, not a real dialog) ============ -->
+  <!-- ============ form editor: shown inside the app, below the tabs ============ -->
   <div id="form-editor-view" class="hidden">
-    <div class="card" style="max-width:600px;margin:0 auto">
-      <h2 id="form-editor-title">Add a form</h2>
-      <label for="fe-name">Form name</label>
-      <input type="text" id="fe-name" placeholder="e.g. Downtown Music Festival">
-      <label for="fe-port">Port</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="number" id="fe-port" placeholder="leave blank to auto-assign" style="margin:0">
-        <button class="btn-outline btn-sm" id="fe-port-test" type="button" style="white-space:nowrap">Test port</button>
+    <div class="fe-wrap">
+      <div class="fe-head">
+        <button class="btn-outline btn-sm" id="fe-back" type="button">&larr; Back</button>
+        <h2 id="form-editor-title">Add a form</h2>
       </div>
-      <div class="msg" id="fe-port-result" style="margin-top:8px"></div>
-      <p class="hint">Every form is also reachable through this admin panel's own address at <code>/f/&lt;form-slug&gt;/</code> — handy when opening a port per form isn't practical, since one tunnel or proxy hostname then publishes all of them.</p>
-      <p class="hint" id="fe-port-hint">Each form needs its own port (1024–65535). Point a separate Cloudflare Tunnel hostname at this port to publish it.</p>
 
-      <label for="fe-public-url">Public address <span class="hint" style="display:inline">(optional)</span></label>
-      <input type="text" id="fe-public-url" placeholder="https://feedback.example.com" dir="ltr">
-      <p class="hint">The address visitors use, if it isn't this server's own host and port — the Cloudflare Tunnel hostname you pointed at this form, for example. Set it and the <b>View</b> button and the link shown next to the form both open that address instead.</p>
+      <section class="card fe-sec">
+        <h3>Basics</h3>
+        <label for="fe-name">Form name</label>
+        <input type="text" id="fe-name" placeholder="e.g. Customer feedback">
+        <label>Languages</label>
+        <div class="fe-inline">
+          <div class="check-row"><input type="checkbox" id="fe-lang-en"><label for="fe-lang-en" style="margin:0">English</label></div>
+          <div class="check-row"><input type="checkbox" id="fe-lang-ar"><label for="fe-lang-ar" style="margin:0">Arabic</label></div>
+        </div>
+        <div id="fe-lang-extra-wrap"></div>
+        <p class="hint">At least one. With only one, visitors don't see a language switch.</p>
+        <label>Name and email</label>
+        <div class="check-row"><input type="checkbox" id="fe-ask-core"><label for="fe-ask-core" style="margin:0">Ask first name, last name and email at the top of the form</label></div>
+        <p class="hint">Leave off to ask only your own questions. You can add First name, Last name or Email address as normal questions instead.</p>
+      </section>
 
-      <label>Built-in questions</label>
-      <div class="check-row"><input type="checkbox" id="fe-ask-core"><label for="fe-ask-core" style="margin:0">Ask for first name, last name and email address</label></div>
-      <p class="hint">Tick this and the form asks for first name, last name and email address at the top, above your own questions. A new form starts with it off, so it asks only the questions you choose — add First name, Last name or Email address from the catalogue if you want them among your own questions. The consent tick is always there. Forms made before this setting existed keep asking for all three until you turn it off.</p>
+      <section class="card fe-sec">
+        <h3>Address</h3>
+        <div class="fe-grid">
+          <div>
+            <label for="fe-port">Port</label>
+            <div style="display:flex;gap:8px;align-items:center">
+              <input type="number" id="fe-port" placeholder="blank = automatic" style="margin:0">
+              <button class="btn-outline btn-sm" id="fe-port-test" type="button" style="white-space:nowrap">Test port</button>
+            </div>
+          </div>
+          <div>
+            <label for="fe-public-url">Public address <span class="hint" style="display:inline">(optional)</span></label>
+            <input type="text" id="fe-public-url" placeholder="https://feedback.example.com" dir="ltr">
+          </div>
+        </div>
+        <div class="msg" id="fe-port-result" style="margin-top:8px"></div>
+        <details class="fe-help">
+          <summary>How addresses work</summary>
+          <p class="hint" id="fe-port-hint">Each form needs its own port (1024–65535). Point a separate Cloudflare Tunnel hostname at this port to publish it.</p>
+          <p class="hint">Every form is also reachable through this admin panel's own address at <code>/f/&lt;form-slug&gt;/</code>, so one tunnel or proxy hostname can publish all forms.</p>
+          <p class="hint">Public address: the address visitors use, for example your Cloudflare Tunnel hostname. When set, <b>View</b> and the form's link open it.</p>
+        </details>
+      </section>
 
-      <label>Language Labels</label>
-      <div class="check-row"><input type="checkbox" id="fe-lang-en"><label for="fe-lang-en" style="margin:0">English</label></div>
-      <div class="check-row" style="margin-top:0"><input type="checkbox" id="fe-lang-ar"><label for="fe-lang-ar" style="margin:0">Arabic</label></div>
-      <div id="fe-lang-extra-wrap"></div>
-      <p class="hint">At least one must stay enabled. With only one enabled, visitors won't see a language switcher at all.</p>
+      <section class="card fe-sec">
+        <h3>Open and close</h3>
+        <div class="fe-grid">
+          <div id="fe-opens-wrap" class="hidden">
+            <label for="fe-opens">Opens on</label>
+            <input type="date" id="fe-opens">
+          </div>
+          <div>
+            <label for="fe-expiry">Closes on</label>
+            <input type="date" id="fe-expiry">
+          </div>
+          <div id="fe-max-wrap" class="hidden">
+            <label for="fe-max">Close after</label>
+            <input type="number" id="fe-max" min="1" step="1" placeholder="no limit">
+          </div>
+        </div>
+        <p class="hint" id="fe-max-hint">All optional. Leave blank to keep the form open.</p>
+        <p class="hint" id="fe-more-note">Opening date, response limit, messages and webhooks appear after the form is saved.</p>
+        <div id="fe-more" class="hidden">
+          <details class="fe-help">
+            <summary>Messages visitors see when the form is closed or not open yet</summary>
+            <label>Closed (English)</label>
+            <div id="fe-closed-en"></div>
+            <label>Closed (Arabic)</label>
+            <div id="fe-closed-ar"></div>
+            <label>Not open yet (English)</label>
+            <div id="fe-opens-en"></div>
+            <label>Not open yet (Arabic)</label>
+            <div id="fe-opens-ar"></div>
+            <p class="hint">Leave empty for the standard wording. The opening date is always shown above your message.</p>
+          </details>
+        </div>
+      </section>
 
-      <label for="fe-expiry" style="margin-top:14px">Expiry date</label>
-      <input type="date" id="fe-expiry">
-      <p class="hint">Optional. Once reached, the public page stops accepting responses. Leave blank for no expiry.</p>
-
-      <p class="hint" id="fe-more-note">More options (opening date, response limit, closed messages and webhooks) appear here once the form has been created.</p>
-      <div id="fe-more" class="hidden">
-        <label for="fe-opens" style="margin-top:14px">Opens on</label>
-        <input type="date" id="fe-opens">
-        <p class="hint">Optional. Before this date the public page says "Opens on ..." and takes no responses. Must be before the expiry date.</p>
-
-        <label for="fe-max">Close after this many responses</label>
-        <input type="number" id="fe-max" min="1" step="1" placeholder="no limit">
-        <p class="hint" id="fe-max-hint">Optional. The form closes by itself once this many responses are saved. Leave blank for no limit.</p>
-
-        <label>Message when the form is closed <span class="hint" style="display:inline">(English)</span></label>
-        <div id="fe-closed-en"></div>
-        <label>Message when the form is closed <span class="hint" style="display:inline">(Arabic)</span></label>
-        <div id="fe-closed-ar"></div>
-        <label>Message before the form opens <span class="hint" style="display:inline">(English)</span></label>
-        <div id="fe-opens-en"></div>
-        <label>Message before the form opens <span class="hint" style="display:inline">(Arabic)</span></label>
-        <div id="fe-opens-ar"></div>
-        <p class="hint">Optional. Leave a message empty to show the standard wording. The "Opens on ..." date is always shown above your message.</p>
-
-        <h3 style="margin:22px 0 4px">Webhooks</h3>
-        <p class="hint">Send every new response to another system. We POST JSON signed with a secret (header <code>X-OFF-Signature</code>, an HMAC-SHA256 of the body). A failed send is tried again after 1, 5 and 30 minutes, and never slows down the visitor.</p>
+      <section class="card fe-sec hidden" id="fe-wh-sec">
+        <h3>Webhooks</h3>
+        <p class="hint">Send every new response to another system as signed JSON (header <code>X-OFF-Signature</code>, HMAC-SHA256). Failed sends retry after 1, 5 and 30 minutes.</p>
         <div id="wh-secret" class="hidden" style="border:1px solid var(--yellow);border-radius:8px;padding:10px 12px;margin:10px 0">
           <b>Signing secret</b> <span class="hint" style="display:inline">- copy it now, it is shown only once.</span>
           <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
@@ -1201,17 +1242,21 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
         </div>
         <div id="wh-list"></div>
         <label for="wh-url">Add a webhook address</label>
-        <input type="text" id="wh-url" dir="ltr" placeholder="https://example.com/hooks/feedback">
+        <div style="display:flex;gap:8px;align-items:center">
+          <input type="text" id="wh-url" dir="ltr" placeholder="https://example.com/hooks/feedback" style="margin:0">
+          <button class="btn-outline btn-sm" id="wh-add" type="button" style="white-space:nowrap">Add webhook</button>
+        </div>
         <div class="check-row"><input type="checkbox" id="wh-local"><label for="wh-local" style="margin:0">Allow local network</label></div>
-        <p class="hint">Addresses on a private or internal network are refused unless this is ticked (this protects your network). https is required; http works for localhost only.</p>
-        <button class="btn-outline btn-sm" id="wh-add" type="button">Add webhook</button>
+        <p class="hint">Private network addresses are refused unless ticked. https required (http only for localhost).</p>
         <div class="msg" id="wh-msg" style="margin-top:8px"></div>
-      </div>
+      </section>
 
-      <div class="msg bad" id="form-editor-msg"></div>
-      <div style="display:flex;gap:10px;margin-top:16px">
-        <button class="btn-outline" id="fe-cancel">Cancel</button>
-        <button class="btn" id="fe-save">Save form</button>
+      <div class="fe-actions">
+        <div class="msg bad" id="form-editor-msg"></div>
+        <div style="display:flex;gap:10px;justify-content:flex-end">
+          <button class="btn-outline" id="fe-cancel">Cancel</button>
+          <button class="btn" id="fe-save">Save form</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1348,11 +1393,26 @@ function api(method, url, body){
   });
 }
 
+// Editors (form, field, key, role, user, password, colours, template picker)
+// open inside the app: the header and tabs stay put and the editor takes the
+// place of the tab's content, instead of a separate bare page.
+var EDITOR_VIEWS = ["editor-view","template-view","form-editor-view","key-editor-view",
+                    "role-editor-view","admin-user-editor-view","password-view","mytheme-view"];
+(function(){
+  var slot = document.createElement("div");
+  slot.id = "editor-slot";
+  var tabs = document.querySelector("#dash-view > .tabs");
+  tabs.parentNode.insertBefore(slot, tabs.nextSibling);
+  EDITOR_VIEWS.forEach(function(v){ slot.appendChild($(v)); });
+})();
 function show(id){
-  ["setup-view","login-view","dash-view","editor-view","template-view","form-editor-view","key-editor-view",
-   "role-editor-view","admin-user-editor-view","password-view","mytheme-view"].forEach(function(v){
-    $(v).classList.toggle("hidden", v !== id);
+  var inEditor = EDITOR_VIEWS.indexOf(id) >= 0;
+  ["setup-view","login-view","dash-view"].forEach(function(v){
+    $(v).classList.toggle("hidden", inEditor ? v !== "dash-view" : v !== id);
   });
+  EDITOR_VIEWS.forEach(function(v){ $(v).classList.toggle("hidden", v !== id); });
+  $("dash-view").classList.toggle("editing", inEditor);
+  if (inEditor) window.scrollTo(0, 0);
 }
 function flash(id, text, ok){
   var el = $(id);
@@ -1523,6 +1583,7 @@ $("logout-btn").addEventListener("click", function(){
 /* ------------------------------------------------------------ tabs ---- */
 document.querySelectorAll(".tab").forEach(function(btn){
   btn.addEventListener("click", function(){
+    if ($("dash-view").classList.contains("editing")) show("dash-view");
     document.querySelectorAll(".tab").forEach(function(b){ b.classList.remove("active"); });
     btn.classList.add("active");
     ["dashboard","forms","summary","subs","config","administration","help","about"].forEach(function(t){
@@ -1674,10 +1735,10 @@ function renderForms(){
     var viewHere = mkBtn("View on this address", function(){ window.open(sharedFormUrl(f), "_blank", "noopener"); });
     var buttons = [view, viewHere];
     if (hasAnyPermission(["edit_fields", "edit_branding"], f.id)){
-      buttons.push(mkBtn("Edit", function(){ openFormDetail(f); }));         // questions & branding
+      buttons.push(mkBtn("Questions & design", function(){ openFormDetail(f); }));         // questions & branding
     }
     if (hasAnyPermission(["manage_forms", "manage_form_settings"], f.id)){
-      buttons.push(mkBtn("Manage", function(){ openFormEditor(f); }));       // name, port, languages
+      buttons.push(mkBtn("Settings", function(){ openFormEditor(f); }));       // name, port, languages
     }
     if (hasPermission("manage_forms")){
       buttons.push(mkBtn("Clone", function(){ cloneForm(f); }));
@@ -1704,7 +1765,7 @@ function renderForms(){
     actions.className = "actions";
     var buttons = [];
     if (hasAnyPermission(["manage_forms", "manage_form_settings"], f.id)){
-      buttons.push(mkBtn("Manage", function(){ openFormEditor(f); }));
+      buttons.push(mkBtn("Settings", function(){ openFormEditor(f); }));
     }
     if (hasPermission("manage_forms")){
       buttons.push(mkBtn("Restore", function(){ toggleFormActive(f); }));
@@ -1861,10 +1922,11 @@ function openTemplatePicker(){
   });
 }
 $("fe-cancel").addEventListener("click", function(){ show("dash-view"); });
+$("fe-back").addEventListener("click", function(){ show("dash-view"); });
 function openFormEditor(form){
   STATE.editingFormId = form ? form.id : null;
   if (form){ STATE.newFormTemplate = null; }
-  $("form-editor-title").textContent = form ? "Edit form" : "Add a form";
+  $("form-editor-title").textContent = form ? "Form settings" : "Add a form";
   $("fe-name").value = form ? form.name : "";
   $("fe-port").value = form ? form.port : "";
   $("fe-lang-en").checked = form ? form.lang_en : true;
@@ -1873,6 +1935,7 @@ function openFormEditor(form){
   $("fe-public-url").value = (form && form.public_url) || "";
   $("fe-ask-core").checked = form ? form.ask_core_fields !== false : false;
   $("fe-more").classList.toggle("hidden", !form);
+  ["fe-opens-wrap", "fe-max-wrap", "fe-wh-sec"].forEach(function(id){ $(id).classList.toggle("hidden", !form); });
   $("fe-more-note").classList.toggle("hidden", !!form);
   $("fe-opens").value = (form && form.opens_on) || "";
   $("fe-max").value = (form && form.max_responses != null) ? form.max_responses : "";
@@ -1985,7 +2048,7 @@ function renderFields(){
   if (note){
     note.textContent = (f && f.ask_core_fields === false)
       ? "This form asks only the questions below."
-      : "First name, last name and email address are asked at the top of this form before the questions below. Turn that off under Manage.";
+      : "First name, last name and email address are asked at the top of this form before the questions below. Turn that off under Settings.";
   }
   var box = $("fields-list");
   box.innerHTML = "";

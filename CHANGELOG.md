@@ -5,6 +5,13 @@ file from GitHub to show what a new version fixes.
 
 ## 1.13.0
 
+- Admin: form settings, the question editor and the other editors now open
+  inside the app, with the header and tabs still on screen, instead of a bare
+  separate page. Form settings are grouped into Basics, Address, Open and
+  close, and Webhooks, with shorter help (details fold away) and a Save bar
+  that stays at the bottom of the screen.
+- Admin: the form buttons "Edit" and "Manage" are renamed "Questions & design"
+  and "Settings", so it's clear which one does what.
 - Fixed: Submissions showed empty Name and Email for forms that ask First name,
   Last name and Email address as questions, and the CSV had two sets of name
   and email columns. Now there is one Name and one Email, taken from wherever
