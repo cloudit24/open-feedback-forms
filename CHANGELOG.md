@@ -5,6 +5,8 @@ file from GitHub to show what a new version fixes.
 
 ## 1.13.0
 
+- Admin: "+ Add a form" and "+ Add a field" now sit at the top of their lists,
+  next to a new "Field keys" shortcut that jumps straight to the catalogue.
 - New: webhooks. A form's Manage panel can send every new response to another
   system. Add a web address (https, or http for localhost) and we POST the answer
   as JSON, signed with a secret so the other side can check it really came from
