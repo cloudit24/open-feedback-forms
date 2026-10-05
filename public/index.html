@@ -523,6 +523,8 @@ var T = {
     setupBody:"We are still setting this up. Please check back shortly.",
     expiredTitle:"This form is no longer accepting responses",
     expiredBody:"Thanks for your interest — this feedback window has closed.",
+    opensTitle:"This form opens on {date}",
+    opensBody:"Thanks for your interest — please come back then.",
     privacyTitle:"Terms and Conditions",
     privacyBodyNoContact:"We're grateful for the time you're taking to share your thoughts with us. {org} uses your answers to review your feedback and improve what we do. We treat what you send with care, we never sell it, and we never share it outside {org}. You're always welcome to ask us to update or delete it by emailing us.",
     privacyBody:"We're grateful for the time you're taking to share your thoughts with us. {org} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside {org}. You're always welcome to ask us to update or delete your information by emailing us.",
@@ -558,6 +560,8 @@ var T = {
     setupBody:"ما زلنا نعمل على إعداد هذا النموذج. يرجى المحاولة لاحقاً.",
     expiredTitle:"هذا النموذج لم يعد يقبل الردود",
     expiredBody:"شكراً لاهتمامك — انتهت فترة استقبال الملاحظات لهذا النموذج.",
+    opensTitle:"يفتح هذا النموذج في {date}",
+    opensBody:"شكراً لاهتمامك — يرجى العودة في ذلك الوقت.",
     privacyTitle:"الشروط والأحكام",
     privacyBodyNoContact:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يستخدم {org} إجاباتك لمراجعة ملاحظاتك وتحسين ما نقدمه. نتعامل مع ما ترسله بعناية تامة، ولا نبيعه أبداً، ولا نشاركه خارج {org}. ويسعدنا دائماً أن تطلب منا تحديثه أو حذفه عبر مراسلتنا.",
     privacyBody:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يقوم {org} بجمع اسمك وبريدك الإلكتروني ورقم هاتفك المتحرك وجنسيتك حتى يتمكن فريقنا من مراجعة ملاحظاتك، وإبقائك على اطلاع بآخر المستجدات، والحفاظ على علاقتنا المستمرة بك. وقد نتواصل معك أيضاً بخصوص الملاحظة التي شاركتنا إياها، سواء للمتابعة أو للاستفسار أو لمجرد شكرك عليها. نتعامل مع بياناتك بعناية تامة، ولا نبيعها أبداً، ولا نشاركها خارج {org}. ويسعدنا دائماً أن تطلب منا تحديث أو حذف بياناتك عبر مراسلتنا.",
@@ -604,6 +608,7 @@ var ASK_CORE = true;
 var ratingValues = {};         /* field_key -> 1..5, for any 'rating' fields */
 var choiceValues = {};         /* field_key -> option value, for dropdowns shown as buttons */
 var EXPIRED = false;
+var CLOSED = null;             /* why the form is not open: {reason, opensOn, messageEn, messageAr} */
 function $(id){ return document.getElementById(id); }
 
 /* ------------------------- theme ------------------------------ */
@@ -725,7 +730,35 @@ function applyLang(next){
   try { localStorage.setItem("awLang", lang); } catch(e){}
   applyWelcomeText();
   applyThanksText();
+  applyClosedNotice();
   renderDynamicFields();       // labels/options are language-dependent
+}
+
+/* Closed / not open yet. The admin's own message (cleaned by the server with
+   the same allow-list as the other styled text) replaces the default body.
+   Languages other than English and Arabic get the English message. */
+function closedDate(iso){
+  try {
+    var p = iso.split("-");
+    return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(lang === "ar" ? "ar" : lang, { dateStyle: "long" });
+  } catch(e){ return iso; }
+}
+function applyClosedNotice(){
+  if (!CLOSED) return;
+  var strings = T[lang] || T.en;
+  var scheduled = CLOSED.reason === "scheduled";
+  var title = scheduled
+    ? (strings.opensTitle || T.en.opensTitle).split("{date}").join(closedDate(CLOSED.opensOn))
+    : (strings.expiredTitle || T.en.expiredTitle);
+  var html = lang === "ar" ? CLOSED.messageAr : (CLOSED.messageEn || "");
+  if (lang !== "ar" && lang !== "en" && !html) html = CLOSED.messageEn || "";
+  $("setupNoticeTitle").textContent = title;
+  if (html){
+    $("setupNoticeBody").innerHTML = html;
+  } else {
+    $("setupNoticeBody").textContent = scheduled ? (strings.opensBody || T.en.opensBody)
+                                                 : (strings.expiredBody || T.en.expiredBody);
+  }
 }
 
 /* ------------------ welcome + thank-you screens ------------------
@@ -835,8 +868,9 @@ function fetchFields(){
       }
       if (res.body.expired){
         EXPIRED = true;
-        $("setupNoticeTitle").setAttribute("data-i18n", "expiredTitle");
-        $("setupNoticeBody").setAttribute("data-i18n", "expiredBody");
+        CLOSED = res.body.closed || { reason: "date", opensOn: null, messageEn: "", messageAr: "" };
+        $("setupNoticeTitle").removeAttribute("data-i18n");
+        $("setupNoticeBody").removeAttribute("data-i18n");
         LANG_META = res.body.languageLabels || LANG_META;
         applyBranding(res.body.branding);
         $("setupNotice").classList.remove("hidden");
@@ -1388,6 +1422,7 @@ function submit(e){
       document.querySelector(".card").scrollIntoView({behavior:"smooth", block:"start"});
       return;
     }
+    if (res.status === 410){ fetchFields(); return; }   // the form closed while it was open on this screen
     if (res.status === 429)      banner(T[lang].errRate);
     else if (res.status === 403) banner(T[lang].errBot);
     else                         banner(T[lang].errFix);

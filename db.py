@@ -144,6 +144,47 @@ SCHEMA_SQL = [
         INDEX idx_form_trigger (form_id, trigger_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
+    # Webhooks (1.13.0). The secret signs what is sent; it is never returned
+    # by a list. webhook_deliveries = what is still waiting to be sent or
+    # retried; webhook_log = the last 50 attempts per webhook.
+    """
+    CREATE TABLE IF NOT EXISTS form_webhooks (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        form_id       INT NOT NULL,
+        url           VARCHAR(500) NOT NULL,
+        secret        VARCHAR(80) NOT NULL,
+        allow_local   TINYINT(1) NOT NULL DEFAULT 0,
+        active        TINYINT(1) NOT NULL DEFAULT 1,
+        created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_form (form_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS webhook_deliveries (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        webhook_id    INT NOT NULL,
+        event         VARCHAR(20) NOT NULL DEFAULT 'submission',
+        body          LONGTEXT NOT NULL,
+        attempt       INT NOT NULL DEFAULT 0,
+        next_try      DATETIME NOT NULL,
+        created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_due (next_try),
+        INDEX idx_webhook (webhook_id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS webhook_log (
+        id            INT AUTO_INCREMENT PRIMARY KEY,
+        webhook_id    INT NOT NULL,
+        created_at    DATETIME NOT NULL,
+        event         VARCHAR(20) NOT NULL DEFAULT 'submission',
+        attempt       INT NOT NULL DEFAULT 1,
+        status_code   INT NULL,
+        ok            TINYINT(1) NOT NULL DEFAULT 0,
+        error         VARCHAR(300) NULL,
+        INDEX idx_webhook (webhook_id, id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    """,
 ]
 
 # Best-effort migration for a database that already has the pre-multi-form
@@ -226,6 +267,14 @@ MIGRATE_SQL = [
     # the visitor's device, with a button to switch). 'both' is what every
     # form did before, so existing forms look exactly the same.
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS theme_mode VARCHAR(5) NOT NULL DEFAULT 'both'",
+    # Close rules (1.13.0): close after N responses (NULL = no limit), an
+    # optional opening date, and the messages shown while closed / not open yet.
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS max_responses INT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS opens_on DATE NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS closed_message_en TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS closed_message_ar TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS opens_message_en TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS opens_message_ar TEXT NULL",
 ]
 
 # Ported straight from the old hardcoded index.html, so the form looks and
@@ -1180,8 +1229,12 @@ def clone_form(source_id, name, slug, port):
         conn.close()
 
 
+CLOSE_TEXT_COLUMNS = ("closed_message_en", "closed_message_ar", "opens_message_en", "opens_message_ar")
+
+
 def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabled_extra_langs=None,
-                 expiry_date=_UNSET, public_url=_UNSET, ask_core_fields=None):
+                 expiry_date=_UNSET, public_url=_UNSET, ask_core_fields=None,
+                 max_responses=_UNSET, opens_on=_UNSET, close_texts=None):
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -1202,6 +1255,14 @@ def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabl
             sets.append("public_url=%s"); params.append(public_url or None)
         if ask_core_fields is not None:
             sets.append("ask_core_fields=%s"); params.append(1 if ask_core_fields else 0)
+        if max_responses is not _UNSET:
+            sets.append("max_responses=%s"); params.append(max_responses)   # None = no limit
+        if opens_on is not _UNSET:
+            sets.append("opens_on=%s"); params.append(opens_on)
+        for col, val in (close_texts or {}).items():
+            if col not in CLOSE_TEXT_COLUMNS:
+                raise ValueError("unknown column")
+            sets.append(col + "=%s"); params.append(val)
         if sets:
             params.append(form_id)
             cur.execute("UPDATE forms SET " + ", ".join(sets) + " WHERE id=%s", params)
@@ -1238,6 +1299,9 @@ def delete_form_permanently(form_id):
         cur.execute("DELETE FROM feedback WHERE form_id=%s", (form_id,))
         cur.execute("DELETE FROM form_fields WHERE form_id=%s", (form_id,))
         cur.execute("DELETE FROM alert_rules WHERE form_id=%s", (form_id,))
+        cur.execute("DELETE FROM webhook_deliveries WHERE webhook_id IN (SELECT id FROM form_webhooks WHERE form_id=%s)", (form_id,))
+        cur.execute("DELETE FROM webhook_log WHERE webhook_id IN (SELECT id FROM form_webhooks WHERE form_id=%s)", (form_id,))
+        cur.execute("DELETE FROM form_webhooks WHERE form_id=%s", (form_id,))
         cur.execute("DELETE FROM admin_user_forms WHERE form_id=%s", (form_id,))
         cur.execute("DELETE FROM forms WHERE id=%s", (form_id,))
         conn.commit()
@@ -1479,30 +1543,318 @@ def make_reference():
     return "FB-%s-%s" % (day, tail)
 
 
-def save_feedback(form_id, rec):
+class FormClosedError(Exception):
+    """The form reached its response limit (raised inside the insert
+    transaction, so two quick submissions can't both slip past N-1)."""
+
+
+def count_responses(form_id):
     conn = _conn()
     try:
         cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM feedback WHERE form_id=%s", (form_id,))
+        n = cur.fetchone()[0]
+        cur.close()
+        return int(n)
+    finally:
+        conn.close()
+
+
+def response_counts(form_ids):
+    """{form_id: number of responses} for the given forms, one query."""
+    if not form_ids:
+        return {}
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT form_id, COUNT(*) FROM feedback WHERE form_id IN (%s) GROUP BY form_id"
+                    % ",".join(["%s"] * len(form_ids)), list(form_ids))
+        out = {int(f): int(n) for f, n in cur.fetchall()}
+        cur.close()
+        return out
+    finally:
+        conn.close()
+
+
+def save_feedback(form_id, rec):
+    """Saves one response and returns its reference. See save_feedback_full."""
+    return save_feedback_full(form_id, rec)["reference"]
+
+
+def save_feedback_full(form_id, rec):
+    """Saves one response. Returns {"reference", "id", "created_at"}.
+
+    The response limit is checked here, in the database: the form's row is
+    locked (SELECT ... FOR UPDATE) for the length of the insert, so a second
+    submission waits its turn and sees the first one already counted. Raises
+    FormClosedError when the limit is already reached."""
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT max_responses FROM forms WHERE id=%s", (form_id,))
+        row = cur.fetchone()
+        limited = bool(row and row[0] is not None)
+        conn.rollback()                      # end this read, so the count below is read fresh
+        if limited:
+            cur.execute("SELECT max_responses FROM forms WHERE id=%s FOR UPDATE", (form_id,))
+            row = cur.fetchone()
+            limit = row[0] if row else None
+            if limit is not None:
+                cur.execute("SELECT COUNT(*) FROM feedback WHERE form_id=%s", (form_id,))
+                if int(cur.fetchone()[0]) >= int(limit):
+                    conn.rollback()
+                    raise FormClosedError()
         for _ in range(5):                              # retry on rare collision
             ref = make_reference()
+            created = datetime.now(timezone.utc)
             try:
                 cur.execute(
                     """INSERT INTO feedback (form_id, reference, created_at, first_name, last_name,
                            email, consent, language, extra_fields, ip, user_agent, hidden_json)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                    (form_id, ref, datetime.now(timezone.utc), rec["firstName"], rec["lastName"],
+                    (form_id, ref, created, rec["firstName"], rec["lastName"],
                      rec["email"], 1, rec["language"], json.dumps(rec["extra"]),
                      rec["ip"], rec["userAgent"],
                      json.dumps(rec["hidden"], ensure_ascii=False) if rec.get("hidden") else None))
+                new_id = cur.lastrowid
                 conn.commit()
                 cur.close()
-                return ref
+                return {"reference": ref, "id": new_id,
+                        "created_at": created.strftime("%Y-%m-%dT%H:%M:%SZ")}
             except mysql.connector.Error as e:
                 if e.errno == 1062:                     # duplicate key on `reference`
-                    conn.rollback()
                     continue
                 raise
+        conn.rollback()
         raise DBError("could not allocate a reference number")
+    finally:
+        conn.close()
+
+
+def _retry_on_deadlock(fn):
+    """The webhook queue is written to by several threads at once (visitors,
+    the sender). The database may then abort one of two colliding
+    transactions (deadlock / lock wait); that is safe to simply try again."""
+    import functools
+    import time as _time
+
+    @functools.wraps(fn)
+    def run(*a, **kw):
+        for i in range(4):
+            try:
+                return fn(*a, **kw)
+            except mysql.connector.Error as e:
+                if getattr(e, "errno", None) in (1213, 1205, 1020) and i < 3:
+                    _time.sleep(0.05 * (i + 1))
+                    continue
+                raise
+    return run
+
+
+# ---------------------------------------------------------------- webhooks
+
+def list_webhooks(form_id):
+    """A form's webhooks, oldest first. The secret is NOT included, ever."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, form_id, url, allow_local, active, created_at FROM form_webhooks "
+                    "WHERE form_id=%s ORDER BY id", (form_id,))
+        rows = cur.fetchall()
+        for r in rows:
+            cur.execute("SELECT created_at, status_code, ok, error FROM webhook_log "
+                        "WHERE webhook_id=%s ORDER BY id DESC LIMIT 1", (r["id"],))
+            last = cur.fetchone()
+            r["allow_local"] = bool(r["allow_local"]); r["active"] = bool(r["active"])
+            r["last"] = ({"at": last["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ"),
+                          "status_code": last["status_code"],
+                          "ok": bool(last["ok"]), "error": last["error"]} if last else None)
+            r["created_at"] = str(r["created_at"])
+            cur.execute("SELECT COUNT(*) AS n FROM webhook_deliveries WHERE webhook_id=%s", (r["id"],))
+            r["waiting"] = int(cur.fetchone()["n"])
+        cur.close()
+        return rows
+    finally:
+        conn.close()
+
+
+def get_webhook(webhook_id, with_secret=False):
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id, form_id, url, allow_local, active" + (", secret" if with_secret else "")
+                    + " FROM form_webhooks WHERE id=%s", (webhook_id,))
+        row = cur.fetchone()
+        cur.close()
+        if row:
+            row["allow_local"] = bool(row["allow_local"]); row["active"] = bool(row["active"])
+        return row
+    finally:
+        conn.close()
+
+
+def count_webhooks(form_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM form_webhooks WHERE form_id=%s", (form_id,))
+        n = cur.fetchone()[0]
+        cur.close()
+        return int(n)
+    finally:
+        conn.close()
+
+
+def create_webhook(form_id, url, secret, allow_local):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO form_webhooks (form_id, url, secret, allow_local) VALUES (%s,%s,%s,%s)",
+                    (form_id, url, secret, 1 if allow_local else 0))
+        new_id = cur.lastrowid
+        conn.commit()
+        cur.close()
+        return new_id
+    finally:
+        conn.close()
+
+
+def update_webhook(webhook_id, url=None, allow_local=None, active=None, secret=None):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        sets, params = [], []
+        if url is not None:
+            sets.append("url=%s"); params.append(url)
+        if allow_local is not None:
+            sets.append("allow_local=%s"); params.append(1 if allow_local else 0)
+        if active is not None:
+            sets.append("active=%s"); params.append(1 if active else 0)
+        if secret is not None:
+            sets.append("secret=%s"); params.append(secret)
+        if sets:
+            params.append(webhook_id)
+            cur.execute("UPDATE form_webhooks SET " + ", ".join(sets) + " WHERE id=%s", params)
+            conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def delete_webhook(webhook_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("DELETE FROM webhook_deliveries WHERE webhook_id=%s", (webhook_id,))
+        cur.execute("DELETE FROM webhook_log WHERE webhook_id=%s", (webhook_id,))
+        cur.execute("DELETE FROM form_webhooks WHERE id=%s", (webhook_id,))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+@_retry_on_deadlock
+def enqueue_webhooks(form_id, body_text):
+    """Queue one delivery per active webhook of the form. Returns how many."""
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT id FROM form_webhooks WHERE form_id=%s AND active=1", (form_id,))
+        ids = [r[0] for r in cur.fetchall()]
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        for wid in ids:
+            cur.execute("INSERT INTO webhook_deliveries (webhook_id, event, body, attempt, next_try, created_at) "
+                        "VALUES (%s,'submission',%s,0,%s,%s)", (wid, body_text, now, now))
+        conn.commit()
+        cur.close()
+        return len(ids)
+    finally:
+        conn.close()
+
+
+@_retry_on_deadlock
+def claim_due_deliveries(limit=20):
+    """Deliveries whose time has come. Each is pushed 10 minutes ahead right
+    away, so a crash mid-send just means it is tried again later."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        # a locking read, so it sees the very latest rows (not an older snapshot)
+        cur.execute("SELECT id, webhook_id, event, body, attempt FROM webhook_deliveries "
+                    "WHERE next_try <= %s ORDER BY id LIMIT %s FOR UPDATE", (now, limit))
+        rows = cur.fetchall()
+        for r in rows:
+            cur.execute("UPDATE webhook_deliveries SET next_try=%s WHERE id=%s",
+                        (now + timedelta(minutes=10), r["id"]))
+        conn.commit()
+        out = []
+        for r in rows:
+            cur.execute("SELECT url, secret, allow_local, active FROM form_webhooks WHERE id=%s", (r["webhook_id"],))
+            w = cur.fetchone()
+            if not w:                                   # its webhook is gone: junk
+                cur.execute("DELETE FROM webhook_deliveries WHERE id=%s", (r["id"],))
+                continue
+            r.update(w)
+            out.append(r)
+        conn.commit()
+        cur.close()
+        return out
+    finally:
+        conn.close()
+
+
+@_retry_on_deadlock
+def finish_delivery(delivery_id, done, next_try=None, attempt=None):
+    """Remove a delivery (sent, or out of retries) or schedule its next try."""
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        if done:
+            cur.execute("DELETE FROM webhook_deliveries WHERE id=%s", (delivery_id,))
+        else:
+            cur.execute("UPDATE webhook_deliveries SET next_try=%s, attempt=%s WHERE id=%s",
+                        (next_try, attempt, delivery_id))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+@_retry_on_deadlock
+def log_webhook_attempt(webhook_id, event, attempt, status_code, ok, error):
+    """Add one line to the webhook's log and keep only the newest 50."""
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO webhook_log (webhook_id, created_at, event, attempt, status_code, ok, error) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s)",
+                    (webhook_id, datetime.now(timezone.utc).replace(tzinfo=None), event, attempt, status_code, 1 if ok else 0,
+                     (error[:300] if error else None)))
+        # keep the newest 50: everything at or below the 51st newest id goes
+        cur.execute("SELECT id FROM webhook_log WHERE webhook_id=%s ORDER BY id DESC LIMIT 1 OFFSET 50",
+                    (webhook_id,))
+        cut = cur.fetchone()
+        if cut:
+            cur.execute("DELETE FROM webhook_log WHERE webhook_id=%s AND id<=%s", (webhook_id, cut[0]))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def webhook_log(webhook_id):
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT created_at, event, attempt, status_code, ok, error FROM webhook_log "
+                    "WHERE webhook_id=%s ORDER BY id DESC LIMIT 50", (webhook_id,))
+        rows = cur.fetchall()
+        cur.close()
+        return [{"at": r["created_at"].strftime("%Y-%m-%dT%H:%M:%SZ"), "event": r["event"],
+                 "attempt": r["attempt"], "status_code": r["status_code"], "ok": bool(r["ok"]),
+                 "error": r["error"]} for r in rows]
     finally:
         conn.close()
 

@@ -3,6 +3,30 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.13.0
+
+- New: webhooks. A form's Manage panel can send every new response to another
+  system. Add a web address (https, or http for localhost) and we POST the answer
+  as JSON, signed with a secret so the other side can check it really came from
+  here (header X-OFF-Signature, an HMAC-SHA256 of the body). The secret is shown
+  once, with a Copy button, and you can make a new one at any time. Only answers
+  that were really saved are sent (questions hidden by a rule are not).
+- Sending never slows down or breaks the form. If the other side is down we try
+  again after 1 minute, 5 minutes and 30 minutes, and each webhook keeps a log of
+  its last 50 attempts, plus a "Send test" button. Tries that were waiting are not
+  lost if the app restarts.
+- Safety: addresses on a private or internal network (for example 10.x.x.x,
+  192.168.x.x, localhost) are refused unless you tick "Allow local network".
+  Managing webhooks needs the same permission as editing the form.
+- New: close rules. A form can close after a number of responses, open on a date
+  (before that it says "Opens on ..."), and show your own "closed" and "opens
+  soon" messages in English and Arabic. The expiry date works as before.
+  The database makes sure two people sending at the same moment cannot both take
+  the last place.
+- The form list now shows a status: Open, Scheduled, Closed (date) or Closed
+  (limit reached). Forms you already have are unchanged and stay open.
+- Also added: scripts/webhook_receiver.py, a tiny receiver for trying webhooks out.
+
 ## 1.12.0
 
 - New: a "Summary" tab, before Submissions, shows the results of one form at a

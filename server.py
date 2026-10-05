@@ -45,7 +45,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 import zoneinfo
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import db
@@ -56,6 +56,8 @@ import sanitise
 import templates
 import ui_strings
 import notifier
+import formstate
+import webhooks
 
 # Bundled read-only assets: sys._MEIPASS when frozen by PyInstaller (onedir's
 # _internal folder), the script's own folder otherwise. Never the same
@@ -552,6 +554,28 @@ def form_is_expired(form):
     return exp <= datetime.now().date()
 
 
+def current_form_state(form):
+    """open / scheduled / closed_date / closed_limit for one form. Only forms
+    with a response limit pay for a count."""
+    n = 0
+    if form and form.get("max_responses") is not None:
+        try:
+            n = db.count_responses(form["id"])
+        except Exception as e:
+            log("response count failed: %s" % e)
+    return formstate.form_state(form, n)
+
+
+def close_info(form, st):
+    """What the public page needs to show a closed / not-yet-open notice."""
+    reason = {formstate.SCHEDULED: "scheduled", formstate.CLOSED_DATE: "date",
+              formstate.CLOSED_LIMIT: "limit"}[st["state"]]
+    closed = reason != "scheduled"
+    return {"reason": reason, "opensOn": st["opens_on"],
+            "messageEn": sanitise.sanitise(form.get("closed_message_en" if closed else "opens_message_en")),
+            "messageAr": sanitise.sanitise(form.get("closed_message_ar" if closed else "opens_message_ar"))}
+
+
 def validate_submission(raw, active_fields, require_core=True, hidden_names=()):
     if raw.get("website"):
         return None, "honeypot"
@@ -911,8 +935,9 @@ class PublicRoutes:
         except Exception as e:
             log("form-fields query failed: %s" % e)
             return self.send_json(500, {"ok": False})
-        if form_is_expired(form):
-            return self.send_json(200, {"ok": True, "expired": True, "fields": [],
+        st = current_form_state(form) if form else None
+        if st and st["state"] != formstate.OPEN:
+            return self.send_json(200, {"ok": True, "expired": True, "closed": close_info(form, st), "fields": [],
                                         "branding": dict(form_look(form),
                                                          orgName=form.get("org_name") or form.get("name") or ""),
                                         "languages": {"en": True, "ar": True}, "extraLanguages": [],
@@ -972,8 +997,11 @@ class PublicRoutes:
         if not db.is_connected():
             return self.send_json(503, {"ok": False})
 
-        if form_is_expired(db.get_form(form_id)):
-            return self.send_json(410, {"ok": False, "error": "this form is no longer accepting responses"})
+        form = db.get_form(form_id)
+        st = current_form_state(form) if form else None
+        if st and st["state"] != formstate.OPEN:
+            return self.send_json(410, {"ok": False, "error": "this form is not accepting responses",
+                                        "reason": st["state"]})
 
         try:
             active_fields = db.list_fields(form_id, active_only=True)
@@ -981,7 +1009,6 @@ class PublicRoutes:
             log("could not load fields: %s" % e)
             return self.send_json(500, {"ok": False})
 
-        form = db.get_form(form_id)
         rec, err = validate_submission(raw, active_fields,
                                        require_core=bool(form and form.get("ask_core_fields", True)),
                                        hidden_names=logic.parse_hidden_names((form or {}).get("hidden_fields") or "")[0])
@@ -1004,13 +1031,19 @@ class PublicRoutes:
         rec["userAgent"] = (self.headers.get("User-Agent") or "")[:250]
 
         try:
-            ref = db.save_feedback(form_id, rec)
+            saved = db.save_feedback_full(form_id, rec)
+        except db.FormClosedError:
+            log("response limit reached on form %s; submission from %s refused" % (form_id, ip))
+            return self.send_json(410, {"ok": False, "error": "this form is not accepting responses",
+                                        "reason": formstate.CLOSED_LIMIT})
         except Exception as e:
             log("SAVE FAILED: %s" % e)
             return self.send_json(500, {"ok": False})
+        ref = saved["reference"]
 
         log("saved %s from %s (form %s)" % (ref, ip, form_id))
         _fire_new_submission_alert(form_id, rec, ref)
+        _queue_webhooks(form, saved, rec)
         return self.send_json(200, {"ok": True, "reference": ref})
 
 
@@ -1040,6 +1073,58 @@ def _fire_new_submission_alert(form_id, rec, ref):
         except Exception as e:
             log("new-submission alert failed: %s" % e)
     threading.Thread(target=run, daemon=True).start()
+
+
+def _queue_webhooks(form, saved, rec):
+    """Put the new response in the webhook queue. Never raises: a problem
+    here must not touch the visitor's own submission."""
+    try:
+        body = webhooks.build_body(form, saved["id"], saved["created_at"], rec.get("extra"), rec.get("hidden"))
+        if db.enqueue_webhooks(form["id"], body.decode("utf-8")):
+            webhooks.WAKE.set()
+    except Exception as e:
+        log("could not queue webhooks for form %s: %s" % (form.get("id"), e.__class__.__name__))
+
+
+def _deliver_one(d):
+    """Send one queued delivery, write the log line, then drop it or
+    schedule the next try (1 min, 5 min, 30 min)."""
+    attempt = d["attempt"] + 1
+    try:
+        if not d["active"]:
+            db.finish_delivery(d["id"], True)
+            return
+        code, err = webhooks.send(d["url"], d["secret"], d["body"].encode("utf-8"), d["event"],
+                                  bool(d["allow_local"]))
+        ok = err is None
+        db.log_webhook_attempt(d["webhook_id"], d["event"], attempt, code, ok, err)
+        if ok or attempt > len(webhooks.RETRY_DELAYS):
+            db.finish_delivery(d["id"], True)
+        else:
+            db.finish_delivery(d["id"], False,
+                               next_try=datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(seconds=webhooks.RETRY_DELAYS[attempt - 1]),
+                               attempt=attempt)
+    except Exception as e:
+        log("webhook delivery %s failed: %s %s" % (d.get("id"), e.__class__.__name__, getattr(e, "errno", "")))
+
+
+def _webhook_worker_loop():
+    """Background sender. Wakes when a response arrives, and every few
+    seconds to pick up retries that have come due. Survives a restart,
+    because the queue lives in the database."""
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=4)
+    while True:
+        webhooks.WAKE.wait(5)
+        webhooks.WAKE.clear()
+        if not db.is_connected():
+            continue
+        try:
+            due = db.claim_due_deliveries()
+            if due:
+                list(pool.map(_deliver_one, due))
+        except Exception as e:
+            log("webhook worker: %s %s" % (e.__class__.__name__, getattr(e, "errno", "")))
 
 
 def make_public_handler(form_id):
@@ -1212,6 +1297,12 @@ class AdminHandler(PublicRoutes, BaseHandler):
         m = re.match(r"^/admin/forms/(\d+)/summary$", path)
         if m:
             return self.get_form_summary(int(m.group(1)))
+        m = re.match(r"^/admin/forms/(\d+)/webhooks$", path)
+        if m:
+            return self.get_form_webhooks(int(m.group(1)))
+        m = re.match(r"^/admin/webhooks/(\d+)/log$", path)
+        if m:
+            return self.get_webhook_log(int(m.group(1)))
         m = re.match(r"^/admin/forms/(\d+)/branding$", path)
         if m:
             return self.get_admin_branding(int(m.group(1)))
@@ -1282,6 +1373,13 @@ class AdminHandler(PublicRoutes, BaseHandler):
         m = re.match(r"^/admin/forms/(\d+)/clone$", path)
         if m:
             return self.post_form_clone(int(m.group(1)))
+
+        m = re.match(r"^/admin/forms/(\d+)/webhooks$", path)
+        if m:
+            return self.post_webhook_create(int(m.group(1)))
+        m = re.match(r"^/admin/webhooks/(\d+)/(update|delete|regenerate|test)$", path)
+        if m:
+            return self.post_webhook_action(int(m.group(1)), m.group(2))
 
         m = re.match(r"^/admin/forms/(\d+)/(update|delete|restore|destroy)$", path)
         if m:
@@ -1845,6 +1943,10 @@ class AdminHandler(PublicRoutes, BaseHandler):
             return self.send_json(503, {"ok": False, "error": "database not connected"})
         forms = self._forms_visible_to(self.admin_identity())
         running = FORMS.status()
+        try:
+            counts = db.response_counts([f["id"] for f in forms if f.get("max_responses") is not None])
+        except Exception:
+            counts = {}
         out = [{
             "id": f["id"], "name": f["name"], "slug": f["slug"], "port": f["port"],
             "active": f["active"], "listening": f["id"] in running,
@@ -1854,6 +1956,14 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "lang_en": f["lang_en"], "lang_ar": f["lang_ar"],
             "enabled_extra_langs": f.get("enabled_extra_langs") or [],
             "expiry_date": str(f["expiry_date"]) if f.get("expiry_date") else None,
+            "opens_on": str(f["opens_on"]) if f.get("opens_on") else None,
+            "max_responses": f.get("max_responses"),
+            "response_count": counts.get(f["id"], 0) if f.get("max_responses") is not None else None,
+            "status": formstate.form_state(f, counts.get(f["id"], 0))["state"],
+            "closed_message_en": sanitise.sanitise(f.get("closed_message_en")),
+            "closed_message_ar": sanitise.sanitise(f.get("closed_message_ar")),
+            "opens_message_en": sanitise.sanitise(f.get("opens_message_en")),
+            "opens_message_ar": sanitise.sanitise(f.get("opens_message_ar")),
             "created_at": str(f["created_at"]) if f.get("created_at") else None,
         } for f in forms]
         return self.send_json(200, {"ok": True, "forms": out, "adminPort": ADMIN_PORT,
@@ -2050,6 +2160,40 @@ class AdminHandler(PublicRoutes, BaseHandler):
             if err:
                 return self.send_json(400, {"ok": False, "error": err})
             update_kwargs["expiry_date"] = expiry_date
+        if "opens_on" in body:
+            err, opens_on = self._parse_expiry_date(body.get("opens_on"))
+            if err:
+                return self.send_json(400, {"ok": False, "error": err.replace("expiry", "opening")})
+            update_kwargs["opens_on"] = opens_on
+        if "max_responses" in body:
+            raw_max = body.get("max_responses")
+            if raw_max in (None, ""):
+                update_kwargs["max_responses"] = None
+            else:
+                try:
+                    n = int(str(raw_max).strip())
+                except ValueError:
+                    n = 0
+                if n < 1 or n > 10000000:
+                    return self.send_json(400, {"ok": False, "error": "the response limit must be a whole number from 1 up (or empty for no limit)"})
+                update_kwargs["max_responses"] = n
+        # the opening date has to come before the expiry date
+        o = update_kwargs["opens_on"] if "opens_on" in update_kwargs else form.get("opens_on")
+        x = update_kwargs["expiry_date"] if "expiry_date" in update_kwargs else form.get("expiry_date")
+        if o and x and str(o) >= str(x):
+            return self.send_json(400, {"ok": False, "error": "the opening date must be before the expiry date"})
+        close_texts = {}
+        for col in db.CLOSE_TEXT_COLUMNS:
+            if col in body:
+                raw = body.get(col)
+                if not isinstance(raw, str) or len(raw) > 6000:
+                    return self.send_json(400, {"ok": False, "error": "that message is too long"})
+                safe = sanitise.sanitise(raw)
+                if len(safe) > 4000:
+                    return self.send_json(400, {"ok": False, "error": "that message is too long"})
+                close_texts[col] = safe
+        if close_texts:
+            update_kwargs["close_texts"] = close_texts
 
         db.update_form(form_id, name=name, port=port, lang_en=lang_en, lang_ar=lang_ar,
                         enabled_extra_langs=extra_langs, **update_kwargs)
@@ -2104,6 +2248,100 @@ class AdminHandler(PublicRoutes, BaseHandler):
         return self.send_json(200, {"ok": True})
 
     # ---- branding ---------------------------------------------------------
+
+    # ---- webhooks (same permission as editing the form) ------------------
+
+    def _webhook_permission(self, form_id):
+        return self.require_any_permission([("manage_forms", None), ("manage_form_settings", form_id)])
+
+    def _webhook_public(self, w):
+        """A webhook as the admin sees it: never the secret."""
+        return {"id": w["id"], "url": w["url"], "allow_local": w["allow_local"], "active": w["active"],
+                "last": w.get("last"), "waiting": w.get("waiting", 0)}
+
+    def get_form_webhooks(self, form_id):
+        if not self._webhook_permission(form_id):
+            return
+        if not db.get_form(form_id):
+            return self.send_json(404, {"ok": False, "error": "form not found"})
+        return self.send_json(200, {"ok": True, "webhooks": [self._webhook_public(w) for w in db.list_webhooks(form_id)]})
+
+    def get_webhook_log(self, webhook_id):
+        w = db.get_webhook(webhook_id)
+        if not w:
+            return self.send_json(404, {"ok": False, "error": "webhook not found"})
+        if not self._webhook_permission(w["form_id"]):
+            return
+        return self.send_json(200, {"ok": True, "log": db.webhook_log(webhook_id)})
+
+    def _check_webhook_target(self, url, allow_local):
+        """(error, cleaned url). Also refuses an address that already points
+        inside the network; a name that can't be found yet is let through
+        (the sender checks again every time)."""
+        err, parts = webhooks.check_url(url)
+        if err:
+            return err, None
+        if not allow_local:
+            try:
+                webhooks.resolve(parts[1], parts[2], False)
+            except webhooks.WebhookError as e:
+                if str(e).startswith("blocked"):
+                    return str(e), None
+        return None, url.strip()
+
+    def post_webhook_create(self, form_id):
+        if not self._webhook_permission(form_id):
+            return
+        if not db.get_form(form_id):
+            return self.send_json(404, {"ok": False, "error": "form not found"})
+        body = self.read_json_body() or {}
+        allow_local = bool(body.get("allow_local"))
+        err, url = self._check_webhook_target(body.get("url"), allow_local)
+        if err:
+            return self.send_json(400, {"ok": False, "error": err})
+        if db.count_webhooks(form_id) >= webhooks.MAX_PER_FORM:
+            return self.send_json(400, {"ok": False, "error": "a form can have at most %d webhooks" % webhooks.MAX_PER_FORM})
+        secret = webhooks.new_secret()
+        wid = db.create_webhook(form_id, url, secret, allow_local)
+        log("webhook %s added to form %s" % (wid, form_id))
+        # The secret is shown this one time only.
+        return self.send_json(200, {"ok": True, "id": wid, "secret": secret})
+
+    def post_webhook_action(self, webhook_id, action):
+        w = db.get_webhook(webhook_id)
+        if not w:
+            return self.send_json(404, {"ok": False, "error": "webhook not found"})
+        if not self._webhook_permission(w["form_id"]):
+            return
+        if action == "delete":
+            db.delete_webhook(webhook_id)
+            log("webhook %s deleted" % webhook_id)
+            return self.send_json(200, {"ok": True})
+        if action == "regenerate":
+            secret = webhooks.new_secret()
+            db.update_webhook(webhook_id, secret=secret)
+            log("webhook %s secret regenerated" % webhook_id)
+            return self.send_json(200, {"ok": True, "secret": secret})
+        if action == "update":
+            body = self.read_json_body() or {}
+            allow_local = bool(body["allow_local"]) if "allow_local" in body else w["allow_local"]
+            url = None
+            if "url" in body or "allow_local" in body:
+                err, url = self._check_webhook_target(body.get("url", w["url"]), allow_local)
+                if err:
+                    return self.send_json(400, {"ok": False, "error": err})
+            db.update_webhook(webhook_id, url=url if "url" in body else None,
+                              allow_local=allow_local if "allow_local" in body else None,
+                              active=bool(body["active"]) if "active" in body else None)
+            return self.send_json(200, {"ok": True})
+        # action == "test": sent right now, so the admin sees the answer
+        full = db.get_webhook(webhook_id, with_secret=True)
+        form = db.get_form(w["form_id"])
+        sample = webhooks.build_body(form, 0, datetime.now(timezone.utc).replace(tzinfo=None).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                     {"example_question": "Example answer"}, {}, event="test")
+        code, err = webhooks.send(full["url"], full["secret"], sample, "test", full["allow_local"])
+        db.log_webhook_attempt(webhook_id, "test", 1, code, err is None, err)
+        return self.send_json(200, {"ok": True, "sent": err is None, "status_code": code, "error": err})
 
     def get_admin_branding(self, form_id):
         if not self.require_permission("edit_branding", form_id):
@@ -3084,6 +3322,7 @@ def main():
 
     threading.Thread(target=_db_health_check_loop, daemon=True).start()
     threading.Thread(target=_daily_digest_loop, daemon=True).start()
+    threading.Thread(target=_webhook_worker_loop, daemon=True).start()
 
     srv = ThreadingHTTPServer((HOST, ADMIN_PORT), AdminHandler)
     srv.daemon_threads = True

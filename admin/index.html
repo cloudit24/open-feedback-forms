@@ -1102,7 +1102,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
 
   <!-- ============ form editor (simple inline panel, not a real dialog) ============ -->
   <div id="form-editor-view" class="hidden">
-    <div class="card" style="max-width:480px;margin:0 auto">
+    <div class="card" style="max-width:600px;margin:0 auto">
       <h2 id="form-editor-title">Add a form</h2>
       <label for="fe-name">Form name</label>
       <input type="text" id="fe-name" placeholder="e.g. Downtown Music Festival">
@@ -1132,6 +1132,45 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
       <label for="fe-expiry" style="margin-top:14px">Expiry date</label>
       <input type="date" id="fe-expiry">
       <p class="hint">Optional. Once reached, the public page stops accepting responses. Leave blank for no expiry.</p>
+
+      <p class="hint" id="fe-more-note">More options (opening date, response limit, closed messages and webhooks) appear here once the form has been created.</p>
+      <div id="fe-more" class="hidden">
+        <label for="fe-opens" style="margin-top:14px">Opens on</label>
+        <input type="date" id="fe-opens">
+        <p class="hint">Optional. Before this date the public page says "Opens on ..." and takes no responses. Must be before the expiry date.</p>
+
+        <label for="fe-max">Close after this many responses</label>
+        <input type="number" id="fe-max" min="1" step="1" placeholder="no limit">
+        <p class="hint" id="fe-max-hint">Optional. The form closes by itself once this many responses are saved. Leave blank for no limit.</p>
+
+        <label>Message when the form is closed <span class="hint" style="display:inline">(English)</span></label>
+        <div id="fe-closed-en"></div>
+        <label>Message when the form is closed <span class="hint" style="display:inline">(Arabic)</span></label>
+        <div id="fe-closed-ar"></div>
+        <label>Message before the form opens <span class="hint" style="display:inline">(English)</span></label>
+        <div id="fe-opens-en"></div>
+        <label>Message before the form opens <span class="hint" style="display:inline">(Arabic)</span></label>
+        <div id="fe-opens-ar"></div>
+        <p class="hint">Optional. Leave a message empty to show the standard wording. The "Opens on ..." date is always shown above your message.</p>
+
+        <h3 style="margin:22px 0 4px">Webhooks</h3>
+        <p class="hint">Send every new response to another system. We POST JSON signed with a secret (header <code>X-OFF-Signature</code>, an HMAC-SHA256 of the body). A failed send is tried again after 1, 5 and 30 minutes, and never slows down the visitor.</p>
+        <div id="wh-secret" class="hidden" style="border:1px solid var(--yellow);border-radius:8px;padding:10px 12px;margin:10px 0">
+          <b>Signing secret</b> <span class="hint" style="display:inline">- copy it now, it is shown only once.</span>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap">
+            <code id="wh-secret-val" dir="ltr" style="overflow-wrap:anywhere"></code>
+            <button type="button" class="btn-outline btn-sm" id="wh-secret-copy">Copy</button>
+            <button type="button" class="btn-outline btn-sm" id="wh-secret-hide">Done</button>
+          </div>
+        </div>
+        <div id="wh-list"></div>
+        <label for="wh-url">Add a webhook address</label>
+        <input type="text" id="wh-url" dir="ltr" placeholder="https://example.com/hooks/feedback">
+        <div class="check-row"><input type="checkbox" id="wh-local"><label for="wh-local" style="margin:0">Allow local network</label></div>
+        <p class="hint">Addresses on a private or internal network are refused unless this is ticked (this protects your network). https is required; http works for localhost only.</p>
+        <button class="btn-outline btn-sm" id="wh-add" type="button">Add webhook</button>
+        <div class="msg" id="wh-msg" style="margin-top:8px"></div>
+      </div>
 
       <div class="msg bad" id="form-editor-msg"></div>
       <div style="display:flex;gap:10px;margin-top:16px">
@@ -1559,6 +1598,20 @@ function sortForms(list){
   });
   return sorted;
 }
+/* Open / Scheduled / Closed (date) / Closed (limit reached): the server works
+   it out (the same rule it uses to accept or refuse a submission). */
+function statusBadge(f){
+  var txt, cls = "on";
+  if (f.status === "scheduled"){ txt = "Scheduled \u00b7 opens " + f.opens_on; cls = "off"; }
+  else if (f.status === "closed_date"){ txt = "Closed (" + f.expiry_date + ")"; cls = "req"; }
+  else if (f.status === "closed_limit"){ txt = "Closed (limit reached)"; cls = "req"; }
+  else {
+    txt = "Open";
+    if (f.max_responses != null) txt += " \u00b7 " + f.response_count + " of " + f.max_responses + " responses";
+    if (f.expiry_date) txt += " \u00b7 closes " + f.expiry_date;
+  }
+  return '<span class="badge ' + cls + '">' + escapeHtml(txt) + '</span>';
+}
 function renderForms(){
   var box = $("forms-list");
   box.innerHTML = "";
@@ -1568,15 +1621,13 @@ function renderForms(){
   sortForms(active).forEach(function(f){
     var row = document.createElement("div");
     row.className = "form-row";
-    var expired = f.expiry_date && f.expiry_date <= new Date().toISOString().slice(0, 10);
     row.innerHTML =
       '<div class="info"><b>' + escapeHtml(f.name) + '</b>' +
       '<div class="meta">port <code>' + f.port + '</code> · ' + escapeHtml(f.url) +
       ' · also at <a href="' + escapeHtml(sharedFormPath(f)) + '" target="_blank" rel="noopener"><code>' +
       escapeHtml(sharedFormPath(f)) + '</code></a>' +
       ' · <span class="badge ' + (f.listening ? "on" : "off") + '">' + (f.listening ? "listening" : "not listening") + '</span>' +
-      (f.expiry_date ? ' · <span class="badge ' + (expired ? "req" : "off") + '">' +
-        (expired ? "expired " : "expires ") + escapeHtml(f.expiry_date) + '</span>' : '') +
+      ' · ' + statusBadge(f) +
       '</div></div>';
     var actions = document.createElement("div");
     actions.className = "actions";
@@ -1782,6 +1833,19 @@ function openFormEditor(form){
   $("fe-expiry").value = (form && form.expiry_date) || "";
   $("fe-public-url").value = (form && form.public_url) || "";
   $("fe-ask-core").checked = form ? form.ask_core_fields !== false : false;
+  $("fe-more").classList.toggle("hidden", !form);
+  $("fe-more-note").classList.toggle("hidden", !!form);
+  $("fe-opens").value = (form && form.opens_on) || "";
+  $("fe-max").value = (form && form.max_responses != null) ? form.max_responses : "";
+  $("fe-max-hint").textContent = (form && form.max_responses != null)
+    ? "Optional. Now " + form.response_count + " of " + form.max_responses + " responses. Leave blank for no limit."
+    : "Optional. The form closes by itself once this many responses are saved. Leave blank for no limit.";
+  feClosedEn.setHtml(form ? form.closed_message_en : ""); feClosedAr.setHtml(form ? form.closed_message_ar : "");
+  feOpensEn.setHtml(form ? form.opens_message_en : ""); feOpensAr.setHtml(form ? form.opens_message_ar : "");
+  $("wh-secret").classList.add("hidden"); $("wh-secret-val").textContent = "";
+  $("wh-url").value = ""; $("wh-local").checked = false; clearFlash("wh-msg");
+  $("wh-list").innerHTML = "";
+  if (form) loadWebhooks();
   $("fe-port-hint").innerHTML = STATE.publishedPorts
     ? 'Leave blank and a free port is picked from <code>' + escapeHtml(STATE.autoPortRange) + '</code>. ' +
       'In Docker only published ports can be reached from outside — this install publishes <code>' +
@@ -1850,6 +1914,12 @@ $("fe-save").addEventListener("click", function(){
                   expiry_date: $("fe-expiry").value || "",
                   public_url: $("fe-public-url").value.trim(),
                   ask_core_fields: $("fe-ask-core").checked };
+  if (STATE.editingFormId){
+    payload.opens_on = $("fe-opens").value || "";
+    payload.max_responses = $("fe-max").value.trim();
+    payload.closed_message_en = feClosedEn.getHtml(); payload.closed_message_ar = feClosedAr.getHtml();
+    payload.opens_message_en = feOpensEn.getHtml(); payload.opens_message_ar = feOpensAr.getHtml();
+  }
   if (!STATE.editingFormId && STATE.newFormTemplate){ payload.template = STATE.newFormTemplate; }
   var url = STATE.editingFormId ? "/admin/forms/" + STATE.editingFormId + "/update" : "/admin/forms";
   api("POST", url, payload).then(function(res){
@@ -3071,6 +3141,126 @@ var welcomeEn = makeEditor($("br-welcome-text-en"), "ltr", "Shown under the welc
 var welcomeAr = makeEditor($("br-welcome-text-ar"), "rtl", "يظهر تحت عنوان الترحيب", function(){});
 var thanksEn = makeEditor($("br-thanks-text-en"), "ltr", "Shown after the form is sent", function(){});
 var thanksAr = makeEditor($("br-thanks-text-ar"), "rtl", "يظهر بعد إرسال النموذج", function(){});
+var feClosedEn = makeEditor($("fe-closed-en"), "ltr", "Shown when the form is closed", function(){});
+var feClosedAr = makeEditor($("fe-closed-ar"), "rtl", "يظهر عندما يكون النموذج مغلقاً", function(){});
+var feOpensEn = makeEditor($("fe-opens-en"), "ltr", "Shown before the form opens", function(){});
+var feOpensAr = makeEditor($("fe-opens-ar"), "rtl", "يظهر قبل فتح النموذج", function(){});
+
+/* ------------------------------------------------------------ webhooks
+   Managed from a form's Manage panel (same permission as editing the form).
+   The signing secret comes back only when a webhook is created or its secret
+   is regenerated, and is shown once. */
+function showWebhookSecret(secret){
+  $("wh-secret-val").textContent = secret;
+  $("wh-secret").classList.remove("hidden");
+}
+$("wh-secret-hide").addEventListener("click", function(){
+  $("wh-secret").classList.add("hidden"); $("wh-secret-val").textContent = "";
+});
+$("wh-secret-copy").addEventListener("click", function(){
+  var t = $("wh-secret-val").textContent, btn = this;
+  function done(){ btn.textContent = "Copied"; setTimeout(function(){ btn.textContent = "Copy"; }, 1500); }
+  if (navigator.clipboard && navigator.clipboard.writeText){ navigator.clipboard.writeText(t).then(done, function(){}); }
+  else {
+    var r = document.createRange(); r.selectNodeContents($("wh-secret-val"));
+    var sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    try { document.execCommand("copy"); done(); } catch(e){}
+  }
+});
+function whWhen(iso){
+  if (!iso) return "";
+  var d = new Date(iso);
+  return isNaN(d) ? iso : d.toLocaleString();
+}
+function loadWebhooks(){
+  var id = STATE.editingFormId;
+  if (!id) return;
+  api("GET", "/admin/forms/" + id + "/webhooks").then(function(res){
+    if (STATE.editingFormId !== id) return;
+    if (res.status !== 200){ flash("wh-msg", (res.body && res.body.error) || "Could not load the webhooks."); return; }
+    renderWebhooks(res.body.webhooks || []);
+  });
+}
+function renderWebhooks(list){
+  var box = $("wh-list");
+  box.innerHTML = "";
+  if (!list.length){ box.innerHTML = '<p class="hint">No webhooks yet.</p>'; return; }
+  list.forEach(function(w){
+    var row = document.createElement("div");
+    row.style.cssText = "border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin:8px 0";
+    var last = w.last
+      ? '<span class="badge ' + (w.last.ok ? "on" : "req") + '">' + (w.last.ok ? "last send ok" : "last send failed") +
+        (w.last.status_code ? " (" + w.last.status_code + ")" : "") + '</span> <span class="hint" style="display:inline">' + escapeHtml(whWhen(w.last.at)) + '</span>'
+      : '<span class="hint" style="display:inline">not used yet</span>';
+    row.innerHTML = '<div dir="ltr" style="overflow-wrap:anywhere"><code>' + escapeHtml(w.url) + '</code></div>' +
+      '<div style="margin-top:4px"><span class="badge ' + (w.active ? "on" : "off") + '">' + (w.active ? "active" : "paused") + '</span> ' +
+      (w.allow_local ? '<span class="badge off">local network allowed</span> ' : '') + last +
+      (w.waiting ? ' <span class="hint" style="display:inline">' + w.waiting + ' waiting to send</span>' : '') + '</div>';
+    var acts = document.createElement("div");
+    acts.className = "actions"; acts.style.marginTop = "8px";
+    var logBox = document.createElement("div");
+    function act(label, fn, danger){
+      var b = mkBtn(label, fn); b.className = "btn-outline btn-sm" + (danger ? " btn-danger" : ""); acts.appendChild(b); return b;
+    }
+    act("Send test", function(){
+      var b = this; b.disabled = true; b.textContent = "Sending...";
+      api("POST", "/admin/webhooks/" + w.id + "/test", {}).then(function(res){
+        b.disabled = false; b.textContent = "Send test";
+        var r = res.body || {};
+        if (r.sent) flash("wh-msg", "Test sent. The receiver answered " + r.status_code + ".", true);
+        else flash("wh-msg", "Test failed: " + (r.error || "unknown error"));
+        loadWebhooks();
+      });
+    });
+    act("Log", function(){
+      if (logBox.innerHTML){ logBox.innerHTML = ""; return; }
+      api("GET", "/admin/webhooks/" + w.id + "/log").then(function(res){
+        var rows = (res.body && res.body.log) || [];
+        if (!rows.length){ logBox.innerHTML = '<p class="hint">Nothing sent yet.</p>'; return; }
+        var h = '<div style="max-height:200px;overflow:auto;margin-top:8px"><table style="width:100%;font-size:12px"><tr><th>When</th><th>Kind</th><th>Try</th><th>Result</th></tr>';
+        rows.forEach(function(r){
+          h += '<tr><td>' + escapeHtml(whWhen(r.at)) + '</td><td>' + escapeHtml(r.event) + '</td><td>' + r.attempt + '</td><td>' +
+            (r.ok ? "OK" : "Failed") + (r.status_code ? " (" + r.status_code + ")" : "") + (r.error ? " - " + escapeHtml(r.error) : "") + '</td></tr>';
+        });
+        logBox.innerHTML = h + '</table></div>';
+      });
+    });
+    act("Regenerate secret", function(){
+      if (!confirm("Make a new signing secret? The old one stops working at once, so update the receiver too.")) return;
+      api("POST", "/admin/webhooks/" + w.id + "/regenerate", {}).then(function(res){
+        if (res.body && res.body.ok) showWebhookSecret(res.body.secret);
+        else flash("wh-msg", (res.body && res.body.error) || "Could not make a new secret.");
+      });
+    });
+    act(w.active ? "Pause" : "Resume", function(){
+      api("POST", "/admin/webhooks/" + w.id + "/update", {active: !w.active}).then(loadWebhooks);
+    });
+    act("Allow local network: " + (w.allow_local ? "on" : "off"), function(){
+      api("POST", "/admin/webhooks/" + w.id + "/update", {allow_local: !w.allow_local}).then(function(res){
+        if (res.body && !res.body.ok) flash("wh-msg", res.body.error || "Could not change that.");
+        loadWebhooks();
+      });
+    });
+    act("Delete", function(){
+      if (!confirm("Delete this webhook and its log?")) return;
+      api("POST", "/admin/webhooks/" + w.id + "/delete", {}).then(loadWebhooks);
+    }, true);
+    row.appendChild(acts); row.appendChild(logBox);
+    box.appendChild(row);
+  });
+}
+$("wh-add").addEventListener("click", function(){
+  var id = STATE.editingFormId;
+  if (!id) return;
+  clearFlash("wh-msg");
+  api("POST", "/admin/forms/" + id + "/webhooks", {url: $("wh-url").value.trim(), allow_local: $("wh-local").checked}).then(function(res){
+    var b = res.body || {};
+    if (!b.ok){ flash("wh-msg", b.error || "Could not add the webhook."); return; }
+    $("wh-url").value = ""; $("wh-local").checked = false;
+    showWebhookSecret(b.secret);
+    loadWebhooks();
+  });
+});
 var LAYOUT_HINTS = {
   single_page: "Everything on one page. Forms made before this option keep this.",
   steps: "Questions are grouped by their category, or wherever you add a step break in the Questions list. Visitors move with Next and Back.",
@@ -3630,7 +3820,7 @@ var PERMISSION_LABELS = {
   export_submissions: "Export submissions as CSV (assigned forms)",
   edit_fields: "Edit questions (assigned forms)",
   edit_branding: "Edit branding (assigned forms)",
-  manage_form_settings: "Edit form name/port/languages/expiry (assigned forms)",
+  manage_form_settings: "Edit form name/port/languages/expiry, close rules and webhooks (assigned forms)",
   manage_form_alerts: "Manage alert settings (assigned forms)",
 };
 
