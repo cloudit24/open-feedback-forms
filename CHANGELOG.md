@@ -3,6 +3,29 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.10.0
+
+- New: choose how each form is laid out, under Edit > Branding > Layout.
+  "One page" is the old look and is what every existing form keeps. "Steps"
+  shows groups of questions with Next and Back. "One question at a time" shows
+  one question per screen. New forms start as one question at a time.
+- Steps follow the question groups (categories), or wherever you press
+  "Step break" next to a question in the Questions list.
+- One at a time: a tap on a rating or single-choice answer moves on after a
+  short pause. Enter goes next, number keys (and A, B, C for button answers)
+  pick an answer, and the Up arrow goes back. A grid of questions is one
+  screen and moves on once every row is answered.
+- A progress bar with "3 of 12" (and Arabic wording) runs along the top and
+  fills from the reading side.
+- Optional welcome screen (title, text, Start button) and thank-you screen
+  (title, text, optional button with a link), each in English and Arabic.
+  The text boxes use the same editor as the description.
+- Answers are kept when you go back, switch language or reload the page
+  mid-form (they live only in that browser tab and are cleared once sent).
+- The form is still sent once at the end, exactly as before.
+- Fixed: the "0 / 1000" counter under a long-answer box could throw an error
+  on forms with questions after it.
+
 ## 1.9.0
 
 - New: rating and multiple-choice questions can be tapped instead of picked

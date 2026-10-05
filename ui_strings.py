@@ -37,6 +37,8 @@ UI_STRINGS = {
     "doneTitle": "Thank you — we've got it",
     "doneBody": "Your feedback has reached us. If you asked us to contact you, someone will be in touch.",
     "refLabel": "YOUR REFERENCE", "again": "Send more feedback",
+    "start": "Start", "next": "Next", "back": "Back", "progress": "{n} of {total}",
+    "progressLabel": "Progress",
 }
 
 # The "{org}" placeholder is substituted at render time, not translated —

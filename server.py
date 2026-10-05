@@ -282,6 +282,12 @@ THEME_MODES = ("both", "light", "dark")
 FORM_FONTS = ("system", "inter", "cairo", "tajawal", "plex", "kufi")
 TEXT_SIZES = ("small", "normal", "large")
 TITLE_ALIGNS = ("start", "center")
+LAYOUT_MODES = ("single_page", "steps", "one_at_a_time")
+# Welcome / thank-you screen columns on `forms`: short text, styled text, link.
+SCREEN_TEXT_COLS = ("welcome_title_en", "welcome_title_ar", "thanks_title_en", "thanks_title_ar",
+                    "thanks_button_en", "thanks_button_ar")
+SCREEN_RICH_COLS = ("welcome_text_en", "welcome_text_ar", "thanks_text_en", "thanks_text_ar")
+URL_RE = re.compile(r"^https?://[^\s<>\"']{1,490}$", re.I)
 FONT_FILE_RE = re.compile(r"^[a-z0-9-]+\.woff2$")
 
 
@@ -367,6 +373,20 @@ def form_look(form):
         "font": form.get("font") if form.get("font") in FORM_FONTS else "system",
         "textSize": form.get("text_size") if form.get("text_size") in TEXT_SIZES else "normal",
         "titleAlign": form.get("title_align") if form.get("title_align") in TITLE_ALIGNS else "start",
+        "layoutMode": form.get("layout_mode") if form.get("layout_mode") in LAYOUT_MODES else "single_page",
+        "welcomeEnabled": bool(form.get("welcome_enabled")),
+        "welcomeTitleEn": (form.get("welcome_title_en") or "").strip(),
+        "welcomeTitleAr": (form.get("welcome_title_ar") or "").strip(),
+        "welcomeTextEn": sanitise.sanitise(form.get("welcome_text_en")),
+        "welcomeTextAr": sanitise.sanitise(form.get("welcome_text_ar")),
+        "thanksTitleEn": (form.get("thanks_title_en") or "").strip(),
+        "thanksTitleAr": (form.get("thanks_title_ar") or "").strip(),
+        "thanksTextEn": sanitise.sanitise(form.get("thanks_text_en")),
+        "thanksTextAr": sanitise.sanitise(form.get("thanks_text_ar")),
+        "thanksButtonEn": (form.get("thanks_button_en") or "").strip(),
+        "thanksButtonAr": (form.get("thanks_button_ar") or "").strip(),
+        # only ever a plain http(s) address; anything else is dropped here too
+        "thanksUrl": (form.get("thanks_url") or "").strip() if URL_RE.match((form.get("thanks_url") or "").strip()) else "",
     }
 
 
@@ -891,7 +911,9 @@ class PublicRoutes:
                 "label_ar": f["label_ar"], "labels_extra": f.get("labels_extra") or {},
                 "field_type": f["field_type"],
                 "display_style": clean_display_style(f["field_type"], f.get("display_style")),
-                "options": f["options"], "required": f["required"]} for f in fields]
+                "options": f["options"], "required": f["required"],
+                "category": (f.get("category") or "").strip(),
+                "page_break": bool(f.get("page_break_before"))} for f in fields]
         branding = {
             "orgName": (form and (form.get("org_name") or form.get("name"))) or "",
             "primaryColor": (form and form.get("primary_color")) or "#FFEC01",
@@ -1259,6 +1281,10 @@ class AdminHandler(PublicRoutes, BaseHandler):
         m = re.match(r"^/admin/forms/(\d+)/branding$", path)
         if m:
             return self.post_form_branding(int(m.group(1)))
+
+        m = re.match(r"^/admin/fields/(\d+)/page-break$", path)
+        if m:
+            return self.post_field_page_break(int(m.group(1)))
 
         m = re.match(r"^/admin/fields/(\d+)/(update|delete|restore)$", path)
         if m:
@@ -2080,6 +2106,19 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "font": form_look(form)["font"],
             "text_size": form_look(form)["textSize"],
             "title_align": form_look(form)["titleAlign"],
+            "layout_mode": form_look(form)["layoutMode"],
+            "welcome_enabled": bool(form.get("welcome_enabled")),
+            "welcome_title_en": form.get("welcome_title_en") or "",
+            "welcome_title_ar": form.get("welcome_title_ar") or "",
+            "welcome_text_en": sanitise.sanitise(form.get("welcome_text_en")),
+            "welcome_text_ar": sanitise.sanitise(form.get("welcome_text_ar")),
+            "thanks_title_en": form.get("thanks_title_en") or "",
+            "thanks_title_ar": form.get("thanks_title_ar") or "",
+            "thanks_text_en": sanitise.sanitise(form.get("thanks_text_en")),
+            "thanks_text_ar": sanitise.sanitise(form.get("thanks_text_ar")),
+            "thanks_button_en": form.get("thanks_button_en") or "",
+            "thanks_button_ar": form.get("thanks_button_ar") or "",
+            "thanks_url": form_look(form)["thanksUrl"],
             "form_name": form.get("name") or "",
             "theme_mode": form.get("theme_mode") or "both",
             "hasLogo": bool(form.get("logo_filename")),
@@ -2131,6 +2170,33 @@ class AdminHandler(PublicRoutes, BaseHandler):
             if title_align not in TITLE_ALIGNS:
                 return self.send_json(400, {"ok": False, "error": "title alignment must be start or center"})
 
+        # Layout, welcome screen and thank-you screen. Only what was sent is
+        # changed; styled text goes through the same cleaner as the description.
+        extra = {}
+        if "layout_mode" in body:
+            if body.get("layout_mode") not in LAYOUT_MODES:
+                return self.send_json(400, {"ok": False, "error": "layout must be one page, steps or one question at a time"})
+            extra["layout_mode"] = body["layout_mode"]
+        if "welcome_enabled" in body:
+            extra["welcome_enabled"] = 1 if body.get("welcome_enabled") else 0
+        for col in SCREEN_TEXT_COLS:
+            if col in body:
+                extra[col] = clean(body.get(col), 80 if col.startswith("thanks_button") else 200) or None
+        for col in SCREEN_RICH_COLS:
+            if col in body:
+                raw = body.get(col)
+                if not isinstance(raw, str) or len(raw) > 6000:
+                    return self.send_json(400, {"ok": False, "error": "that text is too long"})
+                safe = sanitise.sanitise(raw)
+                if len(safe) > 4000:
+                    return self.send_json(400, {"ok": False, "error": "that text is too long"})
+                extra[col] = safe
+        if "thanks_url" in body:
+            url = clean(body.get("thanks_url"), 500)
+            if url and not URL_RE.match(url):
+                return self.send_json(400, {"ok": False, "error": "the button link must start with http:// or https://"})
+            extra["thanks_url"] = url or None
+
         primary_color = body.get("primary_color") or None
         ink_color = body.get("ink_color") or None
         for c in (primary_color, ink_color):
@@ -2167,7 +2233,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
                             ink_color=ink_color, title_en=title_en, title_ar=title_ar,
                             description_en=descriptions["description_en"],
                             description_ar=descriptions["description_ar"],
-                            font=font, text_size=text_size, title_align=title_align,
+                            font=font, text_size=text_size, title_align=title_align, extra=extra,
                             logo_filename=logo_filename, clear_logo=clear_logo,
                             theme_mode=theme_mode)
         return self.send_json(200, {"ok": True})
@@ -2328,6 +2394,16 @@ class AdminHandler(PublicRoutes, BaseHandler):
         if not self.require_permission("edit_fields", existing["form_id"]):
             return
         db.set_field_active(field_id, False)
+        return self.send_json(200, {"ok": True})
+
+    def post_field_page_break(self, field_id):
+        existing = db.get_field(field_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "field not found"})
+        if not self.require_permission("edit_fields", existing["form_id"]):
+            return
+        body = self.read_json_body() or {}
+        db.set_field_page_break(field_id, bool(body.get("on")))
         return self.send_json(200, {"ok": True})
 
     def post_field_restore(self, field_id):

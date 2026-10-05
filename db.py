@@ -185,6 +185,23 @@ MIGRATE_SQL = [
     # How a rating / dropdown question is shown (1.9.0): stars, faces, numbers,
     # scale, buttons or grid. NULL = exactly as before (stars / a dropdown).
     "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS display_style VARCHAR(20) NULL",
+    # Layout (1.10.0): one page (what every older form keeps), steps, or one
+    # question at a time. page_break_before = "a new step starts at this
+    # question". The welcome and thank-you screens are all optional.
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS layout_mode VARCHAR(20) NOT NULL DEFAULT 'single_page'",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS welcome_enabled TINYINT(1) NOT NULL DEFAULT 0",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS welcome_title_en VARCHAR(200) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS welcome_title_ar VARCHAR(200) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS welcome_text_en TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS welcome_text_ar TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_title_en VARCHAR(200) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_title_ar VARCHAR(200) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_text_en TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_text_ar TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_button_en VARCHAR(80) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_button_ar VARCHAR(80) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_url VARCHAR(500) NULL",
+    "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS page_break_before TINYINT(1) NOT NULL DEFAULT 0",
     "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS expiry_date DATE NULL",
     # 'date' questions (added in 1.3.0) — widening the list keeps every
@@ -731,8 +748,8 @@ def _seed_default_form_if_empty(conn, default_port):
     if count == 0:
         tpl = templates.get(templates.DEFAULT_TEMPLATE_KEY)
         cur.execute(
-            "INSERT INTO forms (id, name, slug, port, active, title_en, title_ar, description_en, description_ar) "
-            "VALUES (1,%s,%s,%s,1,%s,%s,%s,%s)",
+            "INSERT INTO forms (id, name, slug, port, active, title_en, title_ar, description_en, description_ar, layout_mode) "
+            "VALUES (1,%s,%s,%s,1,%s,%s,%s,%s,'one_at_a_time')",
             (templates.DEFAULT_FORM_NAME, "main", default_port,
              tpl["title_en"], tpl["title_ar"],
              sanitise.sanitise(tpl["description_en"]), sanitise.sanitise(tpl["description_ar"])))
@@ -916,7 +933,7 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
         extra = json.dumps(enabled_extra_langs) if enabled_extra_langs else None
         cur.execute(
             "INSERT INTO forms (name, slug, port, active, lang_en, lang_ar, enabled_extra_langs_json, "
-            "expiry_date, public_url, ask_core_fields) VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s)",
+            "expiry_date, public_url, ask_core_fields, layout_mode) VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,'one_at_a_time')",
             (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra, expiry_date,
              public_url or None, 1 if ask_core_fields else 0))
         new_id = cur.lastrowid
@@ -958,21 +975,31 @@ def clone_form(source_id, name, slug, port):
                                   lang_en, lang_ar, subtitle_en, subtitle_ar,
                                   enabled_extra_langs_json, expiry_date, ask_core_fields,
                                   theme_mode, title_en, title_ar, description_en, description_ar,
-                                  font, text_size, title_align)
-               VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                  font, text_size, title_align, layout_mode, welcome_enabled,
+                                  welcome_title_en, welcome_title_ar, welcome_text_en, welcome_text_ar,
+                                  thanks_title_en, thanks_title_ar, thanks_text_en, thanks_text_ar,
+                                  thanks_button_en, thanks_button_ar, thanks_url)
+               VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
+                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (name, slug, port, src["org_name"], src["primary_color"], src["ink_color"],
              src["lang_en"], src["lang_ar"], src["subtitle_en"], src["subtitle_ar"],
              src["enabled_extra_langs_json"], src["expiry_date"], src.get("ask_core_fields", 1),
              src.get("theme_mode") or "both",
              src.get("title_en"), src.get("title_ar"), src.get("description_en"), src.get("description_ar"),
-             src.get("font") or "system", src.get("text_size") or "normal", src.get("title_align") or "start"))
+             src.get("font") or "system", src.get("text_size") or "normal", src.get("title_align") or "start",
+             src.get("layout_mode") or "single_page", src.get("welcome_enabled") or 0,
+             src.get("welcome_title_en"), src.get("welcome_title_ar"),
+             src.get("welcome_text_en"), src.get("welcome_text_ar"),
+             src.get("thanks_title_en"), src.get("thanks_title_ar"),
+             src.get("thanks_text_en"), src.get("thanks_text_ar"),
+             src.get("thanks_button_en"), src.get("thanks_button_ar"), src.get("thanks_url")))
         new_id = cur.lastrowid
         cur.execute(
             """INSERT INTO form_fields
                    (form_id, field_key, label_en, label_ar, labels_extra_json, field_type,
-                    options_json, required, sort_order, active, display_style)
+                    options_json, required, sort_order, active, display_style, page_break_before)
                SELECT %s, field_key, label_en, label_ar, labels_extra_json, field_type,
-                      options_json, required, sort_order, active, display_style
+                      options_json, required, sort_order, active, display_style, page_break_before
                  FROM form_fields WHERE form_id=%s""",
             (new_id, source_id))
         copied_fields = cur.rowcount
@@ -1050,10 +1077,19 @@ def delete_form_permanently(form_id):
         conn.close()
 
 
+BRANDING_EXTRA_COLUMNS = ("layout_mode", "welcome_enabled", "welcome_title_en", "welcome_title_ar",
+                          "welcome_text_en", "welcome_text_ar", "thanks_title_en", "thanks_title_ar",
+                          "thanks_text_en", "thanks_text_ar", "thanks_button_en", "thanks_button_ar",
+                          "thanks_url")
+
+
 def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
                      subtitle_en=None, subtitle_ar=None, logo_filename=None, clear_logo=False,
                      theme_mode=None, title_en=None, title_ar=None, description_en=None,
-                     description_ar=None, font=None, text_size=None, title_align=None):
+                     description_ar=None, font=None, text_size=None, title_align=None,
+                     extra=None):
+    """`extra` = {column: value} for the layout and welcome / thank-you
+    columns (names come from server.py's fixed list, never from a request)."""
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -1085,6 +1121,10 @@ def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
             sets.append("text_size=%s"); params.append(text_size)
         if title_align is not None:
             sets.append("title_align=%s"); params.append(title_align)
+        for col, val in (extra or {}).items():
+            if col not in BRANDING_EXTRA_COLUMNS:
+                raise ValueError("unknown column")
+            sets.append(col + "=%s"); params.append(val)
         if clear_logo:
             sets.append("logo_filename=NULL")
         elif logo_filename is not None:
@@ -1104,7 +1144,10 @@ def list_fields(form_id, active_only=False):
     conn = _conn()
     try:
         cur = conn.cursor(dictionary=True)
-        sql = "SELECT * FROM form_fields WHERE form_id = %s"
+        # category comes from the question's catalogue entry (used to group steps)
+        sql = ("SELECT form_fields.*, (SELECT k.category FROM field_keys k "
+               "WHERE k.field_key = form_fields.field_key LIMIT 1) AS category "
+               "FROM form_fields WHERE form_id = %s")
         params = [form_id]
         if active_only:
             sql += " AND active = 1"
@@ -1209,6 +1252,17 @@ def set_field_active(field_id, active):
     try:
         cur = conn.cursor()
         cur.execute("UPDATE form_fields SET active=%s WHERE id=%s", (1 if active else 0, field_id))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
+def set_field_page_break(field_id, on):
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE form_fields SET page_break_before=%s WHERE id=%s", (1 if on else 0, field_id))
         conn.commit()
         cur.close()
     finally:

@@ -102,6 +102,10 @@ textarea{resize:vertical;min-height:70px}
   display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);
 }
 .field-row:last-child{border-bottom:none}
+.step-break{display:flex;align-items:center;gap:10px;margin:10px 0 2px;font-size:12px;font-weight:600;color:var(--muted)}
+.step-break:before,.step-break:after{content:"";flex:1;border-top:2px dashed var(--line)}
+.br-sect{margin-top:22px;padding-top:14px;border-top:1px solid var(--line)}
+.br-sect h3{margin:0 0 4px;font-size:15px}
 .field-row .info{flex:1;min-width:0}
 .field-row .info b{display:block;font-size:14px}
 .field-row .info .meta{color:var(--muted);font-size:12px;margin-top:2px}
@@ -462,6 +466,14 @@ table.subs tr:last-child td{border-bottom:none}
             <label for="br-org">Organization name</label>
             <input type="text" id="br-org" placeholder="Shown as the header title and in the terms text">
 
+            <label for="br-layout">Layout</label>
+            <select id="br-layout">
+              <option value="single_page">One page: every question on one page</option>
+              <option value="steps">Steps: groups of questions with Next and Back</option>
+              <option value="one_at_a_time">One question at a time</option>
+            </select>
+            <p class="hint" id="br-layout-hint"></p>
+
             <label for="br-title-en">Title (English)</label>
             <input type="text" id="br-title-en" maxlength="200" placeholder="The main heading of the form. Blank = the form's name">
             <label for="br-title-ar">Title (Arabic)</label>
@@ -535,6 +547,41 @@ table.subs tr:last-child td{border-bottom:none}
               <option value="dark">Dark only</option>
             </select>
             <p class="hint">"Light only" or "Dark only" keeps the form that way on every device and hides the switch button.</p>
+
+            <div class="br-sect">
+              <h3>Welcome screen</h3>
+              <label style="display:flex;align-items:center;gap:8px;font-weight:400"><input type="checkbox" id="br-welcome-on" style="width:auto"> Show a welcome screen with a Start button before the questions</label>
+              <label for="br-welcome-title-en">Title (English)</label>
+              <input type="text" id="br-welcome-title-en" maxlength="200" placeholder="Blank = the form's title">
+              <label for="br-welcome-title-ar">Title (Arabic)</label>
+              <input type="text" id="br-welcome-title-ar" dir="rtl" maxlength="200">
+              <label id="br-welcome-text-en-label">Message (English)</label>
+              <div id="br-welcome-text-en"></div>
+              <label id="br-welcome-text-ar-label">Message (Arabic)</label>
+              <div id="br-welcome-text-ar"></div>
+            </div>
+
+            <div class="br-sect">
+              <h3>Thank-you screen</h3>
+              <p class="hint">Shown after the form is sent, above the reference number. Leave a box blank to keep the standard wording.</p>
+              <label for="br-thanks-title-en">Title (English)</label>
+              <input type="text" id="br-thanks-title-en" maxlength="200" placeholder="Thank you — we've got it">
+              <label for="br-thanks-title-ar">Title (Arabic)</label>
+              <input type="text" id="br-thanks-title-ar" dir="rtl" maxlength="200">
+              <label id="br-thanks-text-en-label">Message (English)</label>
+              <div id="br-thanks-text-en"></div>
+              <label id="br-thanks-text-ar-label">Message (Arabic)</label>
+              <div id="br-thanks-text-ar"></div>
+              <div class="row" style="margin-top:10px">
+                <div><label for="br-thanks-btn-en">Button text (English)</label>
+                  <input type="text" id="br-thanks-btn-en" maxlength="80" placeholder="Optional"></div>
+                <div><label for="br-thanks-btn-ar">Button text (Arabic)</label>
+                  <input type="text" id="br-thanks-btn-ar" dir="rtl" maxlength="80"></div>
+              </div>
+              <label for="br-thanks-url">Button link</label>
+              <input type="text" id="br-thanks-url" maxlength="500" placeholder="https://example.com" dir="ltr">
+              <p class="hint">The button shows only when it has both text and a link starting with http:// or https://.</p>
+            </div>
 
             <div class="msg" id="branding-msg"></div>
             <button class="btn" id="branding-save-btn" style="margin-top:14px">Save branding</button>
@@ -1745,6 +1792,12 @@ function renderFields(){
   box.innerHTML = "";
   var sorted = STATE.fields.slice().sort(function(a,b){ return a.sort_order - b.sort_order; });
   sorted.forEach(function(f, i){
+    if (f.page_break_before && i > 0){
+      var brk = document.createElement("div");
+      brk.className = "step-break";
+      brk.textContent = "New step starts here";
+      box.appendChild(brk);
+    }
     var row = document.createElement("div");
     row.className = "field-row";
     row.innerHTML =
@@ -1760,8 +1813,11 @@ function renderFields(){
     down.disabled = i === sorted.length - 1;
     var edit = mkBtn("Edit", function(){ openEditor(f); });
     var toggle = mkBtn(f.active ? "Hide" : "Restore", function(){ toggleActive(f); });
+    var brkBtn = mkBtn(f.page_break_before ? "Remove step break" : "Step break", function(){ toggleStepBreak(f); });
+    brkBtn.title = "Steps layout: start a new step before this question";
+    brkBtn.disabled = i === 0;
 
-    [up, down, edit, toggle].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
+    [up, down, edit, brkBtn, toggle].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
     row.appendChild(actions);
     box.appendChild(row);
   });
@@ -1832,6 +1888,13 @@ function move(id, dir){
   var tmp = sorted[idx]; sorted[idx] = sorted[swapWith]; sorted[swapWith] = tmp;
   var order = sorted.map(function(f){ return f.id; });
   api("POST", "/admin/fields/reorder", {order: order}).then(function(){ loadFields(); });
+}
+function toggleStepBreak(f){
+  api("POST", "/admin/fields/" + f.id + "/page-break", { on: !f.page_break_before })
+    .then(function(res){
+      if (!res.body.ok){ flash("fields-msg", res.body.error || "Could not change the step break."); return; }
+      loadFields();
+    });
 }
 function toggleActive(f){
   if (f.active && !confirm('Hide "' + f.label_en + '" from the public form? Past submissions keep their data.')) return;
@@ -2560,6 +2623,17 @@ var BR_FORM_NAME = "";
 var pvLang = "en";
 var descEn = makeEditor($("br-desc-en"), "ltr", "Shown under the title", function(){ updatePreview(); });
 var descAr = makeEditor($("br-desc-ar"), "rtl", "يظهر تحت العنوان", function(){ updatePreview(); });
+var welcomeEn = makeEditor($("br-welcome-text-en"), "ltr", "Shown under the welcome title", function(){});
+var welcomeAr = makeEditor($("br-welcome-text-ar"), "rtl", "يظهر تحت عنوان الترحيب", function(){});
+var thanksEn = makeEditor($("br-thanks-text-en"), "ltr", "Shown after the form is sent", function(){});
+var thanksAr = makeEditor($("br-thanks-text-ar"), "rtl", "يظهر بعد إرسال النموذج", function(){});
+var LAYOUT_HINTS = {
+  single_page: "Everything on one page. Forms made before this option keep this.",
+  steps: "Questions are grouped by their category, or wherever you add a step break in the Questions list. Visitors move with Next and Back.",
+  one_at_a_time: "One question fills the screen. Enter or a tap moves on; number and letter keys pick an answer. A grid of questions counts as one screen."
+};
+function updateLayoutHint(){ $("br-layout-hint").textContent = LAYOUT_HINTS[$("br-layout").value] || ""; }
+$("br-layout").addEventListener("change", updateLayoutHint);
 function updatePreview(){
   var ar = pvLang === "ar";
   var pv = $("pv");
@@ -2613,6 +2687,20 @@ function loadBranding(){
     $("br-font").value = b.font || "system";
     $("br-size").value = b.text_size || "normal";
     $("br-align").value = b.title_align || "start";
+    $("br-layout").value = b.layout_mode || "single_page";
+    updateLayoutHint();
+    $("br-welcome-on").checked = !!b.welcome_enabled;
+    $("br-welcome-title-en").value = b.welcome_title_en || "";
+    $("br-welcome-title-ar").value = b.welcome_title_ar || "";
+    welcomeEn.setHtml(b.welcome_text_en || "");
+    welcomeAr.setHtml(b.welcome_text_ar || "");
+    $("br-thanks-title-en").value = b.thanks_title_en || "";
+    $("br-thanks-title-ar").value = b.thanks_title_ar || "";
+    thanksEn.setHtml(b.thanks_text_en || "");
+    thanksAr.setHtml(b.thanks_text_ar || "");
+    $("br-thanks-btn-en").value = b.thanks_button_en || "";
+    $("br-thanks-btn-ar").value = b.thanks_button_ar || "";
+    $("br-thanks-url").value = b.thanks_url || "";
     updatePreview();
     $("br-primary").value = b.primary_color;
     $("br-primary-picker").value = b.primary_color;
@@ -2664,6 +2752,19 @@ $("branding-save-btn").addEventListener("click", function(){
     font: $("br-font").value,
     text_size: $("br-size").value,
     title_align: $("br-align").value,
+    layout_mode: $("br-layout").value,
+    welcome_enabled: $("br-welcome-on").checked,
+    welcome_title_en: $("br-welcome-title-en").value.trim(),
+    welcome_title_ar: $("br-welcome-title-ar").value.trim(),
+    welcome_text_en: welcomeEn.getHtml(),
+    welcome_text_ar: welcomeAr.getHtml(),
+    thanks_title_en: $("br-thanks-title-en").value.trim(),
+    thanks_title_ar: $("br-thanks-title-ar").value.trim(),
+    thanks_text_en: thanksEn.getHtml(),
+    thanks_text_ar: thanksAr.getHtml(),
+    thanks_button_en: $("br-thanks-btn-en").value.trim(),
+    thanks_button_ar: $("br-thanks-btn-ar").value.trim(),
+    thanks_url: $("br-thanks-url").value.trim(),
     primary_color: $("br-primary").value.trim(),
     ink_color: $("br-ink").value.trim(),
     theme_mode: $("br-theme-mode").value
