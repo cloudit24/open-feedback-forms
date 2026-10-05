@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.5.2 released: every form also served at /f/<slug> on the admin address, Test port button, form cloning, per-user admin colours, First/Last name questions, and new forms no longer ask for name/email unless you tick it",
-  "next": "On the client server, run the install link once to move it to 1.5.2, then reach each form at /f/<slug> through the existing tunnel hostname",
-  "url": "http://localhost:8080/admin",
+  "status": "v1.6.0 released: admin panel fixed on port 8800, and each form can be light only, dark only or both",
+  "next": "On the client server, run the install link once, then point the admin tunnel at port 8800",
+  "url": "http://localhost:8800/admin",
   "updated_by": "Claude, 2026-10-05"
 }

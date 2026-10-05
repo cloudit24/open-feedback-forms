@@ -428,6 +428,14 @@ table.subs tr:last-child td{border-bottom:none}
               </div>
             </div>
 
+            <label for="br-theme-mode" style="margin-top:14px">Light or dark</label>
+            <select id="br-theme-mode">
+              <option value="both">Both — follows the visitor's device, with a switch button</option>
+              <option value="light">Light only</option>
+              <option value="dark">Dark only</option>
+            </select>
+            <p class="hint">"Light only" or "Dark only" keeps the form that way on every device and hides the switch button.</p>
+
             <div class="msg" id="branding-msg"></div>
             <button class="btn" id="branding-save-btn" style="margin-top:14px">Save branding</button>
           </div>
@@ -2272,6 +2280,7 @@ function loadBranding(){
     $("br-logo-preview").src = b.hasLogo ? "/admin/forms/" + STATE.currentFormId + "/logo?t=" + Date.now() : "";
     $("br-logo").value = "";
     $("br-remove-logo").classList.toggle("hidden", !b.hasLogo);
+    $("br-theme-mode").value = b.theme_mode || "both";
   });
 }
 $("br-primary-picker").addEventListener("input", function(){ $("br-primary").value = this.value; });
@@ -2310,7 +2319,8 @@ $("branding-save-btn").addEventListener("click", function(){
     subtitle_en: $("br-subtitle-en").value.trim(),
     subtitle_ar: $("br-subtitle-ar").value.trim(),
     primary_color: $("br-primary").value.trim(),
-    ink_color: $("br-ink").value.trim()
+    ink_color: $("br-ink").value.trim(),
+    theme_mode: $("br-theme-mode").value
   };
   if (pendingLogo){ payload.logo_base64 = pendingLogo.base64; payload.logo_ext = pendingLogo.ext; }
   api("POST", "/admin/forms/" + STATE.currentFormId + "/branding", payload).then(function(res){

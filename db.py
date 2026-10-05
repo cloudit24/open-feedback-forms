@@ -46,6 +46,7 @@ SCHEMA_SQL = [
         expiry_date   DATE NULL,
         public_url    VARCHAR(300) NULL,
         ask_core_fields TINYINT(1) NOT NULL DEFAULT 1,
+        theme_mode    VARCHAR(5) NOT NULL DEFAULT 'both',
         created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
@@ -177,6 +178,10 @@ MIGRATE_SQL = [
     # block. Defaults to 1, so every form that already exists keeps asking
     # exactly what it asked before.
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS ask_core_fields TINYINT(1) NOT NULL DEFAULT 1",
+    # How the public form looks: 'light' only, 'dark' only, or 'both' (follows
+    # the visitor's device, with a button to switch). 'both' is what every
+    # form did before, so existing forms look exactly the same.
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS theme_mode VARCHAR(5) NOT NULL DEFAULT 'both'",
 ]
 
 # Ported straight from the old hardcoded index.html, so the form looks and
@@ -758,6 +763,7 @@ def list_forms(active_only=False):
             r["active"] = bool(r["active"])
             r["lang_en"] = bool(r["lang_en"]); r["lang_ar"] = bool(r["lang_ar"])
             r["ask_core_fields"] = bool(r.get("ask_core_fields", 1))
+            r["theme_mode"] = r.get("theme_mode") or "both"
             r["enabled_extra_langs"] = json.loads(r["enabled_extra_langs_json"]) if r["enabled_extra_langs_json"] else []
             del r["enabled_extra_langs_json"]
         return rows
@@ -776,6 +782,7 @@ def get_form(form_id):
             row["active"] = bool(row["active"])
             row["lang_en"] = bool(row["lang_en"]); row["lang_ar"] = bool(row["lang_ar"])
             row["ask_core_fields"] = bool(row.get("ask_core_fields", 1))
+            row["theme_mode"] = row.get("theme_mode") or "both"
             row["enabled_extra_langs"] = json.loads(row["enabled_extra_langs_json"]) if row["enabled_extra_langs_json"] else []
             del row["enabled_extra_langs_json"]
         return row
@@ -852,11 +859,13 @@ def clone_form(source_id, name, slug, port):
         cur.execute(
             """INSERT INTO forms (name, slug, port, active, org_name, primary_color, ink_color,
                                   lang_en, lang_ar, subtitle_en, subtitle_ar,
-                                  enabled_extra_langs_json, expiry_date, ask_core_fields)
-               VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                  enabled_extra_langs_json, expiry_date, ask_core_fields,
+                                  theme_mode)
+               VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (name, slug, port, src["org_name"], src["primary_color"], src["ink_color"],
              src["lang_en"], src["lang_ar"], src["subtitle_en"], src["subtitle_ar"],
-             src["enabled_extra_langs_json"], src["expiry_date"], src.get("ask_core_fields", 1)))
+             src["enabled_extra_langs_json"], src["expiry_date"], src.get("ask_core_fields", 1),
+             src.get("theme_mode") or "both"))
         new_id = cur.lastrowid
         cur.execute(
             """INSERT INTO form_fields
@@ -942,7 +951,8 @@ def delete_form_permanently(form_id):
 
 
 def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
-                     subtitle_en=None, subtitle_ar=None, logo_filename=None, clear_logo=False):
+                     subtitle_en=None, subtitle_ar=None, logo_filename=None, clear_logo=False,
+                     theme_mode=None):
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -957,6 +967,8 @@ def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
             sets.append("subtitle_en=%s"); params.append(subtitle_en or None)
         if subtitle_ar is not None:
             sets.append("subtitle_ar=%s"); params.append(subtitle_ar or None)
+        if theme_mode is not None:
+            sets.append("theme_mode=%s"); params.append(theme_mode)
         if clear_logo:
             sets.append("logo_filename=NULL")
         elif logo_filename is not None:

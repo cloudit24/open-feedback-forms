@@ -77,7 +77,7 @@ Clones the repo, then asks how to handle the database:
 4. **Skip** — set it up later from Configuration → Database connection.
 
 It then builds and starts everything, and confirms the app actually reached
-the database before saying "done". Open http://localhost:8080/admin
+the database before saying "done". Open http://localhost:8800/admin
 afterward to create your admin account (always done through the web form
 itself, never over the script).
 
@@ -130,7 +130,7 @@ docker compose up -d --build
 .\start.ps1
 ```
 
-Then open http://127.0.0.1:8080/admin, create the admin account, and enter
+Then open http://127.0.0.1:8800/admin, create the admin account, and enter
 your MariaDB connection details — the required tables are created and
 seeded automatically on first successful connect, and the first form starts
 listening right away (default port 8081).
@@ -147,7 +147,7 @@ leave it blank to auto-assign one. Point one Cloudflare Tunnel hostname (or
 any reverse proxy) at each form's port to publish it independently.
 
 The admin panel itself always runs on one separate port (`ADMIN_PORT`,
-default 8080) and is never meant to be exposed publicly — put it behind
+always 8800) and is never meant to be exposed publicly — put it behind
 Cloudflare Access, a VPN, or similar.
 
 ## Branding, per form

@@ -2,13 +2,13 @@
 # Run:  .\start.ps1
 #
 # The database connection and admin account aren't set here — they're
-# configured from the admin panel on first run (http://127.0.0.1:8080/admin).
+# configured from the admin panel on first run (http://127.0.0.1:8800/admin).
 # This file only controls network/runtime settings.
 
 # --- settings -------------------------------------------------------
 
 # Port the admin panel listens on.
-$env:ADMIN_PORT = "8080"
+$env:ADMIN_PORT = "8800"
 
 # Port given to the very first form the admin panel creates. Later forms
 # get their own ports too — auto-assigned, or chosen when you create them.

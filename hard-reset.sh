@@ -125,6 +125,6 @@ docker compose down -v
 docker compose up -d --build
 
 echo
-echo "Done. A fresh container is starting — open http://localhost:8080/admin"
+echo "Done. A fresh container is starting — open http://localhost:8800/admin"
 echo "to go through setup again (admin account, then database connection)."
 echo "Your backup is in $BACKUP_DIR if you need to recover anything from it."

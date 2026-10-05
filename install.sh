@@ -309,12 +309,14 @@ ensure_db_reachable() {
     echo "restart MariaDB, and make sure your firewall only allows port 3306 from Docker."
 }
 
-# ---- the admin port stays put -------------------------------------------------
-# Docker fixes a container's published ports when it's created, and compose
-# reads them from .env. If .env goes missing (a re-cloned folder) and is
-# rebuilt without ADMIN_PORT, compose falls back to 8080 and the admin panel
-# silently moves. So: read the port this install is already published on,
-# straight from the container, and write it into .env where it can't drift.
+# ---- ports stay put -----------------------------------------------------------
+# The admin panel is always on 8800: docker-compose.yml publishes it as a fixed
+# number, never from .env, so no update or rebuilt .env can move it.
+# The first form's port does come from .env (FORM_PORT). If .env goes missing
+# (a re-cloned folder) and is rebuilt from .env.example, that would quietly
+# reset it — so read the port this install is already published on, straight
+# from the container, and write it into .env where it can't drift.
+ADMIN_PORT=8800
 published_port_of() {   # container port -> host port, or nothing
     cid=$(docker ps -a -q \
         --filter "label=com.docker.compose.project=$PROJECT" \
@@ -329,33 +331,41 @@ published_port_of() {   # container port -> host port, or nothing
     printf "%s" "$port"
 }
 
-# Writes ADMIN_PORT/FORM_PORT into .env when they aren't already there, using
-# the ports this install is published on (or the defaults for a new install).
+# Keeps FORM_PORT in .env on the port this install already uses, and drops an
+# old ADMIN_PORT line (it no longer does anything: the admin panel is 8800).
 pin_ports() {
     [ -f .env ] || return 0
-    # A rebuilt .env starts from .env.example, whose ADMIN_PORT is just the
-    # default — so after a recovery the container's real port wins.
-    if [ "$RECOVERED" = 1 ]; then
-        for pair in "ADMIN_PORT 8080" "FORM_PORT 8081"; do
-            set -- $pair
-            found=$(published_port_of "$2" 2>/dev/null || true)
-            [ -n "$found" ] || continue
-            [ "$found" = "$(env_get "$1")" ] && continue
-            sed -i.bak "/^$1=/d" .env && rm -f .env.bak
-            printf "%s='%s'
-" "$1" "$found" >> .env
-            echo "Kept $1 on the port this install already uses ($found)."
-        done
+    if grep -q '^ADMIN_PORT=' .env; then
+        sed -i.bak '/^ADMIN_PORT=/d' .env && rm -f .env.bak
     fi
-    if [ -z "$(env_get ADMIN_PORT)" ]; then
-        found=$(published_port_of 8080 2>/dev/null || true)
-        printf "ADMIN_PORT='%s'\n" "${found:-8080}" >> .env
-        [ -n "$found" ] && echo "Kept the admin panel on the port it already uses ($found)."
+    found=$(published_port_of 8081 2>/dev/null || true)
+    current=$(env_get FORM_PORT)
+    # After a recovery, .env's FORM_PORT is only .env.example's default — the
+    # container's real port wins. Otherwise a value already in .env is kept.
+    if [ -n "$found" ] && { [ -z "$current" ] || [ "$RECOVERED" = 1 ]; } && [ "$found" != "$current" ]; then
+        sed -i.bak '/^FORM_PORT=/d' .env && rm -f .env.bak
+        printf "FORM_PORT='%s'\n" "$found" >> .env
+        echo "Kept the first form on the port it already uses ($found)."
+    elif [ -z "$current" ]; then
+        printf "FORM_PORT='8081'\n" >> .env
     fi
-    if [ -z "$(env_get FORM_PORT)" ]; then
-        found=$(published_port_of 8081 2>/dev/null || true)
-        printf "FORM_PORT='%s'\n" "${found:-8081}" >> .env
+}
+
+# Port 8800 must be free for the admin panel — unless it's this install's own
+# container holding it already. Stop with a clear message rather than letting
+# Docker fail halfway through an update.
+check_admin_port() {
+    [ "$(published_port_of 8800 2>/dev/null || true)" = 8800 ] && return 0
+    busy=""
+    if command -v ss >/dev/null 2>&1; then
+        ss -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '[:.]8800$' && busy=1
+    elif command -v netstat >/dev/null 2>&1; then
+        netstat -ltn 2>/dev/null | awk '{print $4}' | grep -Eq '[:.]8800$' && busy=1
     fi
+    [ -z "$busy" ] && return 0
+    die "Port 8800 is already in use on this server, and the admin panel needs it.
+Find what's using it with:  sudo ss -ltnp | grep ':8800'
+Stop or move that service, then run this again. Nothing has been changed."
 }
 
 # ---- existing data, lost .env ------------------------------------------------
@@ -521,9 +531,9 @@ if [ -n "$PIN_PROJECT" ] && [ -z "$(env_get COMPOSE_PROJECT_NAME)" ]; then
     printf "COMPOSE_PROJECT_NAME='%s'\n" "$PIN_PROJECT" >> .env
 fi
 
-# The admin panel's port is written down explicitly, so no later update can
-# move it: whatever this install already uses stays.
+# The admin panel is always 8800; the first form keeps whatever port it uses.
 pin_ports
+check_admin_port
 
 # ---- build & start -----------------------------------------------------------
 # `up --build` replaces containers only; named volumes (the data) are never
@@ -540,15 +550,14 @@ if [ "$NEEDS_BOOTSTRAP" = 1 ]; then
     docker compose restart app
 fi
 
-ADMIN_PORT=$(env_get ADMIN_PORT)
-URL="http://localhost:${ADMIN_PORT:-8080}/admin"
+URL="http://localhost:${ADMIN_PORT}/admin"
 FORM_PORT_HOST=$(env_get FORM_PORT)
 echo
 echo "Ports on this server:"
-echo "  admin panel     ${ADMIN_PORT:-8080}  ->  8080 inside the container"
-echo "  first form      ${FORM_PORT_HOST:-8081}  ->  8081 inside the container"
+echo "  admin panel     ${ADMIN_PORT}  (always — it never changes)"
+echo "  first form      ${FORM_PORT_HOST:-8081}"
 echo "  further forms   8090-8189, one per form as assigned in the admin panel"
-echo "Point a tunnel or proxy hostname at ${ADMIN_PORT:-8080} for the admin panel;"
+echo "Point a tunnel or proxy hostname at port ${ADMIN_PORT} for the admin panel;"
 echo "every form is also served on that same address at /f/<form-slug>/."
 
 # Don't just say "done" — ask the running app what state it's actually in.

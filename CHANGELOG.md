@@ -3,6 +3,19 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.6.0
+
+- **The admin panel is always on port 8800.** It's fixed in
+  `docker-compose.yml` rather than read from `.env`, so no update, re-cloned
+  folder or rebuilt `.env` can move it. Updating an older install moves the
+  admin panel from its old port to 8800 once — point your tunnel or bookmark
+  at 8800. If something else on the server already uses 8800, the installer
+  stops and says so before changing anything. Forms keep their ports.
+- **Light, dark or both, per form** (Edit → Branding → Light or dark). "Light
+  only" or "Dark only" keeps the form that way on every device and hides the
+  switch button; "Both" follows the visitor's device and lets them switch, as
+  every form did until now — so existing forms look the same.
+
 ## 1.5.2
 
 - **The admin panel's port no longer moves.** If `.env` went missing (a

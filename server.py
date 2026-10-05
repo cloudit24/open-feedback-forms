@@ -11,7 +11,7 @@ and exporting submissions.
     python server.py
 
 Environment variables (all optional):
-    ADMIN_PORT         port the admin panel listens on   (default 8080)
+    ADMIN_PORT         port the admin panel listens on   (default 8800)
     HOST               address to bind everything to     (default 127.0.0.1)
     FORM_PORT          port given to the very first form  (default 8081)
     TURNSTILE_SECRET   Cloudflare Turnstile secret  (bot check off if unset)
@@ -89,7 +89,7 @@ HOST = os.environ.get("HOST", "127.0.0.1")
 # Addresses that mean "every interface". They're fine to bind to but useless
 # in a link, so a form's address is worked out from the request instead.
 WILDCARD_HOSTS = ("0.0.0.0", "::", "[::]", "*", "")
-ADMIN_PORT = int(os.environ.get("ADMIN_PORT", os.environ.get("PORT", "8080")))
+ADMIN_PORT = int(os.environ.get("ADMIN_PORT", os.environ.get("PORT", "8800")))
 DEFAULT_FORM_PORT = int(os.environ.get("FORM_PORT", "8081"))
 FORM_PORT_RANGE = (8090, 8189)          # auto-assign scans this range
 # Which ports the outside world can actually reach. In Docker only published
@@ -271,6 +271,10 @@ def fetch_update_info():
 LIBRARY_TOPUP_MARKER = "library_keys_1_5_0"
 
 DEFAULT_ADMIN_THEME = {"primary": "#0B5273", "text": "#1F2B33"}
+
+# How a public form may look: light only, dark only, or both (follows the
+# visitor's device, with a switch button).
+THEME_MODES = ("both", "light", "dark")
 
 
 def identity_theme_key(identity):
@@ -517,7 +521,7 @@ def validate_submission(raw, active_fields, require_core=True):
 
 def published_ports():
     """The set of ports reachable from outside, parsed from PUBLISHED_PORTS
-    ("8080,8081,8090-8189"). Empty set means "no restriction known"."""
+    ("8800,8081,8090-8189"). Empty set means "no restriction known"."""
     out = set()
     for part in PUBLISHED_PORTS_RAW.replace(" ", "").split(","):
         if not part:
@@ -847,6 +851,7 @@ class PublicRoutes:
             "logoUrl": "logo" if (form and form.get("logo_filename")) else None,
             "subtitleEn": (form and form.get("subtitle_en")) or None,
             "subtitleAr": (form and form.get("subtitle_ar")) or None,
+            "themeMode": (form.get("theme_mode") or "both") if form else "both",
         }
         ask_core = bool(form.get("ask_core_fields", True)) if form else True
         languages = {
@@ -2006,6 +2011,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "ink_color": form.get("ink_color") or "#0B0B0B",
             "subtitle_en": form.get("subtitle_en") or "",
             "subtitle_ar": form.get("subtitle_ar") or "",
+            "theme_mode": form.get("theme_mode") or "both",
             "hasLogo": bool(form.get("logo_filename")),
         }})
 
@@ -2054,9 +2060,16 @@ class AdminHandler(PublicRoutes, BaseHandler):
         elif clear_logo:
             self._remove_logo_files(updir, form_id)
 
+        theme_mode = None
+        if "theme_mode" in body:
+            theme_mode = body.get("theme_mode")
+            if theme_mode not in THEME_MODES:
+                return self.send_json(400, {"ok": False, "error": "theme must be light, dark or both"})
+
         db.update_branding(form_id, org_name=org_name, primary_color=primary_color,
                             ink_color=ink_color, subtitle_en=subtitle_en, subtitle_ar=subtitle_ar,
-                            logo_filename=logo_filename, clear_logo=clear_logo)
+                            logo_filename=logo_filename, clear_logo=clear_logo,
+                            theme_mode=theme_mode)
         return self.send_json(200, {"ok": True})
 
     @staticmethod

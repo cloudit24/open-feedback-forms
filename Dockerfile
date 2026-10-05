@@ -31,10 +31,10 @@ USER offuser
 # 127.0.0.1 (the default outside Docker) would be unreachable from outside it.
 ENV OFF_CONFIG_DIR=/data \
     HOST=0.0.0.0 \
-    ADMIN_PORT=8080 \
+    ADMIN_PORT=8800 \
     FORM_PORT=8081
 
-EXPOSE 8080 8081 8090-8189
+EXPOSE 8800 8081 8090-8189
 
 ENTRYPOINT ["docker/entrypoint.sh"]
 CMD ["python", "server.py"]
