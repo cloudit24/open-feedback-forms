@@ -3,6 +3,34 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.5.0
+
+- **One address for every form.** Each form is now also served through the
+  admin panel's own address at `/f/<form-slug>/`, so a single tunnel or proxy
+  hostname publishes all of them. A form keeps its own port as well — this is
+  for when opening a port per form isn't practical, which is the usual reason
+  a new form works on the server but not from outside.
+- **Test port**, beside the Port box: says whether the port is free, whether
+  it's the one auto-assign would pick, and whether Docker publishes it — before
+  you save the form.
+- **Clone** a form: same questions, languages and branding, on its own port.
+  Submissions and alert rules are not copied.
+- **My colors**, top right: each person can set their own admin-panel colors,
+  saved to their account. Configuration → Appearance stays the colors everyone
+  else starts from.
+- **First name** and **Last name** are now questions in the catalog, in English
+  and Arabic, under Personal details. If an admin had made their own
+  (`firstname`, `surname`, …), the catalog entry is replaced by ours; their
+  forms and everything already submitted are untouched.
+- A question an admin named themselves for something we know about (`dob`,
+  `mobile`, `mail`, …) is now grouped with the rest instead of sitting alone
+  under Other.
+- **A category is asked for on every question**, chosen from a list with room
+  for your own — nothing fits, it goes to "Other".
+- **The built-in First name / Last name / Email block can be turned off** per
+  form (Manage → Built-in questions), so a form can ask only the questions you
+  chose. On for every existing form, and the consent tick always stays.
+
 ## 1.4.0
 
 - New question in the catalog: **Email address**, in English and Arabic. Every

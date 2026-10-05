@@ -416,6 +416,9 @@ var CODES = ["+971","+966","+965","+974","+973","+968","+20","+962","+961","+963
 var lang = "en";
 var themeOverride = null;      /* null = follow the system, else "light" or "dark" */
 var FIELDS = [];               /* admin-configured fields, fetched from the server */
+// The built-in First name / Last name / Email block. A form can be set to ask
+// only its own questions instead (Manage -> "Ask for name and email").
+var ASK_CORE = true;
 var ratingValues = {};         /* field_key -> 1..5, for any 'rating' fields */
 function $(id){ return document.getElementById(id); }
 
@@ -473,7 +476,7 @@ function applyLanguageAvailability(){
    (server-cached, translated when the language was added) and merged in. */
 function ensureUiStrings(code){
   if (!code || code === "en" || code === "ar" || T[code]) return Promise.resolve();
-  return fetch("/api/ui-strings?lang=" + encodeURIComponent(code))
+  return fetch("api/ui-strings?lang=" + encodeURIComponent(code))
     .then(function(r){ return r.json().then(function(j){ return {status: r.status, body: j}; }); })
     .then(function(res){
       if (res.status === 200 && res.body.ok){
@@ -565,7 +568,7 @@ function applyBranding(b){
 
 /* -------------------------------------------------- dynamic fields ---- */
 function fetchFields(){
-  return fetch("/api/form-fields")
+  return fetch("api/form-fields")
     .then(function(r){ return r.json().then(function(j){ return {status:r.status, body:j}; }); })
     .then(function(res){
       if (res.status !== 200 || !res.body.ok){
@@ -583,6 +586,8 @@ function fetchFields(){
         return;
       }
       FIELDS = res.body.fields;
+      ASK_CORE = res.body.askCoreFields !== false;
+      applyCoreFieldVisibility();
       LANGUAGES = res.body.languages || { en: true, ar: true };
       LANG_META = res.body.languageLabels || LANG_META;
       LANG_LIST = [];
@@ -614,6 +619,15 @@ function optionLabel(o){
   if (lang !== "en" && lang !== "ar") return (o.label_extra && o.label_extra[lang]) || o.label_en || o.label_ar;
   return lang === "ar" ? (o.label_ar || o.label_en) : (o.label_en || o.label_ar);
 }
+function applyCoreFieldVisibility(){
+  ["f-first", "f-last", "f-email"].forEach(function(id){
+    var el = $(id);
+    if (el) el.classList.toggle("hidden", !ASK_CORE);
+  });
+  var row = $("f-first") && $("f-first").parentNode;
+  if (row && row.classList.contains("row")) row.classList.toggle("hidden", !ASK_CORE);
+}
+
 function renderDynamicFields(){
   var box = $("dynamic-fields");
   box.innerHTML = "";
@@ -835,10 +849,12 @@ function submit(e){
   banner("");
 
   var ok = true, firstBadEl = null;
-  ["firstName", "lastName", "email"].forEach(function(n){
-    if (!checkCore(n) && !firstBadEl) firstBadEl = $(n);
-    if (!checkCore(n)) ok = false;
-  });
+  if (ASK_CORE){
+    ["firstName", "lastName", "email"].forEach(function(n){
+      if (!checkCore(n) && !firstBadEl) firstBadEl = $(n);
+      if (!checkCore(n)) ok = false;
+    });
+  }
   FIELDS.forEach(function(f){
     if (!checkDynamicField(f)){
       ok = false;
@@ -861,9 +877,9 @@ function submit(e){
   FIELDS.forEach(function(f){ extra[f.field_key] = collectDynamicValue(f); });
 
   var payload = {
-    firstName: $("firstName").value.trim(),
-    lastName:  $("lastName").value.trim(),
-    email:     $("email").value.trim(),
+    firstName: ASK_CORE ? $("firstName").value.trim() : "",
+    lastName:  ASK_CORE ? $("lastName").value.trim() : "",
+    email:     ASK_CORE ? $("email").value.trim() : "",
     consent:   true,
     language:  lang,
     website:   $("website").value,                 /* honeypot */
@@ -875,7 +891,7 @@ function submit(e){
   btn.disabled = true;
   btn.textContent = T[lang].sending;
 
-  fetch("/api/feedback", {
+  fetch("api/feedback", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify(payload)

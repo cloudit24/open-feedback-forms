@@ -260,6 +260,7 @@ table.subs tr:last-child td{border-bottom:none}
       <div style="display:flex;gap:8px">
         <button class="btn-outline btn-sm" id="theme-btn" aria-label="Switch theme">Dark</button>
         <button class="update-pill hidden" id="update-pill" type="button" title="Show what the update changes">Update available</button>
+        <button class="btn-outline btn-sm" id="mytheme-btn">My colors</button>
         <button class="btn-outline btn-sm" id="password-btn">Change password</button>
         <button class="btn-outline btn-sm" id="logout-btn">Log out</button>
       </div>
@@ -382,7 +383,8 @@ table.subs tr:last-child td{border-bottom:none}
 
           <!-- questions sub-panel -->
           <div id="sub-fdfields">
-            <p class="hint">First name, last name and email always appear and can't be removed. Everything below is yours to edit — changes apply to the public form immediately.</p>
+            <p class="hint" id="fd-core-note"></p>
+            <p class="hint">Everything below is yours to edit — changes apply to the public form immediately.</p>
             <div id="fields-list"></div>
             <div class="msg bad" id="fields-msg"></div>
             <button class="btn" id="add-field-btn" style="margin-top:14px">+ Add a field</button>
@@ -588,6 +590,7 @@ table.subs tr:last-child td{border-bottom:none}
             </div>
           </div>
           <p class="hint">Dark mode keeps its own light-on-dark text color no matter what's set here, so it stays readable.</p>
+          <p class="hint">These are the colors everyone starts from. Anyone signed in can set their own instead with <b>My colors</b>, top right — that only changes their own view, and leaves these alone.</p>
           <div class="msg" id="theme-msg" style="margin-top:10px"></div>
           <button class="btn" id="theme-save-btn" style="margin-top:6px">Save</button>
         </div>
@@ -820,6 +823,32 @@ table.subs tr:last-child td{border-bottom:none}
     </div>
   </div>
 
+  <!-- ============ this account's own colors ============ -->
+  <div id="mytheme-view" class="hidden">
+    <div class="card" style="max-width:420px;margin:0 auto">
+      <h2>My colors</h2>
+      <p class="hint">Your own colors for this admin panel. Only you see them — everyone else keeps the app's colors, and the forms your visitors fill in are never affected. Each form's own look is set under its Branding.</p>
+      <label for="mt-primary">Primary color</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="color" id="mt-primary-picker" style="width:44px;padding:2px">
+        <input type="text" id="mt-primary" placeholder="#0B5273">
+      </div>
+      <label for="mt-text" style="margin-top:12px">Text color (light mode only)</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="color" id="mt-text-picker" style="width:44px;padding:2px">
+        <input type="text" id="mt-text" placeholder="#1F2B33">
+      </div>
+      <label style="margin-top:14px">Ready-made</label>
+      <div id="mt-presets" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+      <div class="msg" id="mt-msg" style="margin-top:10px"></div>
+      <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
+        <button class="btn-outline" id="mt-cancel">Cancel</button>
+        <button class="btn-outline" id="mt-reset">Use the app's colors</button>
+        <button class="btn" id="mt-save">Save</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ============ form editor (simple inline panel, not a real dialog) ============ -->
   <div id="form-editor-view" class="hidden">
     <div class="card" style="max-width:480px;margin:0 auto">
@@ -827,12 +856,21 @@ table.subs tr:last-child td{border-bottom:none}
       <label for="fe-name">Form name</label>
       <input type="text" id="fe-name" placeholder="e.g. Downtown Music Festival">
       <label for="fe-port">Port</label>
-      <input type="number" id="fe-port" placeholder="leave blank to auto-assign">
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="number" id="fe-port" placeholder="leave blank to auto-assign" style="margin:0">
+        <button class="btn-outline btn-sm" id="fe-port-test" type="button" style="white-space:nowrap">Test port</button>
+      </div>
+      <div class="msg" id="fe-port-result" style="margin-top:8px"></div>
+      <p class="hint">Every form is also reachable through this admin panel's own address at <code>/f/&lt;form-slug&gt;/</code> — handy when opening a port per form isn't practical, since one tunnel or proxy hostname then publishes all of them.</p>
       <p class="hint" id="fe-port-hint">Each form needs its own port (1024–65535). Point a separate Cloudflare Tunnel hostname at this port to publish it.</p>
 
       <label for="fe-public-url">Public address <span class="hint" style="display:inline">(optional)</span></label>
       <input type="text" id="fe-public-url" placeholder="https://feedback.example.com" dir="ltr">
       <p class="hint">The address visitors use, if it isn't this server's own host and port — the Cloudflare Tunnel hostname you pointed at this form, for example. Set it and the <b>View</b> button and the link shown next to the form both open that address instead.</p>
+
+      <label>Built-in questions</label>
+      <div class="check-row"><input type="checkbox" id="fe-ask-core"><label for="fe-ask-core" style="margin:0">Ask for first name, last name and email address</label></div>
+      <p class="hint">These three sit at the top of every form by default, above your own questions — that's why they appear without being added. Turn this off and the form asks only the questions you chose (the consent tick stays either way). Existing forms keep this on.</p>
 
       <label>Language Labels</label>
       <div class="check-row"><input type="checkbox" id="fe-lang-en"><label for="fe-lang-en" style="margin:0">English</label></div>
@@ -911,10 +949,10 @@ table.subs tr:last-child td{border-bottom:none}
       <label for="ke-ar">Label (Arabic)</label>
       <input type="text" id="ke-ar" dir="rtl">
       <div id="ke-extra-wrap"></div>
-      <label for="ke-category">Category</label>
-      <input type="text" id="ke-category" list="ke-category-list" placeholder="e.g. Personal details" maxlength="60">
-      <datalist id="ke-category-list"></datalist>
-      <p class="hint">Groups this question in the catalog and in the "add a question" list. Leave blank for "Other".</p>
+      <label for="ke-category-select">Category</label>
+      <select id="ke-category-select"></select>
+      <input type="text" id="ke-category" class="hidden" placeholder="Name the new category" maxlength="60" style="margin-top:8px">
+      <p class="hint">Groups this question in the catalog and in the "add a question" list. Pick one, or add a category of your own — leave it on "Other" if none fits.</p>
       <label for="ke-type">Type</label>
       <select id="ke-type">
         <option value="text">Short text</option>
@@ -959,7 +997,7 @@ function api(method, url, body){
 
 function show(id){
   ["setup-view","login-view","dash-view","editor-view","form-editor-view","key-editor-view",
-   "role-editor-view","admin-user-editor-view","password-view"].forEach(function(v){
+   "role-editor-view","admin-user-editor-view","password-view","mytheme-view"].forEach(function(v){
     $(v).classList.toggle("hidden", v !== id);
   });
 }
@@ -974,7 +1012,12 @@ var STATE = { fields: [], editingId: null, forms: [], currentFormId: null,
               editingFormId: null, subsPage: 1, library: [], editingKeyId: null,
               timezone: "UTC",
               languageLabels: { en: { name: "English", dir: "ltr" }, ar: { name: "Arabic", dir: "rtl" } },
-              adminTheme: { primary: "#0B5273", text: "#1F2B33" }, translateApiKey: "",
+              // adminTheme = what this account sees; appTheme = the app-wide
+              // colors under Configuration -> Appearance. They're the same
+              // until the account picks its own under "My colors".
+              adminTheme: { primary: "#0B5273", text: "#1F2B33" },
+              appTheme: { primary: "#0B5273", text: "#1F2B33" },
+              adminThemeIsOwn: false, translateApiKey: "",
               isBootstrap: true, permissions: "all", allowedForms: "all",
               roles: [], adminUsers: [], permissionKeys: [], editingRoleId: null, editingAdminUserId: null };
 
@@ -995,6 +1038,8 @@ function boot(){
   api("GET", "/admin/status").then(function(res){
     var s = res.body;
     if (s.adminTheme){ STATE.adminTheme = s.adminTheme; }
+    STATE.adminThemeIsOwn = !!s.adminThemeIsOwn;
+    if (!STATE.adminThemeIsOwn && s.adminTheme){ STATE.appTheme = s.adminTheme; }
     applyAdminTheme(STATE.adminTheme);   // needed pre-login too — the setup/login screens use it
     if (!s.adminConfigured){ show("setup-view"); return; }
     if (!s.authenticated){ show("login-view"); return; }
@@ -1205,6 +1250,11 @@ $("db-save-btn").addEventListener("click", function(){
 });
 
 /* ------------------------------------------------------------- forms */
+// Every form is also served through this admin panel's own hostname and port,
+// at /f/<slug>/ — so one tunnel or proxy hostname publishes all of them, with
+// no extra port to open. The form's own port still works as before.
+function sharedFormPath(f){ return "/f/" + f.slug + "/"; }
+function sharedFormUrl(f){ return window.location.origin + sharedFormPath(f); }
 function loadForms(){
   api("GET", "/admin/forms").then(function(res){
     if (res.status !== 200) return;
@@ -1242,6 +1292,8 @@ function renderForms(){
     row.innerHTML =
       '<div class="info"><b>' + escapeHtml(f.name) + '</b>' +
       '<div class="meta">port <code>' + f.port + '</code> · ' + escapeHtml(f.url) +
+      ' · also at <a href="' + escapeHtml(sharedFormPath(f)) + '" target="_blank" rel="noopener"><code>' +
+      escapeHtml(sharedFormPath(f)) + '</code></a>' +
       ' · <span class="badge ' + (f.listening ? "on" : "off") + '">' + (f.listening ? "listening" : "not listening") + '</span>' +
       (f.expiry_date ? ' · <span class="badge ' + (expired ? "req" : "off") + '">' +
         (expired ? "expired " : "expires ") + escapeHtml(f.expiry_date) + '</span>' : '') +
@@ -1249,7 +1301,8 @@ function renderForms(){
     var actions = document.createElement("div");
     actions.className = "actions";
     var view = mkBtn("View", function(){ window.open(f.url, "_blank", "noopener"); });
-    var buttons = [view];
+    var viewHere = mkBtn("View on this address", function(){ window.open(sharedFormUrl(f), "_blank", "noopener"); });
+    var buttons = [view, viewHere];
     if (hasAnyPermission(["edit_fields", "edit_branding"], f.id)){
       buttons.push(mkBtn("Edit", function(){ openFormDetail(f); }));         // questions & branding
     }
@@ -1257,6 +1310,7 @@ function renderForms(){
       buttons.push(mkBtn("Manage", function(){ openFormEditor(f); }));       // name, port, languages
     }
     if (hasPermission("manage_forms")){
+      buttons.push(mkBtn("Clone", function(){ cloneForm(f); }));
       buttons.push(mkBtn("Archive", function(){ toggleFormActive(f); }));
     }
     buttons.forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
@@ -1354,6 +1408,8 @@ function refreshFormDetailHeader(f){
   if (!f) return;
   $("fd-title").textContent = f.name;
   $("fd-meta").innerHTML = 'port <code>' + f.port + '</code> · ' + escapeHtml(f.url) +
+    ' · also at <a href="' + escapeHtml(sharedFormPath(f)) + '" target="_blank" rel="noopener"><code>' +
+    escapeHtml(sharedFormPath(f)) + '</code></a>' +
     ' · <span class="badge ' + (f.listening ? "on" : "off") + '">' + (f.listening ? "listening" : "not listening") + '</span>';
   $("fd-toggle").textContent = f.active ? "Disable" : "Enable";
 }
@@ -1380,6 +1436,28 @@ $("fd-toggle").addEventListener("click", function(){
   var f = currentForm();
   if (f) toggleFormActive(f);
 });
+// A second form set up like this one — same questions, languages and
+// branding, on its own port. Nothing it collected comes along.
+function cloneForm(f){
+  var name = prompt('Name for the copy of "' + f.name + '":', f.name + " (copy)");
+  if (name === null) return;
+  name = name.trim();
+  if (name.length < 2){ alert("A form name needs at least 2 characters."); return; }
+  var port = prompt("Port for the copy — leave blank to pick a free one automatically:", "");
+  if (port === null) return;
+  api("POST", "/admin/forms/" + f.id + "/clone", {name: name, port: port.trim() || undefined})
+    .then(function(res){
+      if (!res.body.ok){ alert(res.body.error || "Could not copy this form."); return; }
+      loadForms();
+      alert('"' + res.body.name + '" is ready on port ' + res.body.port + ' with ' +
+            res.body.fields + ' question(s) copied.
+
+Submissions and alert rules were not copied.' +
+            (res.body.warning ? "
+
+" + res.body.warning : ""));
+    });
+}
 function toggleFormActive(f){
   if (f.active && !confirm('Archive "' + f.name + '"? Its listener stops immediately and it moves to Archived forms below — past submissions are kept, and you can restore it or permanently delete it from there.')) return;
   api("POST", "/admin/forms/" + f.id + "/" + (f.active ? "delete" : "restore")).then(function(res){
@@ -1398,6 +1476,7 @@ function openFormEditor(form){
   $("fe-lang-ar").checked = form ? form.lang_ar : true;
   $("fe-expiry").value = (form && form.expiry_date) || "";
   $("fe-public-url").value = (form && form.public_url) || "";
+  $("fe-ask-core").checked = form ? form.ask_core_fields !== false : true;
   $("fe-port-hint").innerHTML = STATE.publishedPorts
     ? 'Leave blank and a free port is picked from <code>' + escapeHtml(STATE.autoPortRange) + '</code>. ' +
       'In Docker only published ports can be reached from outside — this install publishes <code>' +
@@ -1405,6 +1484,7 @@ function openFormEditor(form){
     : 'Each form needs its own port (1024–65535). Leave blank to auto-assign.';
   renderFormEditorExtraLangs(form ? (form.enabled_extra_langs || []) : []);
   clearFlash("form-editor-msg");
+  clearFlash("fe-port-result");
   show("form-editor-view");
 }
 function renderFormEditorExtraLangs(enabled){
@@ -1439,6 +1519,20 @@ function enforceOneLanguageMinimum(justChecked){
 }
 $("fe-lang-en").addEventListener("change", function(){ enforceOneLanguageMinimum($(this.checked ? "fe-lang-en" : "fe-lang-ar")); });
 $("fe-lang-ar").addEventListener("change", function(){ enforceOneLanguageMinimum($(this.checked ? "fe-lang-ar" : "fe-lang-en")); });
+$("fe-port-test").addEventListener("click", function(){
+  var btn = this, port = $("fe-port").value.trim();
+  clearFlash("fe-port-result");
+  btn.disabled = true; btn.textContent = "Testing…";
+  api("POST", "/admin/port-test", {port: port || undefined, form_id: STATE.editingFormId || undefined})
+    .then(function(res){
+      btn.disabled = false; btn.textContent = "Test port";
+      var b = res.body || {};
+      if (b.error && !b.port){ flash("fe-port-result", b.error); return; }
+      var how = b.assigned === "manual" ? "You picked port " + b.port + "." : "Auto-assigned port " + b.port + ".";
+      flash("fe-port-result", how + " " + (b.notes || []).join(" "), !!b.ok);
+      if (b.assigned === "automatic" && b.port){ $("fe-port").placeholder = "auto-assigns " + b.port; }
+    });
+});
 $("fe-save").addEventListener("click", function(){
   clearFlash("form-editor-msg");
   var name = $("fe-name").value.trim();
@@ -1449,7 +1543,8 @@ $("fe-save").addEventListener("click", function(){
   if (!langEn && !langAr && !extraLangs.length){ flash("form-editor-msg", "At least one language must stay enabled."); return; }
   var payload = { name: name, port: port || undefined, lang_en: langEn, lang_ar: langAr, enabled_extra_langs: extraLangs,
                   expiry_date: $("fe-expiry").value || "",
-                  public_url: $("fe-public-url").value.trim() };
+                  public_url: $("fe-public-url").value.trim(),
+                  ask_core_fields: $("fe-ask-core").checked };
   var url = STATE.editingFormId ? "/admin/forms/" + STATE.editingFormId + "/update" : "/admin/forms";
   api("POST", url, payload).then(function(res){
     if (res.body.ok){
@@ -1470,6 +1565,13 @@ function loadFields(){
   });
 }
 function renderFields(){
+  var f = currentForm();
+  var note = $("fd-core-note");
+  if (note){
+    note.textContent = (f && f.ask_core_fields === false)
+      ? "This form asks only the questions below."
+      : "First name, last name and email address are asked at the top of this form before the questions below. Turn that off under Manage.";
+  }
   var box = $("fields-list");
   box.innerHTML = "";
   var sorted = STATE.fields.slice().sort(function(a,b){ return a.sort_order - b.sort_order; });
@@ -1616,6 +1718,33 @@ function groupByCategory(items){
   });
   return order.map(function(name){ return {name: name, items: byName[name]}; });
 }
+// Asked for on every question, so nothing ends up uncategorised by accident.
+// "Other" is the fallback, and "New category" reveals a box to name your own.
+var NEW_CATEGORY_VALUE = "__new__";
+function categoryChoices(){
+  var out = CATEGORY_ORDER.slice();
+  knownCategories().forEach(function(c){
+    if (out.indexOf(c) === -1 && c !== "Other") out.push(c);
+  });
+  out.push("Other");
+  return out;
+}
+function buildCategoryPicker(current){
+  var sel = $("ke-category-select"), box = $("ke-category");
+  sel.innerHTML = "";
+  var choices = categoryChoices();
+  if (current && choices.indexOf(current) === -1) choices.unshift(current);
+  choices.forEach(function(c){ sel.appendChild(new Option(c, c)); });
+  sel.appendChild(new Option("New category…", NEW_CATEGORY_VALUE));
+  sel.value = current || "Other";
+  box.value = "";
+  box.classList.add("hidden");
+}
+function selectedCategory(){
+  var sel = $("ke-category-select");
+  if (sel.value === NEW_CATEGORY_VALUE) return $("ke-category").value.trim();
+  return sel.value;
+}
 function knownCategories(){
   var seen = {};
   STATE.library.forEach(function(f){
@@ -1724,16 +1853,18 @@ function openKeyEditor(key){
   $("ke-ar").value = key ? key.label_ar : "";
   renderKeyExtraLangs(key ? key.labels_extra : null);
   $("ke-type").value = key ? key.field_type : "text";
-  $("ke-category").value = key ? (key.category || "") : "";
-  var list = $("ke-category-list");
-  list.innerHTML = "";
-  knownCategories().forEach(function(c){ list.appendChild(new Option(c, c)); });
+  buildCategoryPicker(key ? (key.category || "") : "");
   $("ke-options").innerHTML = "";
   if (key && key.field_type === "select" && key.options){ key.options.forEach(addKeyOptionRow); }
   $("ke-options-wrap").classList.toggle("hidden", $("ke-type").value !== "select");
   clearFlash("key-editor-msg");
   show("key-editor-view");
 }
+$("ke-category-select").addEventListener("change", function(){
+  var isNew = this.value === NEW_CATEGORY_VALUE;
+  $("ke-category").classList.toggle("hidden", !isNew);
+  if (isNew) $("ke-category").focus();
+});
 function addKeyOptionRow(opt){
   var row = document.createElement("div");
   row.className = "opt-row";
@@ -1781,7 +1912,7 @@ $("ke-save").addEventListener("click", function(){
     label_ar: $("ke-ar").value.trim(),
     labels_extra: collectKeyExtraLangs(),
     field_type: type,
-    category: $("ke-category").value.trim(),
+    category: selectedCategory() || "Other",
     options: type === "select" ? collectKeyOptions() : null
   };
   var url = STATE.editingKeyId ? "/admin/field-keys/" + STATE.editingKeyId + "/update" : "/admin/field-keys";
@@ -2226,7 +2357,10 @@ function loadAppSettings(quiet){
     if (res.status !== 200) return;
     STATE.timezone = res.body.settings.timezone || "UTC";
     if (res.body.settings.language_labels) STATE.languageLabels = res.body.settings.language_labels;
-    if (res.body.settings.admin_theme) STATE.adminTheme = res.body.settings.admin_theme;
+    if (res.body.settings.admin_theme){
+      STATE.appTheme = res.body.settings.admin_theme;
+      if (!STATE.adminThemeIsOwn) STATE.adminTheme = STATE.appTheme;
+    }
     STATE.translateApiKey = res.body.settings.translate_api_key || "";
     applyLanguageLabelNames();
     applyAdminTheme(STATE.adminTheme);
@@ -2461,7 +2595,7 @@ function applyAdminTheme(theme){
   }
 }
 function loadAdminTheme(){
-  var t = STATE.adminTheme;
+  var t = STATE.appTheme || STATE.adminTheme;
   $("theme-primary").value = t.primary;
   $("theme-primary-picker").value = t.primary;
   $("theme-text").value = t.text;
@@ -2481,12 +2615,103 @@ $("theme-save-btn").addEventListener("click", function(){
   }
   api("POST", "/admin/app-settings", payload).then(function(res){
     if (res.body.ok){
-      flash("theme-msg", "Saved.", true);
-      STATE.adminTheme = payload.admin_theme;
-      applyAdminTheme(STATE.adminTheme);
+      flash("theme-msg", STATE.adminThemeIsOwn
+        ? "Saved. You're on your own colors (My colors), so your view is unchanged."
+        : "Saved.", true);
+      STATE.appTheme = payload.admin_theme;
+      if (!STATE.adminThemeIsOwn){
+        STATE.adminTheme = STATE.appTheme;
+        applyAdminTheme(STATE.adminTheme);
+      }
       return;
     }
     flash("theme-msg", res.body.error || "Could not save these colors.");
+  });
+});
+
+/* ------------------------------------------------ my own colors ------ */
+// Each account can set the colors it sees. Saved against the account, so it
+// follows the person to any browser, and nobody else's panel changes.
+var MY_THEME_PRESETS = [
+  ["House blue", "#0B5273", "#1F2B33"],
+  ["Deep teal", "#0F6B6B", "#16262B"],
+  ["Plum", "#5B2A6B", "#241B2A"],
+  ["Graphite", "#34434D", "#1C2429"],
+  ["Forest", "#2F5D3A", "#1B2A1F"],
+  ["Burgundy", "#7A2230", "#2A1419"]
+];
+function renderMyThemePresets(){
+  var box = $("mt-presets");
+  box.innerHTML = "";
+  MY_THEME_PRESETS.forEach(function(p){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "btn-outline btn-sm"; b.textContent = p[0];
+    b.style.borderLeft = "6px solid " + p[1];
+    b.addEventListener("click", function(){
+      setMyThemeInputs({primary: p[1], text: p[2]});
+      applyAdminTheme({primary: p[1], text: p[2]});     // live preview
+    });
+    box.appendChild(b);
+  });
+}
+function setMyThemeInputs(t){
+  $("mt-primary").value = t.primary; $("mt-primary-picker").value = t.primary;
+  $("mt-text").value = t.text; $("mt-text-picker").value = t.text;
+}
+function openMyThemeView(){
+  setMyThemeInputs(STATE.adminTheme || {primary: "#0B5273", text: "#1F2B33"});
+  renderMyThemePresets();
+  clearFlash("mt-msg");
+  show("mytheme-view");
+}
+function closeMyThemeView(){
+  applyAdminTheme(STATE.adminTheme);                    // drop any live preview
+  show("dash-view");
+}
+$("mytheme-btn").addEventListener("click", openMyThemeView);
+$("mt-cancel").addEventListener("click", closeMyThemeView);
+$("mt-primary-picker").addEventListener("input", function(){ $("mt-primary").value = this.value; previewMyTheme(); });
+$("mt-text-picker").addEventListener("input", function(){ $("mt-text").value = this.value; previewMyTheme(); });
+$("mt-primary").addEventListener("input", function(){
+  if (/^#[0-9a-fA-F]{6}$/.test(this.value)){ $("mt-primary-picker").value = this.value; previewMyTheme(); }
+});
+$("mt-text").addEventListener("input", function(){
+  if (/^#[0-9a-fA-F]{6}$/.test(this.value)){ $("mt-text-picker").value = this.value; previewMyTheme(); }
+});
+function previewMyTheme(){
+  var t = {primary: $("mt-primary").value.trim(), text: $("mt-text").value.trim()};
+  if (/^#[0-9a-fA-F]{6}$/.test(t.primary) && /^#[0-9a-fA-F]{6}$/.test(t.text)) applyAdminTheme(t);
+}
+$("mt-save").addEventListener("click", function(){
+  clearFlash("mt-msg");
+  var t = {primary: $("mt-primary").value.trim(), text: $("mt-text").value.trim()};
+  if (!/^#[0-9a-fA-F]{6}$/.test(t.primary) || !/^#[0-9a-fA-F]{6}$/.test(t.text)){
+    flash("mt-msg", "Colors must be a 6-digit hex code, like #0B5273.");
+    return;
+  }
+  api("POST", "/admin/account/theme", t).then(function(res){
+    if (res.body.ok){
+      STATE.adminTheme = res.body.theme;
+      STATE.adminThemeIsOwn = true;
+      applyAdminTheme(STATE.adminTheme);
+      flash("mt-msg", "Saved — these are your colors now.", true);
+      return;
+    }
+    flash("mt-msg", res.body.error || "Could not save these colors.");
+  });
+});
+$("mt-reset").addEventListener("click", function(){
+  clearFlash("mt-msg");
+  api("POST", "/admin/account/theme", {reset: true}).then(function(res){
+    if (res.body.ok){
+      STATE.adminTheme = res.body.theme;
+      STATE.adminThemeIsOwn = false;
+      setMyThemeInputs(STATE.adminTheme);
+      applyAdminTheme(STATE.adminTheme);
+      flash("mt-msg", "Back to the app's colors.", true);
+      return;
+    }
+    flash("mt-msg", res.body.error || "Could not reset these colors.");
   });
 });
 

@@ -45,6 +45,7 @@ SCHEMA_SQL = [
         enabled_extra_langs_json LONGTEXT NULL,
         expiry_date   DATE NULL,
         public_url    VARCHAR(300) NULL,
+        ask_core_fields TINYINT(1) NOT NULL DEFAULT 1,
         created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
@@ -172,6 +173,10 @@ MIGRATE_SQL = [
     # The address the public actually uses for a form (a Cloudflare Tunnel
     # hostname, say) when it isn't just this server's own host and port.
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS public_url VARCHAR(300) NULL",
+    # Whether the form shows its built-in First name / Last name / Email
+    # block. Defaults to 1, so every form that already exists keeps asking
+    # exactly what it asked before.
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS ask_core_fields TINYINT(1) NOT NULL DEFAULT 1",
 ]
 
 # Ported straight from the old hardcoded index.html, so the form looks and
@@ -279,6 +284,8 @@ DEFAULT_FIELDS = [
 # because the form's built-in top section already asks for them. An admin can
 # still add one to a form from the catalog; it just isn't there by default.
 LIBRARY_ONLY_FIELDS = [
+    ("first_name",           "First name",                                                "الاسم الأول",                                      "text",     None,                      0),
+    ("last_name",            "Last name",                                                 "الاسم الأخير",                                     "text",     None,                      0),
     ("email_address",        "Email address",                                             "البريد الإلكتروني",                                "email",    None,                      0),
 ]
 
@@ -521,6 +528,7 @@ DEFAULT_CATEGORIES = {
     "exp_cleanliness": "Experience ratings", "exp_food": "Experience ratings",
     "exp_atmosphere": "Experience ratings", "exp_staff": "Experience ratings",
     "email_address": "Personal details",
+    "first_name": "Personal details", "last_name": "Personal details",
     "overall_satisfaction": "Overall", "nps": "Overall",
     "feedback_message": "Overall", "marketing_optin": "Consent",
 }
@@ -546,10 +554,59 @@ def _seed_field_key_library_if_empty(conn):
 # version is skipped rather than added alongside it as a near-duplicate.
 BLUEPRINT_ALIASES = {
     "date_of_birth": ("dob", "birthdate", "birth_date", "date_birth", "dateofbirth"),
-    "family_name": ("familyname", "surname", "family", "lastname", "last_name"),
+    "family_name": ("familyname", "family"),
     "phone": ("mobile", "mobile_number", "contact", "contact_number", "phone_number", "telephone"),
     "email_address": ("email_addr", "emailaddress", "e_mail", "mail", "email_id", "mail_address"),
+    "first_name": ("firstname", "fname", "given_name", "givenname", "name_first", "forename"),
+    "last_name": ("lastname", "lname", "second_name", "name_last", "surname"),
 }
+
+
+# Questions a release owns outright: these go in even when an admin built
+# their own version first, and that near-duplicate is removed from the catalog
+# so there's one of each. Only the catalog entry is touched — a form's own
+# questions, and everything already submitted, are left exactly as they are
+# (their answers are filed under the key the form asked with).
+REPLACE_BLUEPRINT_KEYS = ("first_name", "last_name")
+
+
+def replace_owned_library_keys():
+    """Makes sure the catalog holds this release's First name / Last name, in
+    both languages, and drops an admin's own duplicate of either. Returns
+    (added, relabelled, removed)."""
+    blueprint = {k: (en, ar, ftype, options)
+                 for k, en, ar, ftype, options, _req in LIBRARY_FIELDS}
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        added, relabelled, removed = [], [], []
+        for key in REPLACE_BLUEPRINT_KEYS:
+            if key not in blueprint:
+                continue
+            en, ar, ftype, options = blueprint[key]
+            category = DEFAULT_CATEGORIES.get(key)
+            cur.execute("SELECT id FROM field_keys WHERE field_key=%s", (key,))
+            row = cur.fetchone()
+            if row:
+                cur.execute(
+                    "UPDATE field_keys SET label_en=%s, label_ar=%s, category=COALESCE(NULLIF(category,''), %s) "
+                    "WHERE id=%s", (en, ar, category, row[0]))
+                if cur.rowcount:
+                    relabelled.append(key)
+            else:
+                cur.execute(
+                    """INSERT INTO field_keys (field_key, label_en, label_ar, field_type, options_json, category)
+                       VALUES (%s,%s,%s,%s,%s,%s)""", (key, en, ar, ftype, options, category))
+                added.append(key)
+            for alias in BLUEPRINT_ALIASES.get(key, ()):
+                cur.execute("DELETE FROM field_keys WHERE field_key=%s", (alias,))
+                if cur.rowcount:
+                    removed.append(alias)
+        conn.commit()
+        cur.close()
+        return added, relabelled, removed
+    finally:
+        conn.close()
 
 
 def add_missing_library_keys():
@@ -565,7 +622,9 @@ def add_missing_library_keys():
         existing = {row[0] for row in cur.fetchall()}
         added, skipped = [], []
         for key, en, ar, ftype, options, _required in LIBRARY_FIELDS:
-            if key in existing:
+            if key in existing or key in REPLACE_BLUEPRINT_KEYS:
+                # REPLACE_BLUEPRINT_KEYS are handled by
+                # replace_owned_library_keys(), which adds them either way.
                 continue
             clash = [a for a in BLUEPRINT_ALIASES.get(key, ()) if a in existing]
             if clash:
@@ -585,6 +644,14 @@ def add_missing_library_keys():
             cur.execute(
                 "UPDATE field_keys SET category=%s WHERE field_key=%s AND (category IS NULL OR category='')",
                 (category, key))
+            # A question an admin named themselves for the same thing (their
+            # own "firstname", "dob", "mobile"...) gets the same grouping, so
+            # it sits with the rest instead of alone under "Other". Only ever
+            # fills an empty category — one they typed is left alone.
+            for alias in BLUEPRINT_ALIASES.get(key, ()):
+                cur.execute(
+                    "UPDATE field_keys SET category=%s WHERE field_key=%s AND (category IS NULL OR category='')",
+                    (category, alias))
         conn.commit()
         cur.close()
         return added, skipped
@@ -690,6 +757,7 @@ def list_forms(active_only=False):
         for r in rows:
             r["active"] = bool(r["active"])
             r["lang_en"] = bool(r["lang_en"]); r["lang_ar"] = bool(r["lang_ar"])
+            r["ask_core_fields"] = bool(r.get("ask_core_fields", 1))
             r["enabled_extra_langs"] = json.loads(r["enabled_extra_langs_json"]) if r["enabled_extra_langs_json"] else []
             del r["enabled_extra_langs_json"]
         return rows
@@ -707,9 +775,24 @@ def get_form(form_id):
         if row:
             row["active"] = bool(row["active"])
             row["lang_en"] = bool(row["lang_en"]); row["lang_ar"] = bool(row["lang_ar"])
+            row["ask_core_fields"] = bool(row.get("ask_core_fields", 1))
             row["enabled_extra_langs"] = json.loads(row["enabled_extra_langs_json"]) if row["enabled_extra_langs_json"] else []
             del row["enabled_extra_langs_json"]
         return row
+    finally:
+        conn.close()
+
+
+def get_form_by_slug(slug):
+    """Used by the shared-hostname route /f/<slug>, so every form can be
+    reached through the admin panel's own port and hostname."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT id FROM forms WHERE slug=%s AND active=1", (slug,))
+        row = cur.fetchone()
+        cur.close()
+        return get_form(row["id"]) if row else None
     finally:
         conn.close()
 
@@ -730,7 +813,7 @@ def used_ports(exclude_form_id=None):
 
 
 def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_langs=None, expiry_date=None,
-                public_url=None):
+                public_url=None, ask_core_fields=True):
     """Creates the form with no questions yet — a new form starts blank so
     an admin picks exactly the field keys it needs from the Field keys
     library, rather than inheriting the full default set."""
@@ -740,9 +823,9 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
         extra = json.dumps(enabled_extra_langs) if enabled_extra_langs else None
         cur.execute(
             "INSERT INTO forms (name, slug, port, active, lang_en, lang_ar, enabled_extra_langs_json, "
-            "expiry_date, public_url) VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s)",
+            "expiry_date, public_url, ask_core_fields) VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s)",
             (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra, expiry_date,
-             public_url or None))
+             public_url or None, 1 if ask_core_fields else 0))
         new_id = cur.lastrowid
         conn.commit()
         cur.close()
@@ -751,8 +834,48 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
         conn.close()
 
 
+def clone_form(source_id, name, slug, port):
+    """A second form set up exactly like an existing one: same languages,
+    branding, subtitles and questions (in the same order, active or not).
+    Not copied: the submissions it collected, its alert rules (they'd start
+    double-sending), and its public address (that belongs to one hostname).
+    The logo file itself is copied by the caller, which owns the uploads
+    folder."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT * FROM forms WHERE id=%s", (source_id,))
+        src = cur.fetchone()
+        if not src:
+            cur.close()
+            raise ValueError("form not found")
+        cur.execute(
+            """INSERT INTO forms (name, slug, port, active, org_name, primary_color, ink_color,
+                                  lang_en, lang_ar, subtitle_en, subtitle_ar,
+                                  enabled_extra_langs_json, expiry_date, ask_core_fields)
+               VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+            (name, slug, port, src["org_name"], src["primary_color"], src["ink_color"],
+             src["lang_en"], src["lang_ar"], src["subtitle_en"], src["subtitle_ar"],
+             src["enabled_extra_langs_json"], src["expiry_date"], src.get("ask_core_fields", 1)))
+        new_id = cur.lastrowid
+        cur.execute(
+            """INSERT INTO form_fields
+                   (form_id, field_key, label_en, label_ar, labels_extra_json, field_type,
+                    options_json, required, sort_order, active)
+               SELECT %s, field_key, label_en, label_ar, labels_extra_json, field_type,
+                      options_json, required, sort_order, active
+                 FROM form_fields WHERE form_id=%s""",
+            (new_id, source_id))
+        copied_fields = cur.rowcount
+        conn.commit()
+        cur.close()
+        return {"id": new_id, "fields": copied_fields, "logo_filename": src["logo_filename"]}
+    finally:
+        conn.close()
+
+
 def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabled_extra_langs=None,
-                 expiry_date=_UNSET, public_url=_UNSET):
+                 expiry_date=_UNSET, public_url=_UNSET, ask_core_fields=None):
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -771,6 +894,8 @@ def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabl
             sets.append("expiry_date=%s"); params.append(expiry_date)   # None clears it
         if public_url is not _UNSET:
             sets.append("public_url=%s"); params.append(public_url or None)
+        if ask_core_fields is not None:
+            sets.append("ask_core_fields=%s"); params.append(1 if ask_core_fields else 0)
         if sets:
             params.append(form_id)
             cur.execute("UPDATE forms SET " + ", ".join(sets) + " WHERE id=%s", params)

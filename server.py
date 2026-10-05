@@ -36,6 +36,7 @@ import json
 import os
 import re
 import secrets
+import shutil
 import socket
 import sys
 import threading
@@ -267,7 +268,29 @@ def fetch_update_info():
     return latest, notes
 
 
-LIBRARY_TOPUP_MARKER = "library_keys_1_4_0"
+LIBRARY_TOPUP_MARKER = "library_keys_1_5_0"
+
+DEFAULT_ADMIN_THEME = {"primary": "#0B5273", "text": "#1F2B33"}
+
+
+def identity_theme_key(identity):
+    """A stable name for "this account's own colors" in the config store. The
+    primary admin lives in config.json rather than the users table, so it gets
+    its own name instead of a user id."""
+    if not identity:
+        return None
+    if identity["kind"] == "bootstrap":
+        return "bootstrap"
+    return "user:%s" % identity.get("user_id", identity["username"])
+
+
+def theme_for_identity(cfg, identity):
+    """The colors this account sees: its own if it picked some, otherwise the
+    app-wide ones set under Configuration -> Appearance."""
+    app_theme = cfg["settings"].get("admin_theme") or dict(DEFAULT_ADMIN_THEME)
+    key = identity_theme_key(identity)
+    own = (cfg["settings"].get("user_themes") or {}).get(key) if key else None
+    return dict(own) if own else dict(app_theme)
 
 
 def topup_library_once():
@@ -279,6 +302,7 @@ def topup_library_once():
         return
     try:
         added, skipped = db.add_missing_library_keys()
+        owned_added, owned_relabelled, owned_removed = db.replace_owned_library_keys()
     except Exception as e:
         log("could not top up the field key library: %s" % e)
         return
@@ -289,6 +313,13 @@ def topup_library_once():
         log("added new field keys to the library: %s" % ", ".join(added))
     if skipped:
         log("kept your own field keys instead of adding: %s" % "; ".join(skipped))
+    if owned_added:
+        log("added to the library: %s" % ", ".join(owned_added))
+    if owned_relabelled:
+        log("refreshed the English/Arabic labels of: %s" % ", ".join(owned_relabelled))
+    if owned_removed:
+        log("removed your duplicate catalog entries (forms and submissions untouched): %s"
+            % ", ".join(owned_removed))
 
 
 def drop_sessions_for(kind, key, keep_token=None):
@@ -314,6 +345,20 @@ def clean(value, limit):
 def slugify(text):
     s = re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
     return s[:64] or "form"
+
+
+def unique_slug(base, taken):
+    """Slugs are unique per install, so a copy needs its own — "fan-feedback",
+    then "fan-feedback-2", "fan-feedback-3"..."""
+    slug = base or "form"
+    if slug not in taken:
+        return slug
+    n = 2
+    while True:
+        candidate = "%s-%d" % (slug[:60], n)
+        if candidate not in taken:
+            return candidate
+        n += 1
 
 
 def clean_extra_langs(value):
@@ -350,20 +395,27 @@ def normalize_filter_dt(value, end_of_range):
     return value
 
 
-def validate_core(raw):
-    """First name, last name, email, consent — the fields every submission has."""
+def validate_core(raw, require_core=True):
+    """The built-in block: first name, last name, email, consent. A form can
+    turn the three name/email boxes off (ask_core_fields), in which case they
+    arrive empty and are stored empty; consent is always required."""
     rec = {
         "firstName": clean(raw.get("firstName"), 60),
         "lastName":  clean(raw.get("lastName"), 60),
         "email":     clean(raw.get("email"), 120),
         "language":  "ar" if raw.get("language") == "ar" else "en",
     }
-    if len(rec["firstName"]) < 2:
-        return None, "first name too short"
-    if len(rec["lastName"]) < 2:
-        return None, "last name too short"
-    if not EMAIL_RE.match(rec["email"]):
-        return None, "invalid email"
+    if require_core:
+        if len(rec["firstName"]) < 2:
+            return None, "first name too short"
+        if len(rec["lastName"]) < 2:
+            return None, "last name too short"
+        if not EMAIL_RE.match(rec["email"]):
+            return None, "invalid email"
+    else:
+        # Nothing was asked, so nothing is kept — a stray value in the request
+        # can't sneak into the record.
+        rec["firstName"] = rec["lastName"] = rec["email"] = ""
     if raw.get("consent") is not True:
         return None, "consent not given"
     return rec, None
@@ -436,11 +488,11 @@ def form_is_expired(form):
     return exp <= datetime.now().date()
 
 
-def validate_submission(raw, active_fields):
+def validate_submission(raw, active_fields, require_core=True):
     if raw.get("website"):
         return None, "honeypot"
 
-    core, err = validate_core(raw)
+    core, err = validate_core(raw, require_core=require_core)
     if err:
         return None, err
 
@@ -743,21 +795,20 @@ class BaseHandler(BaseHTTPRequestHandler):
 
 # --------------------------------------------------------- public (1/form)
 
-class PublicHandler(BaseHandler):
-    """Serves one form. FORM_ID is bound per port by make_public_handler()."""
-    FORM_ID = None
+class PublicRoutes:
+    """One form's public pages and endpoints. Mixed into both listeners: the
+    form's own port (PublicHandler) and the admin panel's port under
+    /f/<slug>/, so a form can be published either way."""
 
-    def do_GET(self):
-        path = urllib.parse.urlparse(self.path).path
-
+    def public_get(self, form_id, path):
         if path == "/health":
-            return self.send_json(200, {"ok": True, "formId": self.FORM_ID})
+            return self.send_json(200, {"ok": True, "formId": form_id})
         if path == "/api/form-fields":
-            return self.get_form_fields()
+            return self.get_form_fields(form_id)
         if path == "/api/ui-strings":
             return self.get_ui_strings()
         if path == "/logo":
-            return self.serve_logo(self.FORM_ID)
+            return self.serve_logo(form_id)
         if path in ("/", "/index.html"):
             return self.static_from(PUBLIC, "index.html")
 
@@ -766,18 +817,17 @@ class PublicHandler(BaseHandler):
             return self.fail(404)
         return self.static_from(PUBLIC, name)
 
-    def do_POST(self):
-        path = urllib.parse.urlparse(self.path).path
+    def public_post(self, form_id, path):
         if path == "/api/feedback":
-            return self.post_feedback()
+            return self.post_feedback(form_id)
         return self.fail(404)
 
-    def get_form_fields(self):
+    def get_form_fields(self, form_id):
         if not db.is_connected():
             return self.send_json(503, {"ok": False, "error": "not configured"})
         try:
-            fields = db.list_fields(self.FORM_ID, active_only=True)
-            form = db.get_form(self.FORM_ID)
+            fields = db.list_fields(form_id, active_only=True)
+            form = db.get_form(form_id)
         except Exception as e:
             log("form-fields query failed: %s" % e)
             return self.send_json(500, {"ok": False})
@@ -794,10 +844,11 @@ class PublicHandler(BaseHandler):
             "orgName": (form and (form.get("org_name") or form.get("name"))) or "",
             "primaryColor": (form and form.get("primary_color")) or "#FFEC01",
             "inkColor": (form and form.get("ink_color")) or "#0B0B0B",
-            "logoUrl": "/logo" if (form and form.get("logo_filename")) else None,
+            "logoUrl": "logo" if (form and form.get("logo_filename")) else None,
             "subtitleEn": (form and form.get("subtitle_en")) or None,
             "subtitleAr": (form and form.get("subtitle_ar")) or None,
         }
+        ask_core = bool(form.get("ask_core_fields", True)) if form else True
         languages = {
             "en": bool(form["lang_en"]) if form else True,
             "ar": bool(form["lang_ar"]) if form else True,
@@ -807,7 +858,7 @@ class PublicHandler(BaseHandler):
         languageLabels = cfg["settings"].get("language_labels", {})
         return self.send_json(200, {"ok": True, "fields": out, "branding": branding,
                                     "languages": languages, "extraLanguages": extraLangs,
-                                    "languageLabels": languageLabels})
+                                    "languageLabels": languageLabels, "askCoreFields": ask_core})
 
     def get_ui_strings(self):
         lang = self.query_one("lang", "")
@@ -817,7 +868,7 @@ class PublicHandler(BaseHandler):
             return self.send_json(404, {"ok": False, "error": "no cached translation for this language"})
         return self.send_json(200, {"ok": True, "strings": strings})
 
-    def post_feedback(self):
+    def post_feedback(self, form_id):
         ip = self.client_ip()
         raw = self.read_json_body()
         if raw is None:
@@ -830,16 +881,18 @@ class PublicHandler(BaseHandler):
         if not db.is_connected():
             return self.send_json(503, {"ok": False})
 
-        if form_is_expired(db.get_form(self.FORM_ID)):
+        if form_is_expired(db.get_form(form_id)):
             return self.send_json(410, {"ok": False, "error": "this form is no longer accepting responses"})
 
         try:
-            active_fields = db.list_fields(self.FORM_ID, active_only=True)
+            active_fields = db.list_fields(form_id, active_only=True)
         except Exception as e:
             log("could not load fields: %s" % e)
             return self.send_json(500, {"ok": False})
 
-        rec, err = validate_submission(raw, active_fields)
+        form = db.get_form(form_id)
+        rec, err = validate_submission(raw, active_fields,
+                                       require_core=bool(form and form.get("ask_core_fields", True)))
         if err == "honeypot":
             log("honeypot caught a submission from %s" % ip)
             return self.send_json(200, {"ok": True, "reference": db.make_reference()})
@@ -859,14 +912,26 @@ class PublicHandler(BaseHandler):
         rec["userAgent"] = (self.headers.get("User-Agent") or "")[:250]
 
         try:
-            ref = db.save_feedback(self.FORM_ID, rec)
+            ref = db.save_feedback(form_id, rec)
         except Exception as e:
             log("SAVE FAILED: %s" % e)
             return self.send_json(500, {"ok": False})
 
-        log("saved %s from %s (form %s)" % (ref, ip, self.FORM_ID))
-        _fire_new_submission_alert(self.FORM_ID, rec, ref)
+        log("saved %s from %s (form %s)" % (ref, ip, form_id))
+        _fire_new_submission_alert(form_id, rec, ref)
         return self.send_json(200, {"ok": True, "reference": ref})
+
+
+class PublicHandler(PublicRoutes, BaseHandler):
+    """Serves one form on its own port. FORM_ID is bound by
+    make_public_handler()."""
+    FORM_ID = None
+
+    def do_GET(self):
+        return self.public_get(self.FORM_ID, urllib.parse.urlparse(self.path).path)
+
+    def do_POST(self):
+        return self.public_post(self.FORM_ID, urllib.parse.urlparse(self.path).path)
 
 
 def _fire_new_submission_alert(form_id, rec, ref):
@@ -967,9 +1032,45 @@ FORMS = FormManager()
 
 # -------------------------------------------------------------- admin (1x)
 
-class AdminHandler(BaseHandler):
+class AdminHandler(PublicRoutes, BaseHandler):
+    # /f/<slug>/... serves a form on this same port and hostname, so one
+    # tunnel or proxy hostname publishes every form. A form still has its own
+    # port as well; this is the route for when publishing a port per form
+    # isn't practical.
+    FORM_PATH_RE = re.compile(r"^/f/([a-z0-9][a-z0-9-]{0,63})(/.*)?$")
+
+    def public_form_target(self, path):
+        """(form_id, sub_path) for a /f/<slug> request, or None. Sends the
+        404/redirect itself when there's nothing to serve."""
+        m = self.FORM_PATH_RE.match(path)
+        if not m:
+            return None
+        slug, sub = m.group(1), m.group(2)
+        if not db.is_connected():
+            self.fail(503)
+            return "handled"
+        if sub is None:
+            # Without the trailing slash the page's relative links would
+            # resolve one level too high, so send the browser to the slash.
+            self.send_response(301)
+            self.send_header("Location", "/f/%s/" % slug)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return "handled"
+        form = db.get_form_by_slug(slug)
+        if not form:
+            self.fail(404)
+            return "handled"
+        return form["id"], sub
+
     def do_GET(self):
         path = urllib.parse.urlparse(self.path).path
+
+        target = self.public_form_target(path)
+        if target == "handled":
+            return
+        if target:
+            return self.public_get(target[0], target[1])
 
         if path == "/health":
             return self.send_json(200, {"ok": True})
@@ -1022,11 +1123,19 @@ class AdminHandler(BaseHandler):
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
 
+        target = self.public_form_target(path)
+        if target == "handled":
+            return
+        if target:
+            return self.public_post(target[0], target[1])
+
         routes = {
             "/admin/setup": self.post_admin_setup,
             "/admin/login": self.post_admin_login,
             "/admin/logout": self.post_admin_logout,
             "/admin/account/password": self.post_account_password,
+            "/admin/account/theme": self.post_account_theme,
+            "/admin/port-test": self.post_port_test,
             "/admin/db-settings/test": self.post_db_test,
             "/admin/db-settings": self.post_db_settings,
             "/admin/app-settings": self.post_app_settings,
@@ -1066,6 +1175,10 @@ class AdminHandler(BaseHandler):
             if action == "update":
                 return self.post_admin_user_update(user_id)
             return self.post_admin_user_delete(user_id)
+
+        m = re.match(r"^/admin/forms/(\d+)/clone$", path)
+        if m:
+            return self.post_form_clone(int(m.group(1)))
 
         m = re.match(r"^/admin/forms/(\d+)/(update|delete|restore|destroy)$", path)
         if m:
@@ -1124,7 +1237,10 @@ class AdminHandler(BaseHandler):
             "allowedForms": allowed_forms,
             # Safe to expose pre-login (just colors) — the login/setup
             # screens need it too, not only the dashboard behind auth.
-            "adminTheme": cfg["settings"].get("admin_theme", {"primary": "#0B5273", "text": "#1F2B33"}),
+            "adminTheme": theme_for_identity(cfg, identity),
+            # Whether those colors are this account's own pick or the app's.
+            "adminThemeIsOwn": bool((cfg["settings"].get("user_themes") or {}).get(
+                identity_theme_key(identity))) if identity else False,
             "version": VERSION,
         })
 
@@ -1627,6 +1743,7 @@ class AdminHandler(BaseHandler):
             "active": f["active"], "listening": f["id"] in running,
             "url": self.form_url(f),
             "public_url": f.get("public_url") or "",
+            "ask_core_fields": bool(f.get("ask_core_fields", True)),
             "lang_en": f["lang_en"], "lang_ar": f["lang_ar"],
             "enabled_extra_langs": f.get("enabled_extra_langs") or [],
             "expiry_date": str(f["expiry_date"]) if f.get("expiry_date") else None,
@@ -1671,13 +1788,62 @@ class AdminHandler(BaseHandler):
         try:
             new_id = db.create_form(name, slug, port, lang_en=lang_en, lang_ar=lang_ar,
                                     enabled_extra_langs=extra_langs, expiry_date=expiry_date,
-                                    public_url=public_url)
+                                    public_url=public_url,
+                                    ask_core_fields=bool(body.get("ask_core_fields", True)))
         except Exception as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
         FORMS.sync()
         log("form created: %s (port %d)" % (name, port))
         return self.send_json(200, {"ok": True, "id": new_id, "port": port,
                                     "warning": port_reachable_warning(port)})
+
+    def post_form_clone(self, form_id):
+        """A copy of this form on its own port: same languages, branding and
+        questions, no submissions. Its name gets "(copy)" and the admin can
+        rename it straight away."""
+        if not self.require_permission("manage_forms"):
+            return
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        source = db.get_form(form_id)
+        if not source:
+            return self.send_json(404, {"ok": False, "error": "form not found"})
+
+        body = self.read_json_body() or {}
+        name = clean(body.get("name"), 120) or ("%s (copy)" % source["name"])[:120]
+        port_err, port = self._resolve_new_port(body.get("port"))
+        if port_err:
+            return self.send_json(400, {"ok": False, "error": port_err})
+
+        taken = {f["slug"] for f in db.list_forms()}
+        slug = unique_slug(slugify(name), taken)
+        try:
+            result = db.clone_form(form_id, name, slug, port)
+        except Exception as e:
+            return self.send_json(400, {"ok": False, "error": str(e)})
+
+        # The logo is a file on disk, not a database row — copy it too, under
+        # the new form's own name, so deleting either form leaves the other's
+        # logo alone.
+        logo = result.get("logo_filename")
+        if logo:
+            try:
+                updir = config_store.uploads_dir()
+                ext = logo.rsplit(".", 1)[-1]
+                new_logo = "form_%d.%s" % (result["id"], ext)
+                shutil.copyfile(os.path.join(updir, logo), os.path.join(updir, new_logo))
+                db.update_branding(result["id"], logo_filename=new_logo)
+            except OSError as e:
+                log("could not copy the logo for the copy of '%s': %s" % (source["name"], e))
+
+        FORMS.sync()
+        log("form cloned: %s -> %s (port %d)" % (source["name"], name, port))
+        return self.send_json(200, {
+            "ok": True, "id": result["id"], "port": port, "name": name,
+            "fields": result["fields"],
+            "warning": port_reachable_warning(port),
+            "note": "Questions and branding were copied. Submissions and alert rules were not.",
+        })
 
     def _parse_public_url(self, value):
         """"" / None clears it. Anything else must be a plain http(s) address
@@ -1757,6 +1923,8 @@ class AdminHandler(BaseHandler):
             return self.send_json(400, {"ok": False, "error": "at least one language must stay enabled"})
 
         update_kwargs = {}
+        if "ask_core_fields" in body:
+            update_kwargs["ask_core_fields"] = bool(body.get("ask_core_fields"))
         if "public_url" in body:
             err, public_url = self._parse_public_url(body.get("public_url"))
             if err:
@@ -1930,7 +2098,8 @@ class AdminHandler(BaseHandler):
         if err:
             return self.send_json(400, {"ok": False, "error": err})
         body["labels_extra"] = clean_labels_extra(body.get("labels_extra"))
-        body["category"] = clean(body.get("category"), 60)
+        # Every question lands in a group: nothing chosen means "Other".
+        body["category"] = clean(body.get("category"), 60) or "Other"
         try:
             new_id = db.create_field_key(body)
         except Exception as e:
@@ -1945,7 +2114,8 @@ class AdminHandler(BaseHandler):
         if err:
             return self.send_json(400, {"ok": False, "error": err})
         body["labels_extra"] = clean_labels_extra(body.get("labels_extra"))
-        body["category"] = clean(body.get("category"), 60)
+        # Every question lands in a group: nothing chosen means "Other".
+        body["category"] = clean(body.get("category"), 60) or "Other"
         try:
             db.update_field_key(key_id, body)
         except Exception as e:
@@ -2415,6 +2585,88 @@ class AdminHandler(BaseHandler):
             drop_session(c[SESSION_COOKIE].value)
         cookie = self.session_cookie("", 0)
         return self.send_json(200, {"ok": True}, cookie_header=cookie)
+
+    def post_account_theme(self):
+        """Any signed-in account setting the colors it sees. {"reset": true}
+        goes back to the app-wide colors; nobody else's view changes either
+        way."""
+        identity = self.admin_identity()
+        if not identity:
+            return self.send_json(401, {"ok": False, "error": "not signed in"})
+        body = self.read_json_body() or {}
+        cfg = config_store.load()
+        themes = cfg["settings"].setdefault("user_themes", {})
+        key = identity_theme_key(identity)
+        if body.get("reset"):
+            themes.pop(key, None)
+            config_store.save(cfg)
+            return self.send_json(200, {"ok": True, "theme": theme_for_identity(cfg, identity),
+                                        "isOwn": False})
+        primary = clean(body.get("primary"), 7)
+        text = clean(body.get("text"), 7)
+        if not HEX_COLOR_RE.match(primary or "") or not HEX_COLOR_RE.match(text or ""):
+            return self.send_json(400, {"ok": False, "error": "colors must be a 6-digit hex code, like #0B5273"})
+        themes[key] = {"primary": primary, "text": text}
+        config_store.save(cfg)
+        return self.send_json(200, {"ok": True, "theme": themes[key], "isOwn": True})
+
+    def post_port_test(self):
+        """Checks a port before a form is saved — the one the admin typed, or
+        the one auto-assign would pick when the box is left blank."""
+        if not self.require_any_permission([("manage_forms", None), ("manage_form_settings", None)]):
+            return
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        body = self.read_json_body() or {}
+        form_id = body.get("form_id")
+        try:
+            form_id = int(form_id) if form_id else None
+        except (TypeError, ValueError):
+            form_id = None
+        requested = body.get("port")
+        err, port = self._resolve_new_port(requested, exclude_form_id=form_id)
+        if err:
+            return self.send_json(200, {"ok": False, "port": None,
+                                        "assigned": "manual" if requested else "automatic",
+                                        "error": err})
+
+        own_port = None
+        if form_id:
+            existing = db.get_form(form_id)
+            own_port = existing["port"] if existing else None
+
+        notes = []
+        if form_id and port == own_port:
+            notes.append("Port %d is this form's current port." % port)
+        elif requested:
+            notes.append("Port %d is free and not used by another form." % port)
+        else:
+            notes.append("Port %d is the next free port in the auto-assign range %d–%d."
+                         % (port, FORM_PORT_RANGE[0], FORM_PORT_RANGE[1]))
+        if port == own_port:
+            notes.append("This form already runs on it, and answered just now."
+                         if self._port_answers(port) else
+                         "This form is set to it, but nothing answered on it just now.")
+        allowed = published_ports()
+        if not allowed:
+            notes.append("Nothing is restricting which ports can be reached on this server.")
+        elif port in allowed:
+            notes.append("Docker publishes it, so visitors can reach it.")
+        else:
+            notes.append("Docker does not publish it — the form would start but stay "
+                         "unreachable from outside. Published: %s." % PUBLISHED_PORTS_RAW)
+        reachable = (not allowed) or (port in allowed)
+        return self.send_json(200, {"ok": reachable, "port": port,
+                                    "assigned": "manual" if requested else "automatic",
+                                    "notes": notes})
+
+    def _port_answers(self, port, timeout=1.0):
+        """Does something actually answer on this port right now?"""
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=timeout):
+                return True
+        except OSError:
+            return False
 
     def post_account_password(self):
         # Any signed-in account changing its own password. For the primary
