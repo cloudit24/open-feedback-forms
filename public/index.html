@@ -244,8 +244,7 @@ button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
   <div class="card">
 
     <div class="card-head" id="head">
-      <h1 data-i18n="title">Tell us what you think</h1>
-      <p data-i18n="subtitle">Your feedback helps us improve matchdays, facilities and everything around the club. It takes about two minutes.</p>
+      <p id="formSubtitle"></p>
     </div>
 
     <div class="card-body">
@@ -336,8 +335,6 @@ var TURNSTILE_SITEKEY = "";
 var T = {
   en: {
     club:"Your Club",
-    title:"Tell us what you think",
-    subtitle:"Your feedback helps us improve matchdays, facilities and everything around the club. It takes about two minutes.",
     firstName:"First name", lastName:"Last name", email:"Email address",
     optional:"(optional)", choose:"Please choose...",
     setupTitle:"This form isn't ready yet",
@@ -371,8 +368,6 @@ var T = {
   },
   ar: {
     club:"ناديكم",
-    title:"شاركنا رأيك",
-    subtitle:"ملاحظاتك تساعدنا على تحسين أيام المباريات والمرافق وكل ما يخص النادي. لن تستغرق أكثر من دقيقتين.",
     firstName:"الاسم الأول", lastName:"الاسم الأخير", email:"البريد الإلكتروني",
     optional:"(اختياري)", choose:"الرجاء الاختيار...",
     setupTitle:"هذا النموذج غير جاهز بعد",
@@ -525,12 +520,16 @@ function applyLang(next){
     var k = nodes[i].getAttribute("data-i18n");
     var key = (k === "privacyBody" && !ASK_CORE && strings.privacyBodyNoContact)
       ? "privacyBodyNoContact" : k;
-    var text = (k === "subtitle" && subtitleOverride) ? subtitleOverride : strings[key];
+    var text = strings[key];
     if (!text) continue;
     if (k === "club") text = clubName;
     else if (text.indexOf("{club}") !== -1) text = text.split("{club}").join(clubName);
     nodes[i].textContent = text;
   }
+  // No fixed heading or description: only a subtitle the form's admin
+  // wrote under Branding, and nothing at all when there isn't one.
+  $("formSubtitle").textContent = subtitleOverride || "";
+  $("head").classList.toggle("hidden", !subtitleOverride);
   $("lang").value = lang;
   try { localStorage.setItem("awLang", lang); } catch(e){}
   renderDynamicFields();       // labels/options are language-dependent
@@ -934,7 +933,7 @@ function submit(e){
       $("refNo").textContent = res.body.reference || "—";
       $("form").style.display = "none";
       $("done").classList.add("show");
-      $("head").scrollIntoView({behavior:"smooth", block:"start"});
+      document.querySelector(".card").scrollIntoView({behavior:"smooth", block:"start"});
       return;
     }
     if (res.status === 429)      banner(T[lang].errRate);

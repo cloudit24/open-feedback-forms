@@ -9,8 +9,6 @@ exactly as before, so adding this file changes nothing for either of them.
 
 UI_STRINGS = {
     "club": "Your Club",
-    "title": "Tell us what you think",
-    "subtitle": "Your feedback helps us improve matchdays, facilities and everything around the club. It takes about two minutes.",
     "firstName": "First name", "lastName": "Last name", "email": "Email address",
     "optional": "(optional)", "choose": "Please choose...",
     "setupTitle": "This form isn't ready yet",

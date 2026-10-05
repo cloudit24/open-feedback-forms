@@ -3,6 +3,13 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.6.4
+
+- Removed the fixed heading "Tell us what you think" / "شاركنا رأيك" and the
+  fixed description under it from every form. The top of the form now shows
+  only the form's own subtitle, if one is set under Edit → Branding, and
+  nothing at all when it isn't.
+
 ## 1.6.3
 
 - Fixed: running the install link a second time could stop with "Port 8800 is
