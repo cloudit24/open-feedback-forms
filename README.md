@@ -2,8 +2,8 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-A self-hosted, bilingual (English / Arabic) fan/customer feedback form —
-built for sports clubs, but generic enough for any organization. Runs any
+A self-hosted, bilingual (English / Arabic) feedback form for any
+organisation: customers, events, products, staff, websites and more. Runs any
 number of forms, each with its own port, its own logo/colors/name, and its
 own question set, plus one admin panel to manage all of them.
 
@@ -160,10 +160,9 @@ the app.
 
 ## Questions, per form
 
-Each form ships with a starter set of questions (name, mobile, gender, age
-group, nationality, attendance frequency, a six-part matchday-experience
-rating, overall satisfaction, NPS, an open feedback field, and a marketing
-opt-in) that the admin can freely edit, reorder, add to, or retire — changes
+When you add a form you pick a template (Blank, Customer satisfaction, Net
+Promoter Score, Event, Product, Employee, Website, or Venue / visit
+experience), each with a ready-made set of questions that the admin can freely edit, reorder, add to, or retire — changes
 apply to the public page immediately, no deploy required.
 
 ## Getting the data out

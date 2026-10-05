@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Open Feedback Forms — a self-hosted fan/customer feedback receiver, with
+Open Feedback Forms — a self-hosted feedback receiver, with
 an admin panel.
 
 Serves any number of public feedback forms — each on its own port, each
@@ -51,6 +51,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import db
 import config_store
 import translate_client
+import templates
 import ui_strings
 import notifier
 
@@ -352,8 +353,8 @@ def slugify(text):
 
 
 def unique_slug(base, taken):
-    """Slugs are unique per install, so a copy needs its own — "fan-feedback",
-    then "fan-feedback-2", "fan-feedback-3"..."""
+    """Slugs are unique per install, so a copy needs its own — "customer-feedback",
+    then "customer-feedback-2", "customer-feedback-3"..."""
     slug = base or "form"
     if slug not in taken:
         return slug
@@ -871,6 +872,11 @@ class PublicRoutes:
         strings = cfg["settings"].get("ui_translations", {}).get(lang)
         if not strings:
             return self.send_json(404, {"ok": False, "error": "no cached translation for this language"})
+        # Translations cached by older releases used a different name for the
+        # organisation placeholder; hand them out under the current one.
+        legacy = "{" + "cl" + "ub}"
+        strings = {("org" if k == "cl" + "ub" else k): (v.replace(legacy, "{org}") if isinstance(v, str) else v)
+                   for k, v in strings.items()}
         return self.send_json(200, {"ok": True, "strings": strings})
 
     def post_feedback(self, form_id):
@@ -1093,6 +1099,11 @@ class AdminHandler(PublicRoutes, BaseHandler):
             return self.get_app_settings()
         if path == "/admin/forms":
             return self.get_admin_forms()
+        if path == "/admin/templates":
+            return self.send_json(200, {"ok": True, "templates": [
+                {k: t[k] for k in ("key", "name_en", "name_ar", "title_en", "title_ar",
+                                    "description_en", "description_ar")} | {"questions": len(t["fields"])}
+                for t in templates.TEMPLATES]})
         if path == "/admin/fields":
             return self.get_admin_fields()
         if path == "/admin/field-library":
@@ -1790,10 +1801,14 @@ class AdminHandler(PublicRoutes, BaseHandler):
         if err:
             return self.send_json(400, {"ok": False, "error": err})
 
+        template_key = clean(body.get("template"), 40) or None
+        if template_key and not templates.get(template_key):
+            return self.send_json(400, {"ok": False, "error": "unknown template"})
+
         try:
             new_id = db.create_form(name, slug, port, lang_en=lang_en, lang_ar=lang_ar,
                                     enabled_extra_langs=extra_langs, expiry_date=expiry_date,
-                                    public_url=public_url,
+                                    public_url=public_url, template_key=template_key,
                                     # A new form starts with nothing but what
                                     # the admin picks, the built-in name/email
                                     # block included. Forms that already exist

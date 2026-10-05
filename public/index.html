@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Fan Feedback</title>
+<title>Feedback</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -232,7 +232,7 @@ button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
     <div class="brand">
       <img class="crest" id="crestImg" src="" alt="" aria-hidden="true" style="display:none">
       <div class="brand-text">
-        <b data-i18n="club">Your Club</b>
+        <b data-i18n="org">Your organisation</b>
       </div>
     </div>
     <div class="top-actions">
@@ -251,7 +251,7 @@ button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
 
       <div class="setup-notice hidden" id="setupNotice">
         <b id="setupNoticeTitle" data-i18n="setupTitle">This form isn't ready yet</b>
-        <span id="setupNoticeBody" data-i18n="setupBody">The club is still setting this up. Please check back shortly.</span>
+        <span id="setupNoticeBody" data-i18n="setupBody">We are still setting this up. Please check back shortly.</span>
       </div>
 
       <div class="banner bad" id="banner" role="alert"></div>
@@ -289,7 +289,7 @@ button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
 
         <div class="privacy">
           <b data-i18n="privacyTitle">Terms and Conditions</b>
-          <span data-i18n="privacyBody">We're grateful for the time you're taking to share your thoughts with us. {club} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you as one of our fans. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside the club. You're always welcome to ask us to update or delete your information by emailing the club.</span>
+          <span data-i18n="privacyBody">We're grateful for the time you're taking to share your thoughts with us. {org} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside {org}. You're always welcome to ask us to update or delete your information by emailing us.</span>
         </div>
 
         <div id="ts-widget"></div>
@@ -308,7 +308,7 @@ button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>
         </div>
         <h2 data-i18n="doneTitle">Thank you — we've got it</h2>
-        <p data-i18n="doneBody">Your feedback has reached the club. If you asked us to contact you, someone will be in touch.</p>
+        <p data-i18n="doneBody">Your feedback has reached us. If you asked us to contact you, someone will be in touch.</p>
         <div class="ref">
           <span class="ref-label" data-i18n="refLabel">YOUR REFERENCE</span>
           <span id="refNo">—</span>
@@ -319,7 +319,7 @@ button,.check label,.stars label{-webkit-tap-highlight-color:transparent}
     </div>
   </div>
 
-  <p class="foot" data-i18n="foot">{club}</p>
+  <p class="foot" data-i18n="foot">{org}</p>
 </div>
 
 <script>
@@ -334,16 +334,16 @@ var TURNSTILE_SITEKEY = "";
 /* ---------------------------- text ---------------------------- */
 var T = {
   en: {
-    club:"Your Club",
+    org:"Your organisation",
     firstName:"First name", lastName:"Last name", email:"Email address",
     optional:"(optional)", choose:"Please choose...",
     setupTitle:"This form isn't ready yet",
-    setupBody:"The club is still setting this up. Please check back shortly.",
+    setupBody:"We are still setting this up. Please check back shortly.",
     expiredTitle:"This form is no longer accepting responses",
     expiredBody:"Thanks for your interest — this feedback window has closed.",
     privacyTitle:"Terms and Conditions",
-    privacyBodyNoContact:"We're grateful for the time you're taking to share your thoughts with us. {club} uses your answers to review your feedback and improve what we do. We treat what you send with care, we never sell it, and we never share it outside the club. You're always welcome to ask us to update or delete it by emailing the club.",
-    privacyBody:"We're grateful for the time you're taking to share your thoughts with us. {club} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you as one of our fans. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside the club. You're always welcome to ask us to update or delete your information by emailing the club.",
+    privacyBodyNoContact:"We're grateful for the time you're taking to share your thoughts with us. {org} uses your answers to review your feedback and improve what we do. We treat what you send with care, we never sell it, and we never share it outside {org}. You're always welcome to ask us to update or delete it by emailing us.",
+    privacyBody:"We're grateful for the time you're taking to share your thoughts with us. {org} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside {org}. You're always welcome to ask us to update or delete your information by emailing us.",
     consent:"I agree to terms and conditions",
     submit:"Send feedback", sending:"Sending...",
     errFirst:"Please enter your first name.",
@@ -361,22 +361,22 @@ var T = {
     errRate:"You have sent several messages already. Please try again later.",
     errBot:"Please complete the verification check and try again.",
     doneTitle:"Thank you — we've got it",
-    doneBody:"Your feedback has reached the club. If you asked us to contact you, someone will be in touch.",
+    doneBody:"Your feedback has reached us. If you asked us to contact you, someone will be in touch.",
     refLabel:"YOUR REFERENCE", again:"Send more feedback",
-    foot:"{club}",
+    foot:"{org}",
     words:["","Very poor","Poor","Okay","Good","Excellent"]
   },
   ar: {
-    club:"ناديكم",
+    org:"مؤسستكم",
     firstName:"الاسم الأول", lastName:"الاسم الأخير", email:"البريد الإلكتروني",
     optional:"(اختياري)", choose:"الرجاء الاختيار...",
     setupTitle:"هذا النموذج غير جاهز بعد",
-    setupBody:"لا يزال النادي يعمل على إعداد هذا النموذج. يرجى المحاولة لاحقاً.",
+    setupBody:"ما زلنا نعمل على إعداد هذا النموذج. يرجى المحاولة لاحقاً.",
     expiredTitle:"هذا النموذج لم يعد يقبل الردود",
     expiredBody:"شكراً لاهتمامك — انتهت فترة استقبال الملاحظات لهذا النموذج.",
     privacyTitle:"الشروط والأحكام",
-    privacyBodyNoContact:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يستخدم {club} إجاباتك لمراجعة ملاحظاتك وتحسين ما نقدمه. نتعامل مع ما ترسله بعناية تامة، ولا نبيعه أبداً، ولا نشاركه خارج النادي. ويسعدنا دائماً أن تطلب منا تحديثه أو حذفه عبر مراسلة النادي.",
-    privacyBody:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يقوم {club} بجمع اسمك وبريدك الإلكتروني ورقم هاتفك المتحرك وجنسيتك حتى يتمكن فريقنا من مراجعة ملاحظاتك، وإبقائك على اطلاع بآخر المستجدات، والحفاظ على علاقتنا المستمرة بك كأحد جماهيرنا الأعزاء. وقد نتواصل معك أيضاً بخصوص الملاحظة التي شاركتنا إياها، سواء للمتابعة أو للاستفسار أو لمجرد شكرك عليها. نتعامل مع بياناتك بعناية تامة، ولا نبيعها أبداً، ولا نشاركها خارج النادي. ويسعدنا دائماً أن تطلب منا تحديث أو حذف بياناتك عبر مراسلة النادي.",
+    privacyBodyNoContact:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يستخدم {org} إجاباتك لمراجعة ملاحظاتك وتحسين ما نقدمه. نتعامل مع ما ترسله بعناية تامة، ولا نبيعه أبداً، ولا نشاركه خارج {org}. ويسعدنا دائماً أن تطلب منا تحديثه أو حذفه عبر مراسلتنا.",
+    privacyBody:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يقوم {org} بجمع اسمك وبريدك الإلكتروني ورقم هاتفك المتحرك وجنسيتك حتى يتمكن فريقنا من مراجعة ملاحظاتك، وإبقائك على اطلاع بآخر المستجدات، والحفاظ على علاقتنا المستمرة بك. وقد نتواصل معك أيضاً بخصوص الملاحظة التي شاركتنا إياها، سواء للمتابعة أو للاستفسار أو لمجرد شكرك عليها. نتعامل مع بياناتك بعناية تامة، ولا نبيعها أبداً، ولا نشاركها خارج {org}. ويسعدنا دائماً أن تطلب منا تحديث أو حذف بياناتك عبر مراسلتنا.",
     consent:"أوافق على الشروط والأحكام",
     submit:"إرسال الملاحظة", sending:"جارٍ الإرسال...",
     errFirst:"الرجاء إدخال الاسم الأول.",
@@ -394,9 +394,9 @@ var T = {
     errRate:"لقد أرسلت عدة رسائل بالفعل. يرجى المحاولة لاحقاً.",
     errBot:"يرجى إكمال التحقق الأمني والمحاولة مرة أخرى.",
     doneTitle:"شكراً لك — وصلتنا ملاحظتك",
-    doneBody:"وصلت ملاحظتك إلى النادي. وإذا طلبت التواصل معك، سيقوم أحد موظفينا بالاتصال بك.",
+    doneBody:"وصلت ملاحظتك إلينا. وإذا طلبت التواصل معك، سيقوم أحد موظفينا بالاتصال بك.",
     refLabel:"رقم المرجع", again:"إرسال ملاحظة أخرى",
-    foot:"{club}",
+    foot:"{org}",
     words:["","ضعيف جداً","ضعيف","مقبول","جيد","ممتاز"]
   }
 };
@@ -509,10 +509,10 @@ function applyLang(next){
   lang = next;
   var strings = T[lang] || T.en;
   var meta = LANG_META[lang] || { dir: "ltr" };
-  var clubName = BRANDING.orgName || strings.club;
+  var orgName = BRANDING.orgName || strings.org;
   document.documentElement.lang = lang;
   document.documentElement.dir = meta.dir;
-  document.title = clubName + (lang === "ar" ? " — الملاحظات" : " — Feedback");
+  document.title = orgName + (lang === "ar" ? " — الملاحظات" : " — Feedback");
 
   var subtitleOverride = lang === "ar" ? BRANDING.subtitleAr : (lang === "en" ? BRANDING.subtitleEn : null);
   var nodes = document.querySelectorAll("[data-i18n]");
@@ -522,8 +522,8 @@ function applyLang(next){
       ? "privacyBodyNoContact" : k;
     var text = strings[key];
     if (!text) continue;
-    if (k === "club") text = clubName;
-    else if (text.indexOf("{club}") !== -1) text = text.split("{club}").join(clubName);
+    if (k === "org") text = orgName;
+    else if (text.indexOf("{org}") !== -1) text = text.split("{org}").join(orgName);
     nodes[i].textContent = text;
   }
   // No fixed heading or description: only a subtitle the form's admin

@@ -1,7 +1,7 @@
 """
 MariaDB layer for the feedback app.
 
-Everything the fan-facing form and the admin panel need to store lives
+Everything the public form and the admin panel need to store lives
 here: the question list (`form_fields`) and the submissions (`feedback`).
 Schema is created automatically the first time a connection succeeds —
 nothing to run by hand. `extra_fields` is stored as JSON text rather than
@@ -20,6 +20,8 @@ from datetime import datetime, timedelta, timezone
 
 import mysql.connector
 from mysql.connector import pooling
+
+import templates
 
 _UNSET = object()   # distinguishes "not provided" from "explicitly set to None" in optional update params
 _pool = None
@@ -235,15 +237,15 @@ _AGE_OPTIONS = [
     ["55p", "55+", "55 فأكثر"],
 ]
 _ATTENDANCE_OPTIONS = [
-    ["first_time", "This is my first match", "هذه أول مباراة لي"],
+    ["first_time", "This is my first visit", "هذه أول زيارة لي"],
     ["occasionally", "Occasionally", "من حين لآخر"],
-    ["several_per_season", "Several times per season", "عدة مرات في الموسم"],
-    ["most_home", "Most home matches", "معظم المباريات على أرضنا"],
-    ["almost_every", "Almost every home match", "كل المباريات تقريبًا"],
+    ["several_per_season", "Several times a year", "عدة مرات في السنة"],
+    ["most_home", "Most visits", "معظم الزيارات"],
+    ["almost_every", "Almost every time", "في كل مرة تقريبًا"],
 ]
 _HEARD_OPTIONS = [
     ["social", "Social media", "مواقع التواصل الاجتماعي"],
-    ["website_app", "Club website or app", "موقع أو تطبيق النادي"],
+    ["website_app", "Our website or app", "موقعنا أو تطبيقنا"],
     ["friends_family", "Friends or family", "الأصدقاء أو العائلة"],
     ["whatsapp", "WhatsApp", "واتساب"],
     ["other", "Other", "أخرى"],
@@ -271,18 +273,18 @@ DEFAULT_FIELDS = [
     ("gender",               "Gender",                                                    "الجنس",                                            "select",   _opts(_GENDER_OPTIONS),    1),
     ("age_group",            "Age group",                                                 "الفئة العمرية",                                    "select",   _opts(_AGE_OPTIONS),       1),
     ("nationality",          "Nationality",                                               "الجنسية",                                          "select",   _opts(_NAT_OPTIONS),       1),
-    ("attendance_frequency", "How often do you attend our home matches?",                  "كم مرة تحضر مباريات النادي على أرضنا؟",             "select",   _opts(_ATTENDANCE_OPTIONS), 1),
-    ("heard_about",          "How did you hear about today's match?",                     "كيف علمت بمباراة اليوم؟",                          "select",   _opts(_HEARD_OPTIONS),     1),
-    ("exp_entry",            "Stadium entry & access",                                    "الدخول إلى الاستاد",                               "select",   _opts(_EXPERIENCE_SCALE),  1),
+    ("attendance_frequency", "How often do you visit us?",                                "كم مرة تزورنا؟",                                    "select",   _opts(_ATTENDANCE_OPTIONS), 1),
+    ("heard_about",          "How did you hear about us?",                               "كيف سمعت عنا؟",                                    "select",   _opts(_HEARD_OPTIONS),     1),
+    ("exp_entry",            "Entry & access",                                           "الدخول وسهولة الوصول",                              "select",   _opts(_EXPERIENCE_SCALE),  1),
     ("exp_seating",          "Seating & facilities",                                      "المقاعد والمرافق",                                 "select",   _opts(_EXPERIENCE_SCALE),  1),
     ("exp_cleanliness",      "Cleanliness",                                               "النظافة",                                          "select",   _opts(_EXPERIENCE_SCALE),  1),
     ("exp_food",             "Food & beverage",                                           "المأكولات والمشروبات",                            "select",   _opts(_EXPERIENCE_SCALE),  1),
     ("exp_atmosphere",       "Atmosphere & entertainment",                                "الأجواء والترفيه",                                 "select",   _opts(_EXPERIENCE_SCALE),  1),
     ("exp_staff",            "Staff & customer service",                                  "الموظفون وخدمة العملاء",                          "select",   _opts(_EXPERIENCE_SCALE),  1),
-    ("overall_satisfaction", "Overall, how satisfied were you with today's matchday?",    "بشكل عام، ما مدى رضاك عن يوم المباراة؟",           "rating",   None,                      1),
+    ("overall_satisfaction", "Overall, how satisfied were you with your experience?",    "بشكل عام، ما مدى رضاك عن تجربتك؟",                   "rating",   None,                      1),
     ("nps",                  "How likely are you to recommend us to a friend or family member? (0 = not likely, 10 = extremely likely)", "ما مدى احتمالية أن توصي بنا لصديق أو أحد أفراد العائلة؟ (0 = غير محتمل، 10 = محتمل جدًا)", "select", _opts(_NPS_OPTIONS), 1),
-    ("feedback_message",     "What's the one thing we could improve for your next visit?", "ما الشيء الوحيد الذي يمكننا تحسينه لزيارتك القادمة؟", "textarea", None,                    0),
-    ("marketing_optin",      "Yes, keep me updated with club news, match updates, ticket offers and exclusive fan experiences.", "نعم، أرغب بتلقي أخبار النادي وتحديثات المباريات وعروض التذاكر وتجارب حصرية للمشجعين.", "checkbox", None, 0),
+    ("feedback_message",     "What's the one thing we could improve?", "ما الشيء الوحيد الذي يمكننا تحسينه؟", "textarea", None,                    0),
+    ("marketing_optin",      "Yes, keep me updated with news and offers.", "نعم، أرغب في إبقائي على اطلاع بالأخبار والعروض.", "checkbox", None, 0),
 ]
 
 # Questions that belong in the catalog but are not put on a brand-new form,
@@ -292,6 +294,28 @@ LIBRARY_ONLY_FIELDS = [
     ("first_name",           "First name",                                                "الاسم الأول",                                      "text",     None,                      0),
     ("last_name",            "Last name",                                                 "الاسم الأخير",                                     "text",     None,                      0),
     ("email_address",        "Email address",                                             "البريد الإلكتروني",                                "email",    None,                      0),
+    # Questions used by the form templates (templates.py).
+    ('nps_reason', 'What is the main reason for your score?', 'ما السبب الرئيسي لتقييمك؟', 'textarea', None, 0),
+    ('event_overall', 'Overall, how would you rate the event?', 'بشكل عام، كيف تقيّم الفعالية؟', 'rating', None, 1),
+    ('event_content', 'Content & programme', 'المحتوى والبرنامج', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('event_organisation', 'Organisation & timing', 'التنظيم والتوقيت', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('event_venue', 'Venue & facilities', 'المكان والمرافق', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('product_overall', 'Overall, how satisfied are you with the product?', 'بشكل عام، ما مدى رضاك عن المنتج؟', 'rating', None, 1),
+    ('product_quality', 'Quality', 'الجودة', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('product_value', 'Value for money', 'القيمة مقابل السعر', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('product_ease', 'Ease of use', 'سهولة الاستخدام', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('product_missing', 'What is missing, or could work better?', 'ما الذي ينقص المنتج أو يمكن تحسينه؟', 'textarea', None, 0),
+    ('emp_overall', 'Overall, how satisfied are you working here?', 'بشكل عام، ما مدى رضاك عن العمل هنا؟', 'rating', None, 1),
+    ('emp_management', 'Support from management', 'دعم الإدارة', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('emp_environment', 'Work environment', 'بيئة العمل', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('emp_growth', 'Career growth & development', 'التطور والنمو المهني', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('emp_communication', 'Communication', 'التواصل', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('emp_suggestion', 'What one change would improve working here?', 'ما التغيير الذي سيحسّن العمل هنا؟', 'textarea', None, 0),
+    ('web_overall', 'Overall, how satisfied are you with our website?', 'بشكل عام، ما مدى رضاك عن موقعنا؟', 'rating', None, 1),
+    ('web_find', 'Finding what you need', 'العثور على ما تحتاجه', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('web_design', 'Design & look', 'التصميم والمظهر', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('web_speed', 'Speed & performance', 'السرعة والأداء', 'select', _opts(_EXPERIENCE_SCALE), 1),
+    ('web_problem', 'Did anything not work as expected?', 'هل لم يعمل شيء كما توقعت؟', 'textarea', None, 0),
 ]
 
 # Everything the Field keys catalog is seeded and topped up from.
@@ -536,6 +560,14 @@ DEFAULT_CATEGORIES = {
     "first_name": "Personal details", "last_name": "Personal details",
     "overall_satisfaction": "Overall", "nps": "Overall",
     "feedback_message": "Overall", "marketing_optin": "Consent",
+    "nps_reason": "Overall",
+    "event_overall": "Event", "event_content": "Event", "event_organisation": "Event", "event_venue": "Event",
+    "product_overall": "Product", "product_quality": "Product", "product_value": "Product",
+    "product_ease": "Product", "product_missing": "Product",
+    "emp_overall": "Employee", "emp_management": "Employee", "emp_environment": "Employee",
+    "emp_growth": "Employee", "emp_communication": "Employee", "emp_suggestion": "Employee",
+    "web_overall": "Website", "web_find": "Website", "web_design": "Website",
+    "web_speed": "Website", "web_problem": "Website",
 }
 
 def _seed_field_key_library_if_empty(conn):
@@ -669,10 +701,12 @@ def _seed_default_form_if_empty(conn, default_port):
     cur.execute("SELECT COUNT(*) FROM forms")
     (count,) = cur.fetchone()
     if count == 0:
+        tpl = templates.get(templates.DEFAULT_TEMPLATE_KEY)
         cur.execute(
-            "INSERT INTO forms (id, name, slug, port, active) VALUES (1,%s,%s,%s,1)",
-            ("Fan Feedback", "main", default_port))
-        _seed_fields(conn, 1, cur=cur)
+            "INSERT INTO forms (id, name, slug, port, active, subtitle_en, subtitle_ar) VALUES (1,%s,%s,%s,1,%s,%s)",
+            (templates.DEFAULT_FORM_NAME, "main", default_port,
+             tpl["description_en"], tpl["description_ar"]))
+        add_template_fields(cur, 1, tpl)
     cur.close()
 
 
@@ -819,11 +853,32 @@ def used_ports(exclude_form_id=None):
         conn.close()
 
 
+def add_template_fields(cur, form_id, tpl):
+    """Puts a template's questions on a form, in order, using the blueprint's
+    wording. Takes an open cursor; the caller commits. Returns how many."""
+    blueprint = {row[0]: row for row in LIBRARY_FIELDS}
+    n = 0
+    for key in tpl["fields"]:
+        row = blueprint.get(key)
+        if not row:
+            continue
+        _k, en, ar, ftype, options, required = row
+        cur.execute(
+            """INSERT INTO form_fields
+               (form_id, field_key, label_en, label_ar, field_type, options_json, required, sort_order, active)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,1)""",
+            (form_id, key, en, ar, ftype, options, required, n))
+        n += 1
+    return n
+
+
 def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_langs=None, expiry_date=None,
-                public_url=None, ask_core_fields=True):
-    """Creates the form with no questions yet — a new form starts blank so
-    an admin picks exactly the field keys it needs from the Field keys
-    library, rather than inheriting the full default set."""
+                public_url=None, ask_core_fields=True, template_key=None):
+    """Creates the form. With no template it starts with no questions, so an
+    admin picks exactly the field keys it needs from the Field keys library.
+    With a template (templates.py) the template's questions and description
+    are put on it."""
+    tpl = templates.get(template_key) if template_key else None
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -834,6 +889,10 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
             (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra, expiry_date,
              public_url or None, 1 if ask_core_fields else 0))
         new_id = cur.lastrowid
+        if tpl and tpl["fields"]:
+            add_template_fields(cur, new_id, tpl)
+            cur.execute("UPDATE forms SET subtitle_en=%s, subtitle_ar=%s WHERE id=%s",
+                        (tpl["description_en"], tpl["description_ar"], new_id))
         conn.commit()
         cur.close()
         return new_id

@@ -315,7 +315,7 @@ table.subs tr:last-child td{border-bottom:none}
             <div class="bar-labels" id="dash-trend-labels"></div>
           </div>
         </div>
-        <p class="hint" id="dash-empty" style="margin-top:10px">No submissions match these filters yet.</p>
+        <p class="hint" id="dash-empty" style="margin-top:10px">No submissions fit these filters yet.</p>
       </div>
       <div class="row">
         <div class="card">
@@ -392,7 +392,7 @@ table.subs tr:last-child td{border-bottom:none}
 
           <!-- branding sub-panel -->
           <div id="sub-fdbranding" class="hidden">
-            <p class="hint">Shown to fans on this form's public page — its header, its browser tab, and its Terms and Conditions text.</p>
+            <p class="hint">Shown to visitors on this form's public page — its header, its browser tab, and its Terms and Conditions text.</p>
 
             <label for="br-org">Organization name</label>
             <input type="text" id="br-org" placeholder="Shown as the header title and in the terms text">
@@ -633,7 +633,7 @@ table.subs tr:last-child td{border-bottom:none}
             <div><label for="smtp-pass">Password</label><input type="password" id="smtp-pass" placeholder="(leave blank to keep the saved one)"></div>
           </div>
           <div class="row">
-            <div><label for="smtp-from-name">From name</label><input type="text" id="smtp-from-name" placeholder="Sunrise Sports Club"></div>
+            <div><label for="smtp-from-name">From name</label><input type="text" id="smtp-from-name" placeholder="Sunrise Company"></div>
             <div><label for="smtp-from">From address</label><input type="text" id="smtp-from" placeholder="alerts@example.com"></div>
           </div>
           <p class="hint" style="margin-top:4px">The name is what people see as the sender in their inbox, instead of just the address.</p>
@@ -857,6 +857,16 @@ table.subs tr:last-child td{border-bottom:none}
     </div>
   </div>
 
+  <!-- ============ template picker (first step of "Add a form") ============ -->
+  <div id="template-view" class="hidden">
+    <div class="card" style="max-width:640px;margin:0 auto">
+      <h2>Start a new form</h2>
+      <p class="hint">Pick a starting point. You can change, add or remove questions afterwards.</p>
+      <div id="tpl-list" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;margin-top:12px"></div>
+      <div style="margin-top:16px"><button class="btn-outline" id="tpl-cancel" type="button">Cancel</button></div>
+    </div>
+  </div>
+
   <!-- ============ form editor (simple inline panel, not a real dialog) ============ -->
   <div id="form-editor-view" class="hidden">
     <div class="card" style="max-width:480px;margin:0 auto">
@@ -910,7 +920,7 @@ table.subs tr:last-child td{border-bottom:none}
       </div>
       <div id="ed-key-wrap">
         <label for="ed-key">Field key</label>
-        <input type="text" id="ed-key" placeholder="e.g. matchDate" disabled>
+        <input type="text" id="ed-key" placeholder="e.g. eventDate" disabled>
         <p class="hint">Set from the Field keys tab. Can't be changed here.</p>
       </div>
       <label for="ed-en">Label (English)</label>
@@ -950,7 +960,7 @@ table.subs tr:last-child td{border-bottom:none}
     <div class="card" style="max-width:560px;margin:0 auto">
       <h2 id="key-editor-title">Add a field key</h2>
       <label for="ke-key">Field key</label>
-      <input type="text" id="ke-key" placeholder="e.g. matchDate">
+      <input type="text" id="ke-key" placeholder="e.g. eventDate">
       <p class="hint">Lowercase letters, numbers and underscores only, starting with a letter. Can't be changed later.</p>
       <label for="ke-en">Label (English)</label>
       <input type="text" id="ke-en">
@@ -1004,7 +1014,7 @@ function api(method, url, body){
 }
 
 function show(id){
-  ["setup-view","login-view","dash-view","editor-view","form-editor-view","key-editor-view",
+  ["setup-view","login-view","dash-view","editor-view","template-view","form-editor-view","key-editor-view",
    "role-editor-view","admin-user-editor-view","password-view","mytheme-view"].forEach(function(v){
     $(v).classList.toggle("hidden", v !== id);
   });
@@ -1469,10 +1479,39 @@ function toggleFormActive(f){
     loadForms();
   });
 }
-$("add-form-btn").addEventListener("click", function(){ openFormEditor(null); });
+// "Add a form" first asks for a starting point (blank or a ready-made set of
+// questions), then goes to the usual form editor.
+$("add-form-btn").addEventListener("click", function(){ openTemplatePicker(); });
+$("tpl-cancel").addEventListener("click", function(){ show("dash-view"); });
+function openTemplatePicker(){
+  api("GET", "/admin/templates").then(function(res){
+    var list = (res.body && res.body.templates) || [];
+    if (!list.length){ STATE.newFormTemplate = null; openFormEditor(null); return; }
+    var wrap = $("tpl-list");
+    wrap.innerHTML = "";
+    list.forEach(function(t){
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "btn-outline";
+      b.style.cssText = "text-align:start;border-radius:12px;padding:12px 14px;display:block;width:100%";
+      b.innerHTML = '<b>' + escapeHtml(t.name_en) + '</b>' +
+        '<span dir="rtl" style="display:block;color:var(--muted);font-size:13px;margin-top:2px">' + escapeHtml(t.name_ar) + '</span>' +
+        '<span style="display:block;color:var(--muted);font-size:13px;margin-top:4px">' +
+        (t.questions ? t.questions + ' questions' : 'No questions') + '</span>';
+      b.addEventListener("click", function(){
+        STATE.newFormTemplate = t.key;
+        openFormEditor(null);
+        $("fe-name").value = t.key === "blank" ? "" : t.title_en;
+      });
+      wrap.appendChild(b);
+    });
+    show("template-view");
+  });
+}
 $("fe-cancel").addEventListener("click", function(){ show("dash-view"); });
 function openFormEditor(form){
   STATE.editingFormId = form ? form.id : null;
+  if (form){ STATE.newFormTemplate = null; }
   $("form-editor-title").textContent = form ? "Edit form" : "Add a form";
   $("fe-name").value = form ? form.name : "";
   $("fe-port").value = form ? form.port : "";
@@ -1549,6 +1588,7 @@ $("fe-save").addEventListener("click", function(){
                   expiry_date: $("fe-expiry").value || "",
                   public_url: $("fe-public-url").value.trim(),
                   ask_core_fields: $("fe-ask-core").checked };
+  if (!STATE.editingFormId && STATE.newFormTemplate){ payload.template = STATE.newFormTemplate; }
   var url = STATE.editingFormId ? "/admin/forms/" + STATE.editingFormId + "/update" : "/admin/forms";
   api("POST", url, payload).then(function(res){
     if (res.body.ok){
@@ -2240,7 +2280,7 @@ function renderSubmissions(body){
     tbody.appendChild(tr);
   });
   if (!(body.rows || []).length){
-    tbody.innerHTML = '<tr><td colspan="7" class="hint" style="padding:14px 10px">No submissions match these filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7" class="hint" style="padding:14px 10px">No submissions fit these filters.</td></tr>';
   }
   var pages = Math.max(1, Math.ceil(body.total / body.pageSize));
   $("subs-page-info").textContent = "Page " + body.page + " of " + pages + " · " + body.total + " total";
@@ -3008,7 +3048,7 @@ $("pw-save").addEventListener("click", function(){
   clearFlash("pw-msg");
   var next = $("pw-new").value;
   if (next.length < 8){ flash("pw-msg", "The new password needs at least 8 characters."); return; }
-  if (next !== $("pw-confirm").value){ flash("pw-msg", "The two new passwords don't match."); return; }
+  if (next !== $("pw-confirm").value){ flash("pw-msg", "The two new passwords are different."); return; }
   $("pw-save").disabled = true;
   var req = pwTarget
     ? api("POST", "/admin/users/" + pwTarget.id + "/update", {password: next})

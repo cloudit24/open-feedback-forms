@@ -29,7 +29,7 @@ def deliver_email(smtp_cfg, to_addr, subject, body):
     msg["Subject"] = subject
     from_addr = smtp_cfg.get("from") or smtp_cfg.get("user") or "noreply@localhost"
     # One line only (a newline would be header injection); formataddr quotes
-    # the name and encodes non-ASCII, e.g. an Arabic club name.
+    # the name and encodes non-ASCII, e.g. an Arabic organisation name.
     from_name = " ".join((smtp_cfg.get("from_name") or "").split())
     msg["From"] = formataddr((from_name, from_addr)) if from_name else from_addr
     msg["To"] = to_addr

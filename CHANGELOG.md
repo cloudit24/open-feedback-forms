@@ -3,6 +3,20 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.7.0
+
+- The app is now neutral: all wording about clubs, fans, matches and stadiums
+  is gone, in English and Arabic. The privacy text uses your organisation name,
+  and the marketing tick-box now reads "Yes, keep me updated with news and offers."
+- New: when you click "Add a form" you first pick a starting point: Blank,
+  Customer satisfaction, Net Promoter Score, Event feedback, Product feedback,
+  Employee feedback, Website feedback, or Venue / visit experience. Each comes
+  with ready-made questions and a short description, in English and Arabic.
+- A fresh install's first form is now called "Feedback" and uses the Customer
+  satisfaction questions.
+- Nothing changes for forms you already have: their names, questions and
+  answers stay exactly as they were.
+
 ## 1.6.4
 
 - Removed the fixed heading "Tell us what you think" / "شاركنا رأيك" and the

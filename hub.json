@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.6.4 released: fixed form heading/description removed; installer port-check fix; "Fan Voice" label removed; blank-page fix; admin panel fixed on port 8800, and each form can be light only, dark only or both",
-  "next": "On the client server, run the install link once, then point the admin tunnel at port 8800",
+  "status": "v1.7.0 built locally and tested: neutral wording, form templates picker; not pushed yet",
+  "next": "Review, then push and tag 1.7.0; then Prompt 2 (title and text styling)",
   "url": "http://localhost:8800/admin",
   "updated_by": "Claude, 2026-10-05"
 }
