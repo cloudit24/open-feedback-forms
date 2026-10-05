@@ -546,6 +546,169 @@ def dashboard_summary(filters=None, granularity="day", tz_offset_minutes=0):
         conn.close()
 
 
+# ---------------------------------------------------------------- summary
+# Results summary for one form (1.12.0). The answers live in feedback.extra_fields
+# as JSON text, so every count is done by MariaDB: JSON_VALUE(extra_fields,
+# '$."key"') picks one answer and GROUP BY counts them. Nothing is loaded into
+# Python except the finished counts and the 10 latest text answers.
+
+def _json_path(key):
+    return '$."%s"' % str(key).replace('"', "")
+
+
+def _summary_where(form_id, filters, hidden, with_dates=True):
+    f = {"form_id": form_id}
+    if with_dates:
+        for k in ("date_from", "date_to"):
+            if (filters or {}).get(k):
+                f[k] = filters[k]
+    where, params = _submission_filter_sql(f, prefix="f.")
+    for name, value in (hidden or {}).items():
+        where += " AND JSON_VALUE(f.hidden_json, %s) = %s"
+        params = params + [_json_path(name), value]
+    return where, params
+
+
+def form_summary(form_id, filters=None, hidden=None, tz_offset_minutes=0, include_text=True):
+    """Everything the Summary tab shows, as plain data. `filters` may hold
+    date_from / date_to (UTC DATETIME strings); `hidden` is {link field: value}."""
+    import summary as _summary
+    import logic as _logic
+    fields = list_fields(form_id)
+    form = get_form(form_id) or {}
+    where, params = _summary_where(form_id, filters, hidden)
+    where_all, params_all = _summary_where(form_id, filters, hidden, with_dates=False)
+
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT COUNT(*) AS n, MIN(f.created_at) AS first_at, MAX(f.created_at) AS last_at "
+                    "FROM feedback f " + where, params)
+        row = cur.fetchone()
+        total, first_at, last_at = row["n"], row["first_at"], row["last_at"]
+
+        week_from = (datetime.now(timezone.utc) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+        cur.execute("SELECT COUNT(*) AS n FROM feedback f " + where_all + " AND f.created_at >= %s",
+                    params_all + [week_from])
+        this_week = cur.fetchone()["n"]
+
+        questions = []
+        by_key = {}
+        for fld in fields:
+            kind = _summary.kind_of(fld)
+            path = _json_path(fld["field_key"])
+            if kind == "text":
+                if not include_text:
+                    continue
+                cur.execute("SELECT COUNT(*) AS n FROM feedback f " + where +
+                            " AND JSON_VALUE(f.extra_fields, %s) IS NOT NULL AND JSON_VALUE(f.extra_fields, %s) <> ''",
+                            params + [path, path])
+                answered = cur.fetchone()["n"]
+                counts = {}
+            else:
+                cur.execute("SELECT JSON_VALUE(f.extra_fields, %s) AS v, COUNT(*) AS n FROM feedback f " +
+                            where + " GROUP BY v", [path] + params)
+                counts = {}
+                for r in cur.fetchall():
+                    if r["v"] is None or r["v"] == "":
+                        continue
+                    counts[str(r["v"])] = int(r["n"])
+                answered = sum(counts.values())
+            if not fld["active"] and not answered:
+                continue          # a retired question nobody answered: nothing to show
+            q = _summary.build_question(fld, counts, answered)
+            if kind == "text":
+                q["latest"] = []
+                if answered:
+                    cur.execute("SELECT f.id, f.created_at, JSON_VALUE(f.extra_fields, %s) AS v FROM feedback f " +
+                                where + " AND JSON_VALUE(f.extra_fields, %s) IS NOT NULL AND "
+                                "JSON_VALUE(f.extra_fields, %s) <> '' ORDER BY f.id DESC LIMIT 10",
+                                [path] + params + [path, path])
+                    q["latest"] = [{"id": r["id"], "at": _fmt_dt(r["created_at"]), "text": r["v"]}
+                                   for r in cur.fetchall()]
+            questions.append(q)
+            by_key[fld["field_key"]] = q
+
+        # per-day counts, in the admin's display time zone
+        cur.execute("SELECT DATE(DATE_ADD(f.created_at, INTERVAL %s MINUTE)) AS d, COUNT(*) AS n "
+                    "FROM feedback f " + where + " GROUP BY d ORDER BY d", [tz_offset_minutes] + params)
+        by_day = {str(r["d"]): int(r["n"]) for r in cur.fetchall()}
+
+        # values seen in each link field, for the filter drop-downs
+        hidden_options = {}
+        for name in _logic.parse_hidden_names(form.get("hidden_fields") or "")[0]:
+            cur.execute("SELECT JSON_VALUE(f.hidden_json, %s) AS v, COUNT(*) AS n FROM feedback f "
+                        "WHERE f.form_id = %s AND JSON_VALUE(f.hidden_json, %s) IS NOT NULL "
+                        "GROUP BY v ORDER BY n DESC LIMIT 50", [_json_path(name), form_id, _json_path(name)])
+            hidden_options[name] = [r["v"] for r in cur.fetchall()]
+        cur.close()
+    finally:
+        conn.close()
+
+    tz_delta = timedelta(minutes=tz_offset_minutes)
+
+    def _shift(dt_str):
+        if not dt_str:
+            return dt_str
+        try:
+            return (datetime.strptime(dt_str[:19], "%Y-%m-%d %H:%M:%S") + tz_delta).strftime("%Y-%m-%d")
+        except ValueError:
+            return dt_str[:10]
+    daily = _fill_daily_trend(by_day, _shift((filters or {}).get("date_from")), _shift((filters or {}).get("date_to")))
+    weekly = len(daily) > 90
+    if weekly:
+        buckets = {}
+        for d in daily:
+            day = datetime.strptime(d["date"], "%Y-%m-%d").date()
+            monday = (day - timedelta(days=day.weekday())).strftime("%Y-%m-%d")
+            buckets[monday] = buckets.get(monday, 0) + d["n"]
+        trend = [{"date": k, "n": buckets[k]} for k in sorted(buckets)]
+    else:
+        trend = daily
+
+    # heatmaps: neighbouring grid questions with the same answers
+    heatmaps = []
+    for keys in _summary.grid_groups(fields):
+        rows = [by_key[k] for k in keys if k in by_key]
+        if rows:
+            heatmaps.append({"keys": [r["key"] for r in rows],
+                             "columns": [{"value": b["value"], "label_en": b["label_en"], "label_ar": b["label_ar"]}
+                                         for b in rows[0]["bars"]],
+                             "rows": [{"key": r["key"], "label_en": r["label_en"], "label_ar": r["label_ar"],
+                                       "answered": r["answered"], "counts": [b["n"] for b in r["bars"]]}
+                                      for r in rows]})
+    in_heatmap = {k for h in heatmaps for k in h["keys"]}
+    for q in questions:
+        q["inHeatmap"] = q["key"] in in_heatmap
+
+    return {"total": total, "thisWeek": this_week, "firstAt": _fmt_dt(first_at), "lastAt": _fmt_dt(last_at),
+            "questions": questions, "heatmaps": heatmaps, "trend": trend,
+            "trendUnit": "week" if weekly else "day", "hiddenOptions": hidden_options}
+
+
+def _fmt_dt(v):
+    return v.strftime("%Y-%m-%d %H:%M:%S") if hasattr(v, "strftime") else v
+
+
+def summary_text_answers(form_id, field_key, filters=None, hidden=None, offset=0, limit=100):
+    """One text question's answers, newest first, for "show all"."""
+    where, params = _summary_where(form_id, filters, hidden)
+    path = _json_path(field_key)
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute("SELECT f.id, f.created_at, JSON_VALUE(f.extra_fields, %s) AS v FROM feedback f " + where +
+                    " AND JSON_VALUE(f.extra_fields, %s) IS NOT NULL AND JSON_VALUE(f.extra_fields, %s) <> '' "
+                    "ORDER BY f.id DESC LIMIT %s OFFSET %s",
+                    [path] + params + [path, path, limit + 1, offset])
+        rows = cur.fetchall()
+        cur.close()
+    finally:
+        conn.close()
+    return {"answers": [{"id": r["id"], "at": _fmt_dt(r["created_at"]), "text": r["v"]} for r in rows[:limit]],
+            "more": len(rows) > limit}
+
+
 class DBError(Exception):
     pass
 

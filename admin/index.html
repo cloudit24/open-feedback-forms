@@ -271,6 +271,48 @@ table.subs tr:last-child td{border-bottom:none}
 .pv-body{padding:16px 20px 20px}
 .pv-body label{font-size:calc(14px*var(--fs));margin:0 0 6px}
 .pv-fake{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:calc(14px*var(--fs));color:var(--muted)}
+/* ---- Summary tab (results at a glance). Charts are plain inline SVG. ---- */
+.sum-kpis{display:flex;gap:14px;flex-wrap:wrap;margin:6px 0 18px}
+.sum-kpis .kpi{min-width:170px}
+.sum-kpis .kpi .l b{color:var(--ink);font-weight:600}
+.sum-kpis .kpi .n.sm{font-size:17px;line-height:1.3}
+.sum-kpis .kpi .n.bad{color:var(--err)} .sum-kpis .kpi .n.good{color:var(--ok)}
+.sv-stack{display:block;width:100%;height:10px;margin-top:10px;border-radius:5px;overflow:hidden}
+.sv-legend{display:flex;gap:10px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:6px}
+.sv-legend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-inline-end:4px;vertical-align:-1px}
+.sv-bad{fill:var(--err);background:var(--err)} .sv-mid{fill:var(--muted);background:var(--muted)}
+.sv-good{fill:var(--ok);background:var(--ok)} .sv-brand{fill:var(--yellow);background:var(--yellow)}
+.sv-track{fill:var(--bg)}
+.sum-q{padding:16px 0;border-top:1px solid var(--line);break-inside:avoid}
+.sum-q h3{font-size:14.5px;margin:0 0 2px}
+.sum-q .meta{color:var(--muted);font-size:12px;margin-bottom:10px}
+.sv-row{display:grid;grid-template-columns:minmax(80px,1.2fr) minmax(0,3fr) minmax(70px,auto);gap:10px;align-items:center;padding:3px 0;font-size:13px}
+.sv-row .sv-l{overflow-wrap:anywhere}
+.sv-row .sv-n{color:var(--muted);font-variant-numeric:tabular-nums;text-align:end;white-space:nowrap}
+.sv-bar{display:block;width:100%;height:12px}
+html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
+.sv-nps{display:block;width:100%;max-width:560px;height:auto}
+.sv-nps text{fill:var(--muted);font-size:11px;text-anchor:middle}
+.sv-nps text.c{fill:var(--ink);font-weight:600}
+.sv-heat{border-collapse:collapse;font-size:12.5px;width:100%}
+.sv-heat th{font-weight:600;color:var(--muted);padding:6px 8px;text-align:center;border-bottom:1px solid var(--line)}
+.sv-heat th:first-child,.sv-heat td:first-child{text-align:start}
+.sv-heat td{padding:7px 8px;text-align:center;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.sv-heat td.cell{border:2px solid var(--card)}
+.sv-text{list-style:none;margin:0;padding:0}
+.sv-text li{padding:8px 0;border-bottom:1px solid var(--line);font-size:13.5px;overflow-wrap:anywhere}
+.sv-text li:last-child{border-bottom:none}
+.sv-text .when{display:block;color:var(--muted);font-size:11.5px}
+.sum-note{color:var(--muted);font-size:13px;padding:10px 0}
+@media print{
+  .top,.update-banner,.tabs,.no-print,.filters{display:none!important}
+  body{background:#fff}
+  .wrap{padding:0;max-width:none}
+  .card{border:none;padding:0}
+  .sum-q{break-inside:avoid}
+  .sv-heat td.cell{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .sv-bad,.sv-mid,.sv-good,.sv-brand,.sv-track{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
 </style>
 </head>
 <body>
@@ -357,6 +399,7 @@ table.subs tr:last-child td{border-bottom:none}
     <div class="tabs">
       <button class="tab active" data-tab="dashboard">Dashboard</button>
       <button class="tab" data-tab="forms">Forms</button>
+      <button class="tab" data-tab="summary">Summary</button>
       <button class="tab" data-tab="subs">Submissions</button>
       <button class="tab" data-tab="config">Configuration</button>
       <button class="tab hidden" id="tab-btn-admin" data-tab="administration">Administration</button>
@@ -617,6 +660,27 @@ table.subs tr:last-child td{border-bottom:none}
             <button class="btn" id="add-form-alert-btn" style="margin-top:14px">+ Add an alert</button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ---- summary tab: results at a glance for one form ---- -->
+    <div id="tab-summary" class="hidden">
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
+          <h2 style="margin:0">Summary</h2>
+          <button class="btn-outline btn-sm no-print" id="sum-print" type="button">Print</button>
+        </div>
+        <p class="hint" style="margin-top:6px">Results for one form: scores, a chart for each question, and responses over time. Questions hidden by a rule only count the people who were asked.</p>
+        <div class="filters" style="margin-top:14px">
+          <div><label for="sum-form">Form</label><select id="sum-form"></select></div>
+          <div><label for="sum-from">From</label><input type="datetime-local" id="sum-from"></div>
+          <div><label for="sum-to">To</label><input type="datetime-local" id="sum-to"></div>
+          <div id="sum-hbox" class="hidden"><label for="sum-hname">Link field</label><select id="sum-hname"></select></div>
+          <div id="sum-hvbox" class="hidden"><label for="sum-hvalue">Value</label><select id="sum-hvalue"></select></div>
+          <div style="flex:0 0 auto"><button class="btn-outline" id="sum-apply" type="button">Apply</button></div>
+          <div style="flex:0 0 auto"><button class="btn-outline" id="sum-clear" type="button">Clear</button></div>
+        </div>
+        <div id="sum-body"><p class="sum-note">Choose a form.</p></div>
       </div>
     </div>
 
@@ -1278,6 +1342,7 @@ function applyPermissionVisibility(){
   document.querySelector('.tab[data-tab="config"]').classList.toggle("hidden", !anyConfig);
   document.querySelector('.tab[data-tab="dashboard"]').classList.toggle("hidden", !hasPermission("view_dashboard"));
   document.querySelector('.tab[data-tab="subs"]').classList.toggle("hidden", !hasPermission("view_submissions"));
+  document.querySelector('.tab[data-tab="summary"]').classList.toggle("hidden", !hasPermission("view_dashboard"));
   var activeTab = document.querySelector(".tab.active");
   if (activeTab && activeTab.classList.contains("hidden")){
     var firstVisible = Array.from(document.querySelectorAll(".tab")).find(function(b){ return !b.classList.contains("hidden"); });
@@ -1382,9 +1447,10 @@ document.querySelectorAll(".tab").forEach(function(btn){
   btn.addEventListener("click", function(){
     document.querySelectorAll(".tab").forEach(function(b){ b.classList.remove("active"); });
     btn.classList.add("active");
-    ["dashboard","forms","subs","config","administration","help","about"].forEach(function(t){
+    ["dashboard","forms","summary","subs","config","administration","help","about"].forEach(function(t){
       $("tab-" + t).classList.toggle("hidden", btn.dataset.tab !== t);
     });
+    if (btn.dataset.tab === "summary") loadSummary();
     if (btn.dataset.tab === "subs") loadSubmissions();
     if (btn.dataset.tab === "dashboard") loadDashboard();
     if (btn.dataset.tab === "forms"){ closeFormDetail(); loadForms(); }
@@ -1580,7 +1646,7 @@ function destroyForm(f){
 }
 $("forms-sort").addEventListener("change", renderForms);
 function populateFormSelects(){
-  var selects = [$("lib-form-select"), $("f-form"), $("dash-form")];
+  var selects = [$("lib-form-select"), $("f-form"), $("dash-form"), $("sum-form")];
   var filterIds = { "f-form": true, "dash-form": true };
   selects.forEach(function(sel){
     var isFilter = !!filterIds[sel.id];
@@ -2331,6 +2397,203 @@ $("dash-clear").addEventListener("click", function(){
   $("dash-form").value = ""; $("dash-from").value = ""; $("dash-to").value = "";
   loadDashboard();
 });
+
+/* ------------------------------------------------------ summary tab --- */
+/* Every chart below is drawn here as inline SVG (no chart library). The numbers
+   come from GET /admin/forms/<id>/summary, counted by the database. */
+var SUM = { hiddenOptions: {}, formId: "" };
+function sumQuery(extra){
+  var parts = [];
+  var from = zonedInputToUtcParam($("sum-from").value.trim());
+  var to = zonedInputToUtcParam($("sum-to").value.trim());
+  if (from) parts.push("from=" + encodeURIComponent(from));
+  if (to) parts.push("to=" + encodeURIComponent(to));
+  if ($("sum-hname").value && $("sum-hvalue").value){
+    parts.push("hidden_name=" + encodeURIComponent($("sum-hname").value));
+    parts.push("hidden_value=" + encodeURIComponent($("sum-hvalue").value));
+  }
+  Object.keys(extra || {}).forEach(function(k){ parts.push(k + "=" + encodeURIComponent(extra[k])); });
+  return parts.length ? "?" + parts.join("&") : "";
+}
+function sumFillValues(){
+  var name = $("sum-hname").value, sel = $("sum-hvalue"), cur = sel.value;
+  sel.innerHTML = '<option value="">Any value</option>';
+  (SUM.hiddenOptions[name] || []).forEach(function(v){ sel.appendChild(new Option(v, v)); });
+  if (cur) sel.value = cur;
+  $("sum-hvbox").classList.toggle("hidden", !name);
+}
+function sumFillLinkFields(){
+  var names = Object.keys(SUM.hiddenOptions), sel = $("sum-hname"), cur = sel.value;
+  sel.innerHTML = '<option value="">No filter</option>';
+  names.forEach(function(n){ sel.appendChild(new Option(n, n)); });
+  if (cur && names.indexOf(cur) !== -1) sel.value = cur;
+  $("sum-hbox").classList.toggle("hidden", !names.length);
+  sumFillValues();
+}
+function loadSummary(){
+  var fid = $("sum-form").value;
+  if (!fid){ $("sum-body").innerHTML = '<p class="sum-note">Choose a form.</p>'; return; }
+  if (fid !== SUM.formId){ SUM.formId = fid; $("sum-hname").value = ""; $("sum-hvalue").value = ""; }
+  api("GET", "/admin/forms/" + fid + "/summary" + sumQuery()).then(function(res){
+    if (res.status !== 200 || !res.body.ok){
+      $("sum-body").innerHTML = '<p class="sum-note">' + escapeHtml((res.body && res.body.error) || "Could not load the summary.") + '</p>';
+      return;
+    }
+    SUM.hiddenOptions = res.body.summary.hiddenOptions || {};
+    sumFillLinkFields();
+    renderSummary(res.body.summary);
+  });
+}
+function svRow(label, n, pct, cls){
+  return '<div class="sv-row"><span class="sv-l" dir="auto">' + escapeHtml(label) + '</span>' +
+    '<svg class="sv-bar" viewBox="0 0 100 12" preserveAspectRatio="none" role="img" aria-label="' + escapeHtml(label) + ': ' + n + ' (' + pct + '%)">' +
+    '<rect class="sv-track" x="0" y="0" width="100" height="12"></rect>' +
+    '<rect class="' + cls + '" x="0" y="0" width="' + pct + '" height="12"></rect></svg>' +
+    '<span class="sv-n">' + n + ' &middot; ' + pct + '%</span></div>';
+}
+function svBars(q){
+  var h = '';
+  (q.bars || []).forEach(function(b){ h += svRow(b.label_en, b.n, b.pct, b.tone ? "sv-" + b.tone : "sv-brand"); });
+  return h;
+}
+function svNpsChart(q){
+  // Vertical bars 0..10: red (0-6), grey (7-8), green (9-10).
+  var max = Math.max.apply(null, q.bars.map(function(b){ return b.n; }).concat([1]));
+  var W = 440, H = 170, base = 140, top = 22, bw = 32, gap = 8, svg = '';
+  q.bars.forEach(function(b, i){
+    var x = i * (bw + gap) + 4, bh = Math.round((b.n / max) * (base - top));
+    svg += '<g><title>' + escapeHtml(b.label_en) + ': ' + b.n + ' (' + b.pct + '%)</title>' +
+      '<rect class="sv-' + (b.tone || "brand") + '" x="' + x + '" y="' + (base - bh) + '" width="' + bw + '" height="' + Math.max(bh, b.n ? 2 : 0) + '" rx="3"></rect>' +
+      '<text class="c" x="' + (x + bw / 2) + '" y="' + (base - bh - 5) + '">' + b.n + '</text>' +
+      '<text x="' + (x + bw / 2) + '" y="' + (base + 16) + '">' + escapeHtml(b.label_en) + '</text></g>';
+  });
+  return '<svg class="sv-nps" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Answers from 0 to 10">' + svg + '</svg>';
+}
+function svStack(nps){
+  return '<svg class="sv-stack" viewBox="0 0 100 10" preserveAspectRatio="none" role="img" aria-label="Detractors ' + nps.detractorsPct + '%, passives ' + nps.passivesPct + '%, promoters ' + nps.promotersPct + '%">' +
+    '<rect class="sv-bad" x="0" y="0" width="' + nps.detractorsPct + '" height="10"></rect>' +
+    '<rect class="sv-mid" x="' + nps.detractorsPct + '" y="0" width="' + nps.passivesPct + '" height="10"></rect>' +
+    '<rect class="sv-good" x="' + (nps.detractorsPct + nps.passivesPct) + '" y="0" width="' + nps.promotersPct + '" height="10"></rect></svg>' +
+    '<div class="sv-legend"><span><i class="sv-bad"></i>Detractors ' + nps.detractorsPct + '%</span><span><i class="sv-mid"></i>Passives ' + nps.passivesPct + '%</span><span><i class="sv-good"></i>Promoters ' + nps.promotersPct + '%</span></div>';
+}
+function svHeatmap(h){
+  var t = '<table class="sv-heat"><thead><tr><th></th>';
+  h.columns.forEach(function(c){ t += '<th dir="auto">' + escapeHtml(c.label_en) + '</th>'; });
+  t += '<th>Answered</th></tr></thead><tbody>';
+  h.rows.forEach(function(r){
+    t += '<tr><td dir="auto">' + escapeHtml(r.label_en) + '</td>';
+    r.counts.forEach(function(n){
+      var share = r.answered ? n / r.answered : 0;
+      // the colour strength is that answer's share of the row; the number is the count
+      t += '<td class="cell" style="background:rgba(11,82,115,' + (share * 0.85).toFixed(2) + ');color:' + (share > 0.5 ? "#fff" : "inherit") + '" title="' + n + ' of ' + r.answered + ' (' + Math.round(share * 100) + '%)">' + n + '</td>';
+    });
+    t += '<td>' + r.answered + '</td></tr>';
+  });
+  return t + '</tbody></table>';
+}
+function svTrend(s){
+  var n = s.trend.length;
+  if (!n) return '<p class="sum-note">No responses fit these filters.</p>';
+  var max = Math.max.apply(null, s.trend.map(function(d){ return d.n; }).concat([1]));
+  var W = 1000, H = 120, slot = W / n, bw = Math.max(slot * 0.7, 1), rects = '';
+  s.trend.forEach(function(d, i){
+    var bh = Math.round((d.n / max) * (H - 4));
+    rects += '<rect class="sv-brand" x="' + (i * slot + (slot - bw) / 2).toFixed(1) + '" y="' + (H - bh) + '" width="' + bw.toFixed(1) + '" height="' + bh + '"><title>' + (s.trendUnit === "week" ? "Week of " : "") + d.date + ': ' + d.n + '</title></rect>';
+  });
+  var y = '';
+  for (var t = 4; t >= 0; t--) y += '<span>' + Math.round(max * t / 4) + '</span>';
+  var step = Math.max(1, Math.ceil(n / 12)), labs = '';
+  s.trend.forEach(function(d, i){ labs += '<span>' + ((i % step === 0 || i === n - 1) ? d.date.slice(5) : "") + '</span>'; });
+  return '<div class="chart-wrap"><div class="chart-y-axis">' + y + '</div><div class="chart-main">' +
+    '<svg class="line-chart" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" role="img" aria-label="Responses per ' + s.trendUnit + '">' + rects + '</svg>' +
+    '<div class="bar-labels">' + labs + '</div></div></div>';
+}
+function svCard(big, cls, label, extra){
+  return '<div class="kpi"><div class="n ' + (cls || "") + '">' + big + '</div><div class="l">' + label + '</div>' + (extra || "") + '</div>';
+}
+function renderSummary(s){
+  var box = $("sum-body");
+  if (!s.total){
+    box.innerHTML = '<p class="sum-note">No responses fit these filters yet.</p>';
+    return;
+  }
+  var many = function(list){ return list.length > 1; };
+  var npsQs = s.questions.filter(function(q){ return q.kind === "nps" && q.nps; });
+  var csatQs = s.questions.filter(function(q){ return q.kind === "csat" && q.csat; });
+  var cards = svCard(s.total, "", "Responses") + svCard(s.thisWeek, "", "In the last 7 days") +
+    svCard(escapeHtml(formatDT(s.firstAt).slice(0, 10)) + " &ndash; " + escapeHtml(formatDT(s.lastAt).slice(0, 10)), "sm", "First to latest response");
+  npsQs.forEach(function(q){
+    var sc = q.nps.score;
+    cards += svCard((sc > 0 ? "+" : "") + sc, sc < 0 ? "bad" : (sc > 0 ? "good" : ""),
+      "NPS" + (many(npsQs) ? " &middot; " + escapeHtml(q.label_en) : "") + ' <b>(' + q.nps.n + ' answered)</b>', svStack(q.nps));
+  });
+  csatQs.forEach(function(q){
+    cards += svCard(q.csat.pct + "%", "", "CSAT, answers of 4 or 5" + (many(csatQs) ? " &middot; " + escapeHtml(q.label_en) : "") + ' <b>(' + q.csat.n + ' answered)</b>');
+  });
+  s.questions.filter(function(q){ return q.average != null && (q.kind === "csat" || q.kind === "scale"); }).forEach(function(q){
+    cards += svCard(q.average.toFixed(2), "", "Average &middot; " + escapeHtml(q.label_en));
+  });
+  var html = '<div class="sum-kpis">' + cards + '</div>';
+
+  html += '<div class="sum-q" style="border-top:none;padding-top:0"><h3>Responses over time</h3><div class="meta">' +
+    (s.trendUnit === "week" ? "Per week" : "Per day") + '</div>' + svTrend(s) + '</div>';
+
+  var doneHeat = {};
+  s.questions.forEach(function(q){
+    if (q.inHeatmap){
+      s.heatmaps.forEach(function(h, i){
+        if (h.keys.indexOf(q.key) !== -1 && !doneHeat[i]){
+          doneHeat[i] = true;
+          html += '<div class="sum-q"><h3>Grid: ' + escapeHtml(h.rows.map(function(r){ return r.label_en; }).join(", ")) + '</h3>' +
+            '<div class="meta">Each row: how that question was answered. Darker = a bigger share of the row.</div>' + svHeatmap(h) + '</div>';
+        }
+      });
+      return;
+    }
+    html += '<div class="sum-q" data-key="' + escapeHtml(q.key) + '"><h3 dir="auto">' + escapeHtml(q.label_en) + (q.active ? "" : " (retired)") + '</h3>' +
+      '<div class="meta">' + q.answered + ' answered' + (q.answered < s.total ? " of " + s.total : "") + '</div>';
+    if (q.kind === "text"){
+      if (!s.canSeeText){ html += '<p class="sum-note">Written answers need permission to view submissions.</p>'; }
+      else if (!q.latest.length){ html += '<p class="sum-note">No answers yet.</p>'; }
+      else {
+        html += '<ul class="sv-text">' + q.latest.map(function(a){ return svTextItem(a); }).join("") + '</ul>';
+        if (q.answered > q.latest.length) html += '<button class="btn-outline btn-sm no-print sv-showall" type="button" data-key="' + escapeHtml(q.key) + '" data-offset="0">Show all ' + q.answered + '</button>';
+      }
+    } else if (q.kind === "nps"){
+      html += svNpsChart(q);
+    } else {
+      html += svBars(q);
+    }
+    html += '</div>';
+  });
+  box.innerHTML = html;
+  box.querySelectorAll(".sv-showall").forEach(function(btn){
+    btn.addEventListener("click", function(){ svShowAll(btn); });
+  });
+}
+function svTextItem(a){
+  return '<li dir="auto">' + escapeHtml(a.text) + '<span class="when">' + escapeHtml(formatDT(a.at)) + '</span></li>';
+}
+function svShowAll(btn){
+  var list = btn.previousElementSibling, key = btn.dataset.key, offset = parseInt(btn.dataset.offset, 10) || 0;
+  btn.disabled = true;
+  api("GET", "/admin/forms/" + $("sum-form").value + "/summary" + sumQuery({ text_key: key, offset: offset })).then(function(res){
+    btn.disabled = false;
+    if (res.status !== 200 || !res.body.ok){ btn.textContent = "Could not load, try again"; return; }
+    if (list.dataset.full !== "1"){ list.innerHTML = ""; list.dataset.full = "1"; }
+    res.body.answers.forEach(function(a){ list.insertAdjacentHTML("beforeend", svTextItem(a)); });
+    btn.dataset.offset = offset + res.body.answers.length;
+    if (res.body.more) btn.textContent = "Show more"; else btn.remove();
+  });
+}
+$("sum-apply").addEventListener("click", loadSummary);
+$("sum-form").addEventListener("change", function(){ $("sum-hname").value = ""; $("sum-hvalue").value = ""; loadSummary(); });
+$("sum-hname").addEventListener("change", function(){ $("sum-hvalue").value = ""; sumFillValues(); });
+$("sum-clear").addEventListener("click", function(){
+  $("sum-from").value = ""; $("sum-to").value = ""; $("sum-hname").value = ""; $("sum-hvalue").value = "";
+  loadSummary();
+});
+$("sum-print").addEventListener("click", function(){ window.print(); });
 
 /* ------------------------------------------------------- field editor */
 $("add-field-btn").addEventListener("click", function(){ openEditor(null); });

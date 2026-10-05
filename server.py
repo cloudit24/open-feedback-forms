@@ -1209,6 +1209,9 @@ class AdminHandler(PublicRoutes, BaseHandler):
         if path == "/admin/alert-rules":
             return self.get_alert_rules()
 
+        m = re.match(r"^/admin/forms/(\d+)/summary$", path)
+        if m:
+            return self.get_form_summary(int(m.group(1)))
         m = re.match(r"^/admin/forms/(\d+)/branding$", path)
         if m:
             return self.get_admin_branding(int(m.group(1)))
@@ -2713,6 +2716,56 @@ class AdminHandler(PublicRoutes, BaseHandler):
             log("dashboard query failed: %s" % e)
             return self.send_json(500, {"ok": False})
         return self.send_json(200, {"ok": True, "summary": summary})
+
+    def get_form_summary(self, form_id):
+        """GET /admin/forms/<id>/summary?from=&to=&hidden_name=&hidden_value=
+        The Summary tab's numbers for one form. Needs "view dashboard" on that
+        form; the written answers (and "show all") also need "view
+        submissions", because they are people's own words."""
+        identity = self.require_permission("view_dashboard", form_id)
+        if not identity:
+            return
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        form = db.get_form(form_id)
+        if not form:
+            return self.send_json(404, {"ok": False, "error": "form not found"})
+        filters = {}
+        if self.query_one("from"):
+            filters["date_from"] = normalize_filter_dt(self.query_one("from"), end_of_range=False)
+        if self.query_one("to"):
+            filters["date_to"] = normalize_filter_dt(self.query_one("to"), end_of_range=True)
+        hidden = {}
+        hname, hvalue = self.query_one("hidden_name"), self.query_one("hidden_value")
+        if hname and hvalue is not None and hvalue != "":
+            if hname not in logic.parse_hidden_names(form.get("hidden_fields") or "")[0]:
+                return self.send_json(400, {"ok": False, "error": "unknown link field"})
+            hidden[hname] = clean(hvalue, 100)
+        can_text = self.has_permission(identity, "view_submissions", form_id)
+        text_key = self.query_one("text_key")
+        try:
+            if text_key:
+                if not can_text:
+                    return self.send_json(403, {"ok": False, "error": "you don't have permission to do that"})
+                try:
+                    offset = max(0, int(self.query_one("offset") or "0"))
+                except ValueError:
+                    offset = 0
+                return self.send_json(200, dict(ok=True, **db.summary_text_answers(
+                    form_id, text_key, filters, hidden, offset=offset)))
+            tz_offset_minutes = 0
+            try:
+                tz_name = config_store.load()["settings"].get("timezone") or "UTC"
+                tz_offset_minutes = int(datetime.now(zoneinfo.ZoneInfo(tz_name)).utcoffset().total_seconds() // 60)
+            except Exception:
+                pass
+            data = db.form_summary(form_id, filters, hidden, tz_offset_minutes, include_text=can_text)
+        except Exception as e:
+            log("summary query failed: %s" % e)
+            return self.send_json(500, {"ok": False})
+        data["canSeeText"] = can_text
+        data["formName"] = form["name"]
+        return self.send_json(200, {"ok": True, "summary": data})
 
     def export_csv(self):
         if not self.admin_user():

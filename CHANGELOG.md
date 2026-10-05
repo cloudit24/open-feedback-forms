@@ -3,6 +3,30 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.12.0
+
+- New: a "Summary" tab, before Submissions, shows the results of one form at a
+  glance. Pick a form (and, if you like, a date range) and see: total responses,
+  responses in the last 7 days, the date range, the NPS score, the CSAT score
+  and the average of each rating question.
+- NPS is worked out from any 0 to 10 question (promoters 9-10 minus detractors
+  0-6, from -100 to +100, with a red / grey / green bar). CSAT is the share of
+  4s and 5s on a star, face or 1 to 5 question.
+- Every question gets its own chart: bars with counts and percentages for
+  choices and ratings, one red / grey / green bar per number for 0 to 10
+  questions, a coloured table for grid questions (darker = bigger share of the
+  row), and the latest 10 written answers with "Show all". Each question says how
+  many people answered it, so questions hidden by a rule are not counted against
+  everyone. A chart shows responses per day (per week for long ranges).
+- Filter by date range and by a link field (for example branch = dubai) and the
+  whole page updates. "Print" gives a clean printout.
+- Only people allowed to see the dashboard for that form can open it. Written
+  answers also need permission to view submissions.
+- No new libraries: the charts are drawn with small pieces of SVG, and the
+  counting is done by the database.
+- Also added: scripts/seed_test_data.py, which fills a TEST database with fake
+  responses (never run it on a live one).
+
 ## 1.11.0
 
 - New: show a question only when an earlier answer matches. In a question's
