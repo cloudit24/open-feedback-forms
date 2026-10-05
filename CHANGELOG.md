@@ -3,6 +3,17 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.5.2
+
+- **The admin panel's port no longer moves.** If `.env` went missing (a
+  re-cloned folder, for instance) the installer rebuilt it from the example
+  file, which put the admin panel back on 8080 even when the install was using
+  another port. The installer now reads the port the install is actually
+  published on, straight from the container, and writes it into `.env` so no
+  later update can change it. A port you set yourself is never overwritten.
+- The installer now prints the port map at the end — which host port reaches
+  the admin panel, which reaches the first form, and the range for the rest.
+
 ## 1.5.1
 
 - A **new form no longer asks for first name, last name and email** unless you

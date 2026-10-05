@@ -309,11 +309,61 @@ ensure_db_reachable() {
     echo "restart MariaDB, and make sure your firewall only allows port 3306 from Docker."
 }
 
+# ---- the admin port stays put -------------------------------------------------
+# Docker fixes a container's published ports when it's created, and compose
+# reads them from .env. If .env goes missing (a re-cloned folder) and is
+# rebuilt without ADMIN_PORT, compose falls back to 8080 and the admin panel
+# silently moves. So: read the port this install is already published on,
+# straight from the container, and write it into .env where it can't drift.
+published_port_of() {   # container port -> host port, or nothing
+    cid=$(docker ps -a -q \
+        --filter "label=com.docker.compose.project=$PROJECT" \
+        --filter "label=com.docker.compose.service=app" 2>/dev/null | head -n 1)
+    [ -n "$cid" ] || return 1
+    # PortBindings is what Docker was told to publish and it survives the
+    # container being stopped; NetworkSettings.Ports is empty unless it's up.
+    fmt_bind='{{with index .HostConfig.PortBindings "'$1'/tcp"}}{{with index . 0}}{{.HostPort}}{{end}}{{end}}'
+    fmt_net='{{with index .NetworkSettings.Ports "'$1'/tcp"}}{{with index . 0}}{{.HostPort}}{{end}}{{end}}'
+    port=$(docker inspect --format "$fmt_bind" "$cid" 2>/dev/null | head -n 1)
+    [ -n "$port" ] || port=$(docker inspect --format "$fmt_net" "$cid" 2>/dev/null | head -n 1)
+    printf "%s" "$port"
+}
+
+# Writes ADMIN_PORT/FORM_PORT into .env when they aren't already there, using
+# the ports this install is published on (or the defaults for a new install).
+pin_ports() {
+    [ -f .env ] || return 0
+    # A rebuilt .env starts from .env.example, whose ADMIN_PORT is just the
+    # default — so after a recovery the container's real port wins.
+    if [ "$RECOVERED" = 1 ]; then
+        for pair in "ADMIN_PORT 8080" "FORM_PORT 8081"; do
+            set -- $pair
+            found=$(published_port_of "$2" 2>/dev/null || true)
+            [ -n "$found" ] || continue
+            [ "$found" = "$(env_get "$1")" ] && continue
+            sed -i.bak "/^$1=/d" .env && rm -f .env.bak
+            printf "%s='%s'
+" "$1" "$found" >> .env
+            echo "Kept $1 on the port this install already uses ($found)."
+        done
+    fi
+    if [ -z "$(env_get ADMIN_PORT)" ]; then
+        found=$(published_port_of 8080 2>/dev/null || true)
+        printf "ADMIN_PORT='%s'\n" "${found:-8080}" >> .env
+        [ -n "$found" ] && echo "Kept the admin panel on the port it already uses ($found)."
+    fi
+    if [ -z "$(env_get FORM_PORT)" ]; then
+        found=$(published_port_of 8081 2>/dev/null || true)
+        printf "FORM_PORT='%s'\n" "${found:-8081}" >> .env
+    fi
+}
+
 # ---- existing data, lost .env ------------------------------------------------
 # The database volume exists but .env doesn't (checkout deleted or moved).
 # Starting the wizard here would write NEW database passwords that don't match
 # the existing database. config.json in the app volume already holds the real
 # connection details, so rebuild .env from it instead.
+RECOVERED=0
 recover_env() {
     vol_exists "${PROJECT}_off_data" || return 1
     echo "Existing data found but no .env — rebuilding .env from the saved settings..."
@@ -471,6 +521,10 @@ if [ -n "$PIN_PROJECT" ] && [ -z "$(env_get COMPOSE_PROJECT_NAME)" ]; then
     printf "COMPOSE_PROJECT_NAME='%s'\n" "$PIN_PROJECT" >> .env
 fi
 
+# The admin panel's port is written down explicitly, so no later update can
+# move it: whatever this install already uses stays.
+pin_ports
+
 # ---- build & start -----------------------------------------------------------
 # `up --build` replaces containers only; named volumes (the data) are never
 # removed by it.
@@ -488,6 +542,14 @@ fi
 
 ADMIN_PORT=$(env_get ADMIN_PORT)
 URL="http://localhost:${ADMIN_PORT:-8080}/admin"
+FORM_PORT_HOST=$(env_get FORM_PORT)
+echo
+echo "Ports on this server:"
+echo "  admin panel     ${ADMIN_PORT:-8080}  ->  8080 inside the container"
+echo "  first form      ${FORM_PORT_HOST:-8081}  ->  8081 inside the container"
+echo "  further forms   8090-8189, one per form as assigned in the admin panel"
+echo "Point a tunnel or proxy hostname at ${ADMIN_PORT:-8080} for the admin panel;"
+echo "every form is also served on that same address at /f/<form-slug>/."
 
 # Don't just say "done" — ask the running app what state it's actually in.
 check_app() {
