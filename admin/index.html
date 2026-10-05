@@ -72,6 +72,9 @@ button{font-family:inherit;cursor:pointer}
 .btn-outline:hover{border-color:var(--yellow);color:var(--yellow)}
 .btn-danger{color:var(--err);border-color:var(--err)}
 .btn-danger:hover{border-color:var(--err);color:var(--err);background:rgba(198,40,40,.08)}
+.card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.card-top h2{margin:0}
+.card-top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .btn-sm{padding:5px 12px;font-size:12.5px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:20px;margin-bottom:18px}
 .card h2{margin:0 0 14px;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
@@ -452,7 +455,13 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
       <!-- forms list -->
       <div id="forms-list-view">
         <div class="card">
-          <h2>Feedback forms</h2>
+          <div class="card-top">
+            <h2>Feedback forms</h2>
+            <div class="card-top-actions">
+              <button class="btn-outline btn-sm keys-shortcut">Field keys</button>
+              <button class="btn" id="add-form-btn">+ Add a form</button>
+            </div>
+          </div>
           <p class="hint">Each form runs as its own listener on its own port — point one Cloudflare Tunnel hostname at each port to publish it. Give a form a specific port, or leave it blank to auto-assign one.</p>
           <div style="display:flex;align-items:center;gap:10px;margin:10px 0">
             <label for="forms-sort" style="margin:0;white-space:nowrap">Sort by</label>
@@ -465,7 +474,6 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
           </div>
           <div id="forms-list"></div>
           <div class="msg bad" id="forms-msg"></div>
-          <button class="btn" id="add-form-btn" style="margin-top:14px">+ Add a form</button>
         </div>
 
         <div class="card" id="archived-forms-card" style="display:none">
@@ -500,11 +508,14 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
 
           <!-- questions sub-panel -->
           <div id="sub-fdfields">
+            <div class="card-top-actions" style="justify-content:flex-end;margin-bottom:6px">
+              <button class="btn-outline btn-sm keys-shortcut">Field keys</button>
+              <button class="btn" id="add-field-btn">+ Add a field</button>
+            </div>
             <p class="hint" id="fd-core-note"></p>
             <p class="hint">Everything below is yours to edit — changes apply to the public form immediately.</p>
             <div id="fields-list"></div>
             <div class="msg bad" id="fields-msg"></div>
-            <button class="btn" id="add-field-btn" style="margin-top:14px">+ Add a field</button>
           </div>
 
           <!-- branding sub-panel -->
@@ -1398,6 +1409,9 @@ function applyPermissionVisibility(){
   document.querySelector('.subtab[data-subtab="cfgalerts"]').classList.toggle(
     "hidden", !hasPermission("manage_global_alerts"));
   $("add-form-btn").classList.toggle("hidden", !hasPermission("manage_forms"));
+  document.querySelectorAll(".keys-shortcut").forEach(function(b){
+    b.classList.toggle("hidden", !hasAnyPermission(["manage_field_keys", "manage_app_settings"]));
+  });
   $("ed-new-key").classList.toggle("hidden", !hasPermission("manage_field_keys"));
 }
 
@@ -2667,6 +2681,14 @@ $("sum-print").addEventListener("click", function(){ window.print(); });
 
 /* ------------------------------------------------------- field editor */
 $("add-field-btn").addEventListener("click", function(){ openEditor(null); });
+// Shortcut from Forms / a form's Questions straight to Configuration -> Field keys
+document.querySelectorAll(".keys-shortcut").forEach(function(b){
+  b.addEventListener("click", function(){
+    document.querySelector('.tab[data-tab="config"]').click();
+    document.querySelector('.subtab[data-subtab="cfgkeys"]').click();
+    window.scrollTo(0, 0);
+  });
+});
 // Create a question without leaving the form: it goes into the catalog and
 // straight onto this form.
 $("ed-new-key").addEventListener("click", function(){
