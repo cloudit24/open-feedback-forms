@@ -3,6 +3,14 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.5.1
+
+- A **new form no longer asks for first name, last name and email** unless you
+  tick that box — it starts with only the questions you choose. Forms that
+  already exist are unchanged, and the consent tick is always there.
+- When a form isn't collecting a name or email, the consent paragraph no
+  longer says it is (English and Arabic).
+
 ## 1.5.0
 
 - **One address for every form.** Each form is now also served through the

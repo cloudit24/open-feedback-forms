@@ -346,6 +346,7 @@ var T = {
     expiredTitle:"This form is no longer accepting responses",
     expiredBody:"Thanks for your interest — this feedback window has closed.",
     privacyTitle:"Terms and Conditions",
+    privacyBodyNoContact:"We're grateful for the time you're taking to share your thoughts with us. {club} uses your answers to review your feedback and improve what we do. We treat what you send with care, we never sell it, and we never share it outside the club. You're always welcome to ask us to update or delete it by emailing the club.",
     privacyBody:"We're grateful for the time you're taking to share your thoughts with us. {club} collects your name, email address, mobile number and nationality so our team can review your feedback, keep you updated, and look after our ongoing relationship with you as one of our fans. We may also contact you about the feedback you share, whether to follow up, ask a clarifying question, or simply say thank you. We treat your details with care, we never sell them, and we never share them outside the club. You're always welcome to ask us to update or delete your information by emailing the club.",
     consent:"I agree to terms and conditions",
     submit:"Send feedback", sending:"Sending...",
@@ -380,6 +381,7 @@ var T = {
     expiredTitle:"هذا النموذج لم يعد يقبل الردود",
     expiredBody:"شكراً لاهتمامك — انتهت فترة استقبال الملاحظات لهذا النموذج.",
     privacyTitle:"الشروط والأحكام",
+    privacyBodyNoContact:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يستخدم {club} إجاباتك لمراجعة ملاحظاتك وتحسين ما نقدمه. نتعامل مع ما ترسله بعناية تامة، ولا نبيعه أبداً، ولا نشاركه خارج النادي. ويسعدنا دائماً أن تطلب منا تحديثه أو حذفه عبر مراسلة النادي.",
     privacyBody:"نشكرك على وقتك الذي تخصصه لمشاركتنا رأيك. يقوم {club} بجمع اسمك وبريدك الإلكتروني ورقم هاتفك المتحرك وجنسيتك حتى يتمكن فريقنا من مراجعة ملاحظاتك، وإبقائك على اطلاع بآخر المستجدات، والحفاظ على علاقتنا المستمرة بك كأحد جماهيرنا الأعزاء. وقد نتواصل معك أيضاً بخصوص الملاحظة التي شاركتنا إياها، سواء للمتابعة أو للاستفسار أو لمجرد شكرك عليها. نتعامل مع بياناتك بعناية تامة، ولا نبيعها أبداً، ولا نشاركها خارج النادي. ويسعدنا دائماً أن تطلب منا تحديث أو حذف بياناتك عبر مراسلة النادي.",
     consent:"أوافق على الشروط والأحكام",
     submit:"إرسال الملاحظة", sending:"جارٍ الإرسال...",
@@ -499,7 +501,9 @@ function applyLang(next){
   var nodes = document.querySelectorAll("[data-i18n]");
   for (var i = 0; i < nodes.length; i++){
     var k = nodes[i].getAttribute("data-i18n");
-    var text = (k === "subtitle" && subtitleOverride) ? subtitleOverride : strings[k];
+    var key = (k === "privacyBody" && !ASK_CORE && strings.privacyBodyNoContact)
+      ? "privacyBodyNoContact" : k;
+    var text = (k === "subtitle" && subtitleOverride) ? subtitleOverride : strings[key];
     if (!text) continue;
     if (k === "club") text = clubName;
     else if (text.indexOf("{club}") !== -1) text = text.split("{club}").join(clubName);
@@ -588,6 +592,7 @@ function fetchFields(){
       FIELDS = res.body.fields;
       ASK_CORE = res.body.askCoreFields !== false;
       applyCoreFieldVisibility();
+      applyLang(lang);             // the consent paragraph depends on ASK_CORE
       LANGUAGES = res.body.languages || { en: true, ar: true };
       LANG_META = res.body.languageLabels || LANG_META;
       LANG_LIST = [];

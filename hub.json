@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.5.0 released: every form also served at /f/<slug> on the admin address, Test port button, form cloning, per-user admin colours, First/Last name questions, and the built-in name/email block can be switched off per form",
-  "next": "On the client server, run the install link once to move it to 1.5.0, then reach each form at /f/<slug> through the existing tunnel hostname",
+  "status": "v1.5.1 released: every form also served at /f/<slug> on the admin address, Test port button, form cloning, per-user admin colours, First/Last name questions, and new forms no longer ask for name/email unless you tick it",
+  "next": "On the client server, run the install link once to move it to 1.5.1, then reach each form at /f/<slug> through the existing tunnel hostname",
   "url": "http://localhost:8080/admin",
   "updated_by": "Claude, 2026-10-05"
 }

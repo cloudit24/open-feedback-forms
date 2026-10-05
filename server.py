@@ -1789,7 +1789,11 @@ class AdminHandler(PublicRoutes, BaseHandler):
             new_id = db.create_form(name, slug, port, lang_en=lang_en, lang_ar=lang_ar,
                                     enabled_extra_langs=extra_langs, expiry_date=expiry_date,
                                     public_url=public_url,
-                                    ask_core_fields=bool(body.get("ask_core_fields", True)))
+                                    # A new form starts with nothing but what
+                                    # the admin picks, the built-in name/email
+                                    # block included. Forms that already exist
+                                    # keep theirs switched on.
+                                    ask_core_fields=bool(body.get("ask_core_fields", False)))
         except Exception as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
         FORMS.sync()

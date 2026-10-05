@@ -870,7 +870,7 @@ table.subs tr:last-child td{border-bottom:none}
 
       <label>Built-in questions</label>
       <div class="check-row"><input type="checkbox" id="fe-ask-core"><label for="fe-ask-core" style="margin:0">Ask for first name, last name and email address</label></div>
-      <p class="hint">These three sit at the top of every form by default, above your own questions — that's why they appear without being added. Turn this off and the form asks only the questions you chose (the consent tick stays either way). Existing forms keep this on.</p>
+      <p class="hint">Tick this and the form asks for first name, last name and email address at the top, above your own questions. A new form starts with it off, so it asks only the questions you choose — add First name, Last name or Email address from the catalogue if you want them among your own questions. The consent tick is always there. Forms made before this setting existed keep asking for all three until you turn it off.</p>
 
       <label>Language Labels</label>
       <div class="check-row"><input type="checkbox" id="fe-lang-en"><label for="fe-lang-en" style="margin:0">English</label></div>
@@ -1476,7 +1476,7 @@ function openFormEditor(form){
   $("fe-lang-ar").checked = form ? form.lang_ar : true;
   $("fe-expiry").value = (form && form.expiry_date) || "";
   $("fe-public-url").value = (form && form.public_url) || "";
-  $("fe-ask-core").checked = form ? form.ask_core_fields !== false : true;
+  $("fe-ask-core").checked = form ? form.ask_core_fields !== false : false;
   $("fe-port-hint").innerHTML = STATE.publishedPorts
     ? 'Leave blank and a free port is picked from <code>' + escapeHtml(STATE.autoPortRange) + '</code>. ' +
       'In Docker only published ports can be reached from outside — this install publishes <code>' +
