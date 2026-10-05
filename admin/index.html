@@ -194,6 +194,9 @@ table.subs tr:last-child td{border-bottom:none}
 .update-banner code{display:block;margin-top:4px;padding:8px 10px;background:var(--bg);border:1px solid var(--line);
   border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre}
 .update-banner .actions{display:flex;gap:8px;align-items:center}
+.update-pill{background:var(--accent);color:#0B0B0B;border:none;border-radius:999px;
+  padding:5px 12px;font-size:11.5px;font-weight:800;letter-spacing:.02em}
+.update-pill:hover{filter:brightness(1.08)}
 </style>
 </head>
 <body>
@@ -256,6 +259,7 @@ table.subs tr:last-child td{border-bottom:none}
       </div>
       <div style="display:flex;gap:8px">
         <button class="btn-outline btn-sm" id="theme-btn" aria-label="Switch theme">Dark</button>
+        <button class="update-pill hidden" id="update-pill" type="button" title="Show what the update changes">Update available</button>
         <button class="btn-outline btn-sm" id="password-btn">Change password</button>
         <button class="btn-outline btn-sm" id="logout-btn">Log out</button>
       </div>
@@ -851,7 +855,8 @@ table.subs tr:last-child td{border-bottom:none}
       <div id="ed-predefined-wrap">
         <label for="ed-predefined">Field key</label>
         <select id="ed-predefined"><option value="">— choose a field key —</option></select>
-        <p class="hint">Field keys are defined on the Field keys tab. Don't see the one you need? Add it there first.</p>
+        <p class="hint">Don't see the one you need? Create it here — it's added to the catalog and to this form.</p>
+        <button class="btn-outline btn-sm" id="ed-new-key" type="button" style="margin-top:6px">+ Create a new question</button>
       </div>
       <div id="ed-key-wrap">
         <label for="ed-key">Field key</label>
@@ -867,6 +872,7 @@ table.subs tr:last-child td{border-bottom:none}
         <option value="text">Short text</option>
         <option value="email">Email address</option>
         <option value="tel">Phone number</option>
+        <option value="date">Date</option>
         <option value="textarea">Long text</option>
         <option value="select">Dropdown</option>
         <option value="rating">Star rating (1–5)</option>
@@ -901,11 +907,16 @@ table.subs tr:last-child td{border-bottom:none}
       <label for="ke-ar">Label (Arabic)</label>
       <input type="text" id="ke-ar" dir="rtl">
       <div id="ke-extra-wrap"></div>
+      <label for="ke-category">Category</label>
+      <input type="text" id="ke-category" list="ke-category-list" placeholder="e.g. Personal details" maxlength="60">
+      <datalist id="ke-category-list"></datalist>
+      <p class="hint">Groups this question in the catalog and in the "add a question" list. Leave blank for "Other".</p>
       <label for="ke-type">Type</label>
       <select id="ke-type">
         <option value="text">Short text</option>
         <option value="email">Email address</option>
         <option value="tel">Phone number</option>
+        <option value="date">Date</option>
         <option value="textarea">Long text</option>
         <option value="select">Dropdown</option>
         <option value="rating">Star rating (1–5)</option>
@@ -1020,6 +1031,7 @@ function applyPermissionVisibility(){
   document.querySelector('.subtab[data-subtab="cfgalerts"]').classList.toggle(
     "hidden", !hasPermission("manage_global_alerts"));
   $("add-form-btn").classList.toggle("hidden", !hasPermission("manage_forms"));
+  $("ed-new-key").classList.toggle("hidden", !hasPermission("manage_field_keys"));
 }
 
 function renderStatus(s){
@@ -1553,17 +1565,51 @@ function populatePredefinedSelect(){
   var sel = $("ed-predefined");
   var current = sel.value;
   sel.innerHTML = '<option value="">— choose a field key —</option>';
-  STATE.library.forEach(function(f){
-    var opt = document.createElement("option");
-    opt.value = f.field_key; opt.textContent = f.label_en + " (" + f.field_key + ")";
-    sel.appendChild(opt);
+  groupByCategory(STATE.library).forEach(function(group){
+    var holder = document.createElement("optgroup");
+    holder.label = group.name;
+    group.items.forEach(function(f){
+      var opt = document.createElement("option");
+      opt.value = f.field_key; opt.textContent = f.label_en + " (" + f.field_key + ")";
+      holder.appendChild(opt);
+    });
+    sel.appendChild(holder);
   });
   if (current) sel.value = current;
+}
+// Questions in one list, under their category heading. A question with no
+// category falls under "Other", listed last.
+function groupByCategory(items){
+  var order = [], byName = {};
+  items.forEach(function(f){
+    var name = (f.category || "").trim() || "Other";
+    if (!byName[name]){ byName[name] = []; order.push(name); }
+    byName[name].push(f);
+  });
+  order.sort(function(a, b){
+    if (a === "Other") return 1;
+    if (b === "Other") return -1;
+    return a.localeCompare(b);
+  });
+  return order.map(function(name){ return {name: name, items: byName[name]}; });
+}
+function knownCategories(){
+  var seen = {};
+  STATE.library.forEach(function(f){
+    var c = (f.category || "").trim();
+    if (c) seen[c] = true;
+  });
+  return Object.keys(seen).sort();
 }
 function renderLibrary(){
   var box = $("lib-list");
   box.innerHTML = "";
-  STATE.library.forEach(function(f){
+  groupByCategory(STATE.library).forEach(function(group){
+   var heading = document.createElement("h2");
+   heading.textContent = group.name;
+   heading.style.margin = "18px 0 6px";
+   box.appendChild(heading);
+   group.items.forEach(function(f){
     var row = document.createElement("div");
     row.className = "field-row";
     var optCount = f.options ? f.options.length + " options" : "";
@@ -1578,6 +1624,7 @@ function renderLibrary(){
     [add, edit, del].forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
     row.appendChild(actions);
     box.appendChild(row);
+   });
   });
   if (!STATE.library.length){
     box.innerHTML = '<p class="hint">No field keys yet — add one below.</p>';
@@ -1607,7 +1654,7 @@ function deleteLibraryKey(f){
 
 /* --------------------------------------------------- field key editor */
 $("add-key-btn").addEventListener("click", function(){ openKeyEditor(null); });
-$("ke-cancel").addEventListener("click", function(){ show("dash-view"); });
+$("ke-cancel").addEventListener("click", function(){ STATE.keyEditorReturn = null; show("dash-view"); });
 $("ke-type").addEventListener("change", function(){
   $("ke-options-wrap").classList.toggle("hidden", $("ke-type").value !== "select");
 });
@@ -1650,6 +1697,10 @@ function openKeyEditor(key){
   $("ke-ar").value = key ? key.label_ar : "";
   renderKeyExtraLangs(key ? key.labels_extra : null);
   $("ke-type").value = key ? key.field_type : "text";
+  $("ke-category").value = key ? (key.category || "") : "";
+  var list = $("ke-category-list");
+  list.innerHTML = "";
+  knownCategories().forEach(function(c){ list.appendChild(new Option(c, c)); });
   $("ke-options").innerHTML = "";
   if (key && key.field_type === "select" && key.options){ key.options.forEach(addKeyOptionRow); }
   $("ke-options-wrap").classList.toggle("hidden", $("ke-type").value !== "select");
@@ -1703,12 +1754,28 @@ $("ke-save").addEventListener("click", function(){
     label_ar: $("ke-ar").value.trim(),
     labels_extra: collectKeyExtraLangs(),
     field_type: type,
+    category: $("ke-category").value.trim(),
     options: type === "select" ? collectKeyOptions() : null
   };
   var url = STATE.editingKeyId ? "/admin/field-keys/" + STATE.editingKeyId + "/update" : "/admin/field-keys";
+  var backToForm = STATE.keyEditorReturn;
   api("POST", url, payload).then(function(res){
-    if (res.body.ok){ show("dash-view"); loadFieldLibrary(); return; }
-    flash("key-editor-msg", res.body.error || "Could not save this field key.");
+    if (!res.body.ok){
+      flash("key-editor-msg", res.body.error || "Could not save this field key.");
+      return;
+    }
+    STATE.keyEditorReturn = null;
+    if (backToForm){
+      api("POST", "/admin/fields", {form_id: backToForm, field_key: payload.field_key, required: false})
+        .then(function(added){
+          loadFieldLibrary();
+          show("dash-view");
+          loadFields();
+          if (!added.body.ok) alert(added.body.error || "The question was created but could not be added to the form.");
+        });
+      return;
+    }
+    show("dash-view"); loadFieldLibrary();
   });
 });
 
@@ -1851,6 +1918,12 @@ $("dash-clear").addEventListener("click", function(){
 
 /* ------------------------------------------------------- field editor */
 $("add-field-btn").addEventListener("click", function(){ openEditor(null); });
+// Create a question without leaving the form: it goes into the catalog and
+// straight onto this form.
+$("ed-new-key").addEventListener("click", function(){
+  STATE.keyEditorReturn = STATE.currentFormId || null;
+  openKeyEditor(null);
+});
 $("ed-cancel").addEventListener("click", function(){ show("dash-view"); });
 $("ed-type").addEventListener("change", function(){
   $("ed-options-wrap").classList.toggle("hidden", $("ed-type").value !== "select");
@@ -2617,6 +2690,13 @@ function checkForUpdate(){
   api("GET", "/admin/update-check").then(function(res){
     var u = res.body || {};
     if (!u.updateAvailable) return;
+    // The pill stays visible even once the banner is dismissed, so "there is
+    // an update" is never lost from the screen.
+    $("update-pill").classList.remove("hidden");
+    $("update-pill").textContent = "Update available: " + u.latest;
+    $("update-pill").onclick = function(){ $("update-banner").classList.remove("hidden"); window.scrollTo({top: 0, behavior: "smooth"}); };
+    var aboutVersion = document.getElementById("about-version");
+    if (aboutVersion) aboutVersion.textContent = "v" + u.current + " — version " + u.latest + " is available";
     var skipped = null;
     try { skipped = localStorage.getItem("offSkipUpdate"); } catch(e){}
     if (skipped === u.latest) return;

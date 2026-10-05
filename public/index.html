@@ -373,7 +373,7 @@ var T = {
     club:"ناديكم", fanvoice:"صوت الجمهور",
     title:"شاركنا رأيك",
     subtitle:"ملاحظاتك تساعدنا على تحسين أيام المباريات والمرافق وكل ما يخص النادي. لن تستغرق أكثر من دقيقتين.",
-    firstName:"الاسم الأول", lastName:"اسم العائلة", email:"البريد الإلكتروني",
+    firstName:"الاسم الأول", lastName:"الاسم الأخير", email:"البريد الإلكتروني",
     optional:"(اختياري)", choose:"الرجاء الاختيار...",
     setupTitle:"هذا النموذج غير جاهز بعد",
     setupBody:"لا يزال النادي يعمل على إعداد هذا النموذج. يرجى المحاولة لاحقاً.",
@@ -683,6 +683,14 @@ function renderDynamicFields(){
         '<label for="' + fieldInputId(f) + '">' + escapeHtml(fieldLabel(f)) + (f.required ? '<span class="req">*</span>' : '') + '</label>';
       box.appendChild(wrap);
 
+    } else if (f.field_type === "date"){
+      // The browser's own date box: a calendar on phones, and it hands the
+      // server YYYY-MM-DD whatever the visitor's date format looks like.
+      wrap.innerHTML = labelHtml +
+        '<input type="date" id="' + fieldInputId(f) + '" dir="ltr" min="1900-01-01" max="2100-12-31">' +
+        '<p class="err">' + escapeHtml(T[lang].errRequired) + '</p>';
+      box.appendChild(wrap);
+
     } else {                                       // text / email
       wrap.innerHTML = labelHtml +
         '<input type="' + (f.field_type === "email" ? "email" : "text") + '" id="' + fieldInputId(f) + '" maxlength="200">' +
@@ -783,6 +791,11 @@ function checkDynamicField(f){
     var v3 = $(fieldInputId(f)).value.trim();
     if (f.required && !v3){ setErr(wrapId); return false; }
     if (v3 && !validEmail(v3)){ setErr(wrapId); return false; }
+    clearErr(wrapId); return true;
+  }
+  if (f.field_type === "date"){
+    var vd = $(fieldInputId(f)).value;
+    if (f.required && !vd){ setErr(wrapId); return false; }
     clearErr(wrapId); return true;
   }
   if (f.field_type === "textarea"){

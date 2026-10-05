@@ -55,7 +55,7 @@ SCHEMA_SQL = [
         label_en      VARCHAR(200) NOT NULL,
         label_ar      VARCHAR(200) NOT NULL,
         labels_extra_json LONGTEXT NULL,
-        field_type    ENUM('text','email','tel','textarea','select','rating','checkbox') NOT NULL,
+        field_type    ENUM('text','email','tel','textarea','select','rating','checkbox','date') NOT NULL,
         options_json  LONGTEXT NULL,
         required      TINYINT(1) NOT NULL DEFAULT 0,
         sort_order    INT NOT NULL DEFAULT 0,
@@ -69,10 +69,11 @@ SCHEMA_SQL = [
     CREATE TABLE IF NOT EXISTS field_keys (
         id            INT AUTO_INCREMENT PRIMARY KEY,
         field_key     VARCHAR(64)  NOT NULL UNIQUE,
+        category      VARCHAR(60)  NULL,
         label_en      VARCHAR(200) NOT NULL,
         label_ar      VARCHAR(200) NOT NULL,
         labels_extra_json LONGTEXT NULL,
-        field_type    ENUM('text','email','tel','textarea','select','rating','checkbox') NOT NULL,
+        field_type    ENUM('text','email','tel','textarea','select','rating','checkbox','date') NOT NULL,
         options_json  LONGTEXT NULL,
         created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
@@ -162,6 +163,11 @@ MIGRATE_SQL = [
     "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS expiry_date DATE NULL",
+    # 'date' questions (added in 1.3.0) — widening the list keeps every
+    # existing question exactly as it is.
+    "ALTER TABLE form_fields MODIFY COLUMN field_type ENUM('text','email','tel','textarea','select','rating','checkbox','date') NOT NULL",
+    "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS category VARCHAR(60) NULL",
+    "ALTER TABLE field_keys MODIFY COLUMN field_type ENUM('text','email','tel','textarea','select','rating','checkbox','date') NOT NULL",
 ]
 
 # Ported straight from the old hardcoded index.html, so the form looks and
@@ -245,6 +251,8 @@ def _opts(rows):
 
 DEFAULT_FIELDS = [
     # field_key,             label_en,                                                   label_ar,                                          type,       options,                   required
+    ("family_name",          "Family name",                                               "اسم العائلة",                                     "text",     None,                      0),
+    ("date_of_birth",        "Date of birth",                                             "تاريخ الميلاد",                                   "date",     None,                      0),
     ("phone",                "Mobile number",                                            "رقم الهاتف المتحرك",                              "tel",      None,                      1),
     ("gender",               "Gender",                                                    "الجنس",                                            "select",   _opts(_GENDER_OPTIONS),    1),
     ("age_group",            "Age group",                                                 "الفئة العمرية",                                    "select",   _opts(_AGE_OPTIONS),       1),
@@ -268,7 +276,7 @@ def list_field_keys():
     conn = _conn()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM field_keys ORDER BY label_en")
+        cur.execute("SELECT * FROM field_keys ORDER BY category IS NULL, category, label_en")
         rows = cur.fetchall()
         cur.close()
         for r in rows:
@@ -303,9 +311,10 @@ def create_field_key(data):
         opts = json.dumps(data["options"]) if data.get("options") else None
         extra = json.dumps(data["labels_extra"]) if data.get("labels_extra") else None
         cur.execute(
-            """INSERT INTO field_keys (field_key, label_en, label_ar, labels_extra_json, field_type, options_json)
-               VALUES (%s,%s,%s,%s,%s,%s)""",
-            (data["field_key"], data["label_en"], data["label_ar"], extra, data["field_type"], opts))
+            """INSERT INTO field_keys (field_key, label_en, label_ar, labels_extra_json, field_type, options_json, category)
+               VALUES (%s,%s,%s,%s,%s,%s,%s)""",
+            (data["field_key"], data["label_en"], data["label_ar"], extra, data["field_type"], opts,
+             data.get("category") or None))
         conn.commit()
         new_id = cur.lastrowid
         cur.close()
@@ -321,8 +330,10 @@ def update_field_key(key_id, data):
         opts = json.dumps(data["options"]) if data.get("options") else None
         extra = json.dumps(data["labels_extra"]) if data.get("labels_extra") else None
         cur.execute(
-            "UPDATE field_keys SET label_en=%s, label_ar=%s, labels_extra_json=%s, field_type=%s, options_json=%s WHERE id=%s",
-            (data["label_en"], data["label_ar"], extra, data["field_type"], opts, key_id))
+            """UPDATE field_keys SET label_en=%s, label_ar=%s, labels_extra_json=%s,
+                      field_type=%s, options_json=%s, category=%s WHERE id=%s""",
+            (data["label_en"], data["label_ar"], extra, data["field_type"], opts,
+             data.get("category") or None, key_id))
         conn.commit()
         cur.close()
     finally:
@@ -462,6 +473,20 @@ def _seed_fields(conn, form_id, cur=None):
         cur.close()
 
 
+# Which group each built-in question belongs to in the Field keys catalog.
+# Admins can retype a category on any key; these are only the starting point.
+DEFAULT_CATEGORIES = {
+    "family_name": "Personal details", "date_of_birth": "Personal details",
+    "phone": "Personal details", "gender": "Personal details",
+    "age_group": "Personal details", "nationality": "Personal details",
+    "attendance_frequency": "About the visit", "heard_about": "About the visit",
+    "exp_entry": "Experience ratings", "exp_seating": "Experience ratings",
+    "exp_cleanliness": "Experience ratings", "exp_food": "Experience ratings",
+    "exp_atmosphere": "Experience ratings", "exp_staff": "Experience ratings",
+    "overall_satisfaction": "Overall", "nps": "Overall",
+    "feedback_message": "Overall", "marketing_optin": "Consent",
+}
+
 def _seed_field_key_library_if_empty(conn):
     """The admin-managed catalog of field keys (Field keys tab). Seeded once
     from the same blueprint used for a brand-new form, so there's something
@@ -472,10 +497,60 @@ def _seed_field_key_library_if_empty(conn):
     if count == 0:
         for key, en, ar, ftype, options, _required in DEFAULT_FIELDS:
             cur.execute(
-                """INSERT INTO field_keys (field_key, label_en, label_ar, field_type, options_json)
-                   VALUES (%s,%s,%s,%s,%s)""",
-                (key, en, ar, ftype, options))
+                """INSERT INTO field_keys (field_key, label_en, label_ar, field_type, options_json, category)
+                   VALUES (%s,%s,%s,%s,%s,%s)""",
+                (key, en, ar, ftype, options, DEFAULT_CATEGORIES.get(key)))
     cur.close()
+
+
+# Names an admin may already have used for a question a later release also
+# ships. A match means the install keeps what its admin built: the release
+# version is skipped rather than added alongside it as a near-duplicate.
+BLUEPRINT_ALIASES = {
+    "date_of_birth": ("dob", "birthdate", "birth_date", "date_birth", "dateofbirth"),
+    "family_name": ("familyname", "surname", "family", "lastname", "last_name"),
+    "phone": ("mobile", "mobile_number", "contact", "contact_number", "phone_number", "telephone"),
+}
+
+
+def add_missing_library_keys():
+    """Put blueprint questions that don't exist yet into the Field keys
+    catalog — how a question added in a new release reaches an install that
+    already has a catalog. Called once per release (server.py keeps the
+    marker), so a key an admin deleted on purpose doesn't keep coming back.
+    Returns the keys added."""
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("SELECT field_key FROM field_keys")
+        existing = {row[0] for row in cur.fetchall()}
+        added, skipped = [], []
+        for key, en, ar, ftype, options, _required in DEFAULT_FIELDS:
+            if key in existing:
+                continue
+            clash = [a for a in BLUEPRINT_ALIASES.get(key, ()) if a in existing]
+            if clash:
+                # Someone already built this question by hand, under their own
+                # name — theirs stays, untouched, and theirs alone.
+                skipped.append("%s (you already have %s)" % (key, ", ".join(clash)))
+                continue
+            cur.execute(
+                """INSERT INTO field_keys (field_key, label_en, label_ar, field_type, options_json, category)
+                   VALUES (%s,%s,%s,%s,%s,%s)""",
+                (key, en, ar, ftype, options, DEFAULT_CATEGORIES.get(key)))
+            added.append(key)
+        # Questions that pre-date categories get the blueprint's grouping, so
+        # an upgraded install reads the same as a fresh one. A category an
+        # admin typed themselves is never overwritten.
+        for key, category in DEFAULT_CATEGORIES.items():
+            cur.execute(
+                "UPDATE field_keys SET category=%s WHERE field_key=%s AND (category IS NULL OR category='')",
+                (category, key))
+        conn.commit()
+        cur.close()
+        return added, skipped
+    finally:
+        conn.close()
 
 
 def _seed_default_form_if_empty(conn, default_port):

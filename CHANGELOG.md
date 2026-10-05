@@ -3,6 +3,23 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.3.0
+
+- New question type: **Date**, with a proper calendar box on phones. Dates
+  are checked on the way in, so "31 February" or a typed-in format can't be
+  saved.
+- New questions in the catalog: **Date of birth** and **Family name**. Email
+  address and mobile number were already built in.
+- The Arabic label for the built-in Last name is now الاسم الأخير, so it no
+  longer reads the same as the new Family name (اسم العائلة).
+- Questions now have a **category**, asked when you add one, and the catalog
+  and the "add a question" list are grouped by it.
+- You can **create a question while building a form** — it goes into the
+  catalog and onto the form in one step.
+- Questions added by a release appear in your catalog once, and never
+  overwrite or duplicate a question you created yourself.
+- An "Update available" marker now stays in the header until you update.
+
 ## 1.2.0
 
 - Passwords: anyone can change their own from the top right, the owner

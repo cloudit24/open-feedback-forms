@@ -258,6 +258,30 @@ def fetch_update_info():
     return latest, notes
 
 
+LIBRARY_TOPUP_MARKER = "library_keys_1_3_0"
+
+
+def topup_library_once():
+    """Questions added by a release reach an existing install's Field keys
+    catalog the first time it runs that release, and never again — so a key
+    an admin deleted stays deleted."""
+    cfg = config_store.load()
+    if cfg["settings"].get(LIBRARY_TOPUP_MARKER):
+        return
+    try:
+        added, skipped = db.add_missing_library_keys()
+    except Exception as e:
+        log("could not top up the field key library: %s" % e)
+        return
+    cfg = config_store.load()
+    cfg["settings"][LIBRARY_TOPUP_MARKER] = True
+    config_store.save(cfg)
+    if added:
+        log("added new field keys to the library: %s" % ", ".join(added))
+    if skipped:
+        log("kept your own field keys instead of adding: %s" % "; ".join(skipped))
+
+
 def drop_sessions_for(kind, key, keep_token=None):
     """Sign one account out everywhere, e.g. after its password changes.
     `key` is the username for the bootstrap account, user_id for a DB user."""
@@ -371,6 +395,15 @@ def validate_dynamic_value(field, value):
     elif ftype == "tel":
         if not PHONE_RE.match(v):
             return None, "invalid phone for %s" % field["field_key"]
+    elif ftype == "date":
+        # The browser's date box sends YYYY-MM-DD; anything else is someone
+        # posting by hand. strptime also rejects impossible dates like 02-31.
+        try:
+            parsed = datetime.strptime(v, "%Y-%m-%d")
+        except ValueError:
+            return None, "invalid date for %s" % field["field_key"]
+        if not (datetime(1900, 1, 1) <= parsed <= datetime(2100, 12, 31)):
+            return None, "date out of range for %s" % field["field_key"]
     elif ftype == "select":
         valid = {o["value"] for o in (field["options"] or [])}
         if v not in valid:
@@ -1497,6 +1530,7 @@ class AdminHandler(BaseHandler):
         cfg["db"] = db_cfg
         config_store.save(cfg)
         db.set_pool(pool)
+        topup_library_once()
         log("database connected: %s@%s/%s" % (db_cfg["user"], db_cfg["host"], db_cfg["database"]))
         FORMS.sync()
         return self.send_json(200, {"ok": True})
@@ -1807,6 +1841,7 @@ class AdminHandler(BaseHandler):
         if err:
             return self.send_json(400, {"ok": False, "error": err})
         body["labels_extra"] = clean_labels_extra(body.get("labels_extra"))
+        body["category"] = clean(body.get("category"), 60)
         try:
             new_id = db.create_field_key(body)
         except Exception as e:
@@ -1821,6 +1856,7 @@ class AdminHandler(BaseHandler):
         if err:
             return self.send_json(400, {"ok": False, "error": err})
         body["labels_extra"] = clean_labels_extra(body.get("labels_extra"))
+        body["category"] = clean(body.get("category"), 60)
         try:
             db.update_field_key(key_id, body)
         except Exception as e:
@@ -1846,7 +1882,7 @@ class AdminHandler(BaseHandler):
             return "English label is required"
         if not clean(body.get("label_ar"), 200):
             return "Arabic label is required"
-        if body.get("field_type") not in ("text", "email", "tel", "textarea", "select", "rating", "checkbox"):
+        if body.get("field_type") not in ("text", "email", "tel", "textarea", "select", "rating", "checkbox", "date"):
             return "invalid field type"
         if body.get("field_type") == "select":
             opts = body.get("options")
@@ -1951,7 +1987,7 @@ class AdminHandler(BaseHandler):
             return "English label is required"
         if not clean(body.get("label_ar"), 200):
             return "Arabic label is required"
-        if body.get("field_type") not in ("text", "email", "tel", "textarea", "select", "rating", "checkbox"):
+        if body.get("field_type") not in ("text", "email", "tel", "textarea", "select", "rating", "checkbox", "date"):
             return "invalid field type"
         if body.get("field_type") == "select":
             opts = body.get("options")
@@ -2409,6 +2445,7 @@ def main():
         try:
             pool = db.connect_and_prepare(cfg["db"], default_port=DEFAULT_FORM_PORT)
             db.set_pool(pool)
+            topup_library_once()
         except Exception as e:
             db.clear_pool(str(e))
             log("could not connect to the configured database: %s" % e)
