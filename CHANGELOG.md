@@ -3,6 +3,11 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.6.2
+
+- Removed the fixed "Fan Voice" / "صوت الجمهور" line under the name at the top
+  of every form. The header now shows just your logo and organisation name.
+
 ## 1.6.1
 
 - Fixed: the admin panel showed a blank page from 1.5.0 on. A line break inside
