@@ -3,6 +3,11 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.6.1
+
+- Fixed: the admin panel showed a blank page from 1.5.0 on. A line break inside
+  one of the Clone messages stopped the panel's script from loading at all.
+
 ## 1.6.0
 
 - **The admin panel is always on port 8800.** It's fixed in

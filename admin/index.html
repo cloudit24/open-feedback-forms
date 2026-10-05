@@ -1458,12 +1458,8 @@ function cloneForm(f){
       if (!res.body.ok){ alert(res.body.error || "Could not copy this form."); return; }
       loadForms();
       alert('"' + res.body.name + '" is ready on port ' + res.body.port + ' with ' +
-            res.body.fields + ' question(s) copied.
-
-Submissions and alert rules were not copied.' +
-            (res.body.warning ? "
-
-" + res.body.warning : ""));
+            res.body.fields + ' question(s) copied.\n\nSubmissions and alert rules were not copied.' +
+            (res.body.warning ? "\n\n" + res.body.warning : ""));
     });
 }
 function toggleFormActive(f){
