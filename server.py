@@ -51,6 +51,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import db
 import config_store
 import translate_client
+import logic
 import sanitise
 import templates
 import ui_strings
@@ -374,6 +375,7 @@ def form_look(form):
         "textSize": form.get("text_size") if form.get("text_size") in TEXT_SIZES else "normal",
         "titleAlign": form.get("title_align") if form.get("title_align") in TITLE_ALIGNS else "start",
         "layoutMode": form.get("layout_mode") if form.get("layout_mode") in LAYOUT_MODES else "single_page",
+        "hiddenFields": logic.parse_hidden_names(form.get("hidden_fields") or "")[0],
         "welcomeEnabled": bool(form.get("welcome_enabled")),
         "welcomeTitleEn": (form.get("welcome_title_en") or "").strip(),
         "welcomeTitleAr": (form.get("welcome_title_ar") or "").strip(),
@@ -550,7 +552,7 @@ def form_is_expired(form):
     return exp <= datetime.now().date()
 
 
-def validate_submission(raw, active_fields, require_core=True):
+def validate_submission(raw, active_fields, require_core=True, hidden_names=()):
     if raw.get("website"):
         return None, "honeypot"
 
@@ -562,9 +564,16 @@ def validate_submission(raw, active_fields, require_core=True):
     if not isinstance(incoming, dict):
         incoming = {}
 
+    # Conditional questions: the rules are checked here again, never trusted
+    # from the browser. A hidden question is not required and whatever was
+    # posted for it is dropped, even when it looks valid.
+    shown = logic.visible_keys(active_fields, incoming)
+
     extra = {}
     for field in active_fields:
         key = field["field_key"]
+        if key not in shown:
+            continue
         val, ferr = validate_dynamic_value(field, incoming.get(key))
         if ferr:
             return None, ferr
@@ -572,6 +581,7 @@ def validate_submission(raw, active_fields, require_core=True):
             extra[key] = val
 
     core["extra"] = extra
+    core["hidden"] = logic.clean_hidden_values(raw.get("hidden"), hidden_names)
     return core, None
 
 
@@ -912,6 +922,7 @@ class PublicRoutes:
                 "field_type": f["field_type"],
                 "display_style": clean_display_style(f["field_type"], f.get("display_style")),
                 "options": f["options"], "required": f["required"],
+                "show_if": logic.clean_show_if(f.get("show_if"))[0],
                 "category": (f.get("category") or "").strip(),
                 "page_break": bool(f.get("page_break_before"))} for f in fields]
         branding = {
@@ -972,7 +983,8 @@ class PublicRoutes:
 
         form = db.get_form(form_id)
         rec, err = validate_submission(raw, active_fields,
-                                       require_core=bool(form and form.get("ask_core_fields", True)))
+                                       require_core=bool(form and form.get("ask_core_fields", True)),
+                                       hidden_names=logic.parse_hidden_names((form or {}).get("hidden_fields") or "")[0])
         if err == "honeypot":
             log("honeypot caught a submission from %s" % ip)
             return self.send_json(200, {"ok": True, "reference": db.make_reference()})
@@ -1133,7 +1145,8 @@ class AdminHandler(PublicRoutes, BaseHandler):
             # Without the trailing slash the page's relative links would
             # resolve one level too high, so send the browser to the slash.
             self.send_response(301)
-            self.send_header("Location", "/f/%s/" % slug)
+            query = urllib.parse.urlparse(self.path).query
+            self.send_header("Location", "/f/%s/%s" % (slug, ("?" + query) if query else ""))
             self.send_header("Content-Length", "0")
             self.end_headers()
             return "handled"
@@ -2119,6 +2132,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "thanks_button_en": form.get("thanks_button_en") or "",
             "thanks_button_ar": form.get("thanks_button_ar") or "",
             "thanks_url": form_look(form)["thanksUrl"],
+            "hidden_fields": ", ".join(form_look(form)["hiddenFields"]),
             "form_name": form.get("name") or "",
             "theme_mode": form.get("theme_mode") or "both",
             "hasLogo": bool(form.get("logo_filename")),
@@ -2191,6 +2205,11 @@ class AdminHandler(PublicRoutes, BaseHandler):
                 if len(safe) > 4000:
                     return self.send_json(400, {"ok": False, "error": "that text is too long"})
                 extra[col] = safe
+        if "hidden_fields" in body:
+            names, herr = logic.parse_hidden_names(clean(body.get("hidden_fields"), 500))
+            if herr:
+                return self.send_json(400, {"ok": False, "error": herr})
+            extra["hidden_fields"] = ", ".join(names) or None
         if "thanks_url" in body:
             url = clean(body.get("thanks_url"), 500)
             if url and not URL_RE.match(url):
@@ -2355,12 +2374,16 @@ class AdminHandler(PublicRoutes, BaseHandler):
         lib_entry = next((k for k in db.list_field_keys() if k["field_key"] == key), None)
         if not lib_entry:
             return self.send_json(400, {"ok": False, "error": "unknown field key — define it in the Field keys tab first"})
+        _rule, rerr = logic.clean_show_if(body.get("show_if"))
+        if rerr:
+            return self.send_json(400, {"ok": False, "error": "show-if rule: " + rerr})
         payload = {
             "field_key": lib_entry["field_key"], "label_en": lib_entry["label_en"],
             "label_ar": lib_entry["label_ar"], "labels_extra": lib_entry.get("labels_extra") or {},
             "field_type": lib_entry["field_type"],
             "options": lib_entry["options"], "required": bool(body.get("required")),
             "display_style": clean_display_style(lib_entry["field_type"], body.get("display_style")),
+            "show_if": logic.clean_show_if(body.get("show_if"))[0],
         }
         try:
             new_id = db.create_field(form_id, payload)
@@ -2381,6 +2404,8 @@ class AdminHandler(PublicRoutes, BaseHandler):
         body["labels_extra"] = clean_labels_extra(body.get("labels_extra"))
         if "display_style" in body:
             body["display_style"] = clean_display_style(body.get("field_type"), body.get("display_style"))
+        if "show_if" in body:
+            body["show_if"] = logic.clean_show_if(body.get("show_if"))[0]
         try:
             db.update_field(field_id, body)
         except Exception as e:
@@ -2454,6 +2479,10 @@ class AdminHandler(PublicRoutes, BaseHandler):
         style = body.get("display_style")
         if style and clean_display_style(body.get("field_type"), style) is None:
             return "that display style does not fit this question type"
+        if "show_if" in body:
+            _rule, rerr = logic.clean_show_if(body.get("show_if"))
+            if rerr:
+                return "show-if rule: " + rerr
         return None
 
     # ---- roles & users ----------------------------------------------------

@@ -329,6 +329,7 @@ input[type=text],input[type=email],input[type=tel],input[type=date],select,texta
 :root{ --dir:1 }
 html[dir="rtl"]{ --dir:-1 }
 .lay-on .scr-off{ display:none !important }
+.logic-off{ display:none !important }
 @keyframes scrFwd{ from{opacity:0;transform:translateX(calc(var(--dir)*28px))} to{opacity:1;transform:none} }
 @keyframes scrBack{ from{opacity:0;transform:translateX(calc(var(--dir)*-28px))} to{opacity:1;transform:none} }
 .lay-on .anim-fwd{ animation:scrFwd .26s ease both }
@@ -898,12 +899,14 @@ function renderDynamicFields(fresh){
     LAYOUT_RESTORED = true;
     if (snap) restoreAnswers(snap);
   }
+  applyLogic();                                  /* hides rule-hidden questions, drops their restored answers */
   setupLayout();
 }
 
 function drawFields(){
   var box = $("dynamic-fields");
   box.innerHTML = "";
+  VIS = null;                                   /* rules are worked out afresh for the new controls */
 
   for (var fi = 0; fi < FIELDS.length; fi++){
     var f = FIELDS[fi];
@@ -1097,6 +1100,7 @@ function buildRadioGroup(box, labelId, items, state, key, onPick){
     paint();
     if (focus) btns[i].focus();
     onPick(items[i]);
+    applyLogic();
   }
   items.forEach(function(it, i){
     var b = document.createElement("button");
@@ -1306,6 +1310,7 @@ function collectDynamicValue(f){
 function submit(e){
   e.preventDefault();
   banner("");
+  applyLogic();
 
   var ok = true, firstBadEl = null;
   if (layoutOn()){
@@ -1328,6 +1333,7 @@ function submit(e){
     });
   }
   if (!layoutOn()) FIELDS.forEach(function(f){
+    if (!isVisible(f)) return;                     /* hidden by a rule: not required */
     if (!checkDynamicField(f)){
       ok = false;
       if (!firstBadEl) firstBadEl = focusTarget(f);
@@ -1343,7 +1349,7 @@ function submit(e){
 
   var tsField = document.querySelector('[name="cf-turnstile-response"]');
   var extra = {};
-  FIELDS.forEach(function(f){ extra[f.field_key] = collectDynamicValue(f); });
+  FIELDS.forEach(function(f){ if (isVisible(f)) extra[f.field_key] = collectDynamicValue(f); });
 
   var payload = {
     firstName: ASK_CORE ? $("firstName").value.trim() : "",
@@ -1353,7 +1359,8 @@ function submit(e){
     language:  lang,
     website:   $("website").value,                 /* honeypot */
     turnstile: tsField ? tsField.value : "",
-    fields:    extra
+    fields:    extra,
+    hidden:    linkValues()
   };
 
   var btn = $("submit");
@@ -1401,6 +1408,140 @@ function submit(e){
    question (a grid is ONE block), and the terms + consent block. */
 var SCREENS = [], CUR = 0, STARTED = null, ADV = null, LAYOUT_RESTORED = false, SAVE_T = null;
 
+/* ------------------ conditional questions ------------------
+   A question can carry a rule (show_if) that looks at EARLIER answers. This is
+   the same logic as logic.py on the server, which checks it again on submit.
+   Answers are compared as text ("9" is both the rating 9 and the option "9");
+   no answer makes a condition false; a hidden question counts as unanswered;
+   a rule that points at a later or missing question sees no answer. A hidden
+   question is cleared, not required and not sent. */
+var VIS = null;                         /* {field_key: true/false} */
+
+function logicAnswer(f){
+  var v = collectDynamicValue(f);
+  if (f.field_type === "checkbox") return v === true ? "true" : "false";
+  if (v === null || v === undefined || typeof v === "object") return null;
+  v = String(v).trim();
+  return v === "" ? null : v;
+}
+function logicNum(s){
+  s = String(s).trim();
+  return /^-?\d+(\.\d+)?$/.test(s) ? Number(s) : null;
+}
+function logicSame(a, b){
+  if (a === b) return true;
+  var x = logicNum(a), y = logicNum(b);
+  return x !== null && y !== null && x === y;
+}
+function condHolds(c, ans){
+  if (ans === null || ans === undefined) return false;
+  if (c.op === "eq") return logicSame(ans, c.value);
+  if (c.op === "neq") return !logicSame(ans, c.value);
+  if (c.op === "in") return (c.value || []).some(function(v){ return logicSame(ans, v); });
+  var a = logicNum(ans), b = logicNum(c.value);
+  if (a === null || b === null) return false;
+  return c.op === "gte" ? a >= b : (c.op === "lte" ? a <= b : false);
+}
+function computeVis(){
+  var seen = {}, vis = {};
+  FIELDS.forEach(function(f){
+    var ok = true;
+    if (f.show_if && f.show_if.all){
+      ok = f.show_if.all.every(function(c){ return condHolds(c, seen.hasOwnProperty(c.field) ? seen[c.field] : null); });
+    }
+    vis[f.field_key] = ok;
+    seen[f.field_key] = ok ? logicAnswer(f) : null;
+  });
+  return vis;
+}
+function isVisible(f){ return !VIS || VIS[f.field_key] !== false; }
+
+function resetGroup(box){
+  if (!box) return;
+  var btns = box.querySelectorAll('[role="radio"]');
+  for (var i = 0; i < btns.length; i++){
+    btns[i].setAttribute("aria-checked", "false");
+    btns[i].tabIndex = i === 0 ? 0 : -1;
+  }
+}
+function clearAnswer(f){
+  var k = f.field_key, el = $(fieldInputId(f)), word = $(fieldInputId(f) + "_word");
+  if (f.field_type === "rating"){
+    delete ratingValues[k];
+    if (word) word.textContent = "";
+    if (!el) return;
+    if (effectiveStyle(f)) resetGroup(el);
+    else {
+      var radios = el.querySelectorAll("input[type=radio]");
+      for (var i = 0; i < radios.length; i++) radios[i].checked = false;
+      paintStars(f, 0);
+    }
+  } else if (f.field_type === "select" && effectiveStyle(f)){
+    delete choiceValues[k];
+    resetGroup(el);
+  } else if (!el){
+    return;
+  } else if (f.field_type === "checkbox"){
+    el.checked = false;
+  } else if (el.value){
+    el.value = "";
+    if (f.field_type === "textarea") el.dispatchEvent(new Event("input"));
+  }
+}
+
+/* Works out what is visible now, shows and hides the questions, and (when a
+   layout is on) rebuilds the screens so empty ones are skipped. */
+function applyLogic(){
+  if (!FIELDS.length) return;
+  var prev = VIS, vis = computeVis(), changed = !prev;
+  VIS = vis;
+  FIELDS.forEach(function(f){
+    var shown = vis[f.field_key], w = $(fieldWrapId(f));
+    if (!shown){
+      clearErr(fieldWrapId(f));
+      if (!prev || prev[f.field_key]) clearAnswer(f);       /* never keep or resend a hidden answer */
+    }
+    if (w) w.classList.toggle("logic-off", !shown);
+    if (!prev || prev[f.field_key] !== shown) changed = true;
+  });
+  var kids = $("dynamic-fields").children;
+  for (var i = 0; i < kids.length; i++){
+    if (kids[i]._f) kids[i].classList.toggle("logic-off", !kids[i]._f.some(function(f){ return vis[f.field_key]; }));
+  }
+  if (changed && prev && layoutOn() && SCREENS.length) refreshScreens();
+}
+
+/* Same screens, rebuilt after a rule changed what is visible. The visitor stays
+   on their screen, the progress count follows the visible questions, and a
+   pending auto-advance is left alone so it lands on the next visible screen. */
+function refreshScreens(){
+  var old = SCREENS[CUR], next = buildScreens(), at = -1;
+  if (old){
+    for (var i = 0; i < next.length && at < 0; i++){
+      if (old.els.some(function(e){ return next[i].els.indexOf(e) !== -1; })) at = i;
+    }
+  }
+  SCREENS = next;
+  if (at < 0) at = Math.min(CUR, SCREENS.length - 1);
+  showScreen(Math.max(0, at), null, false, true);
+}
+
+/* Values from the form link: /f/name/?branch=dubai. Only the names the admin
+   listed are read; the server checks them again. */
+function linkValues(){
+  var out = {};
+  try {
+    var q = new URLSearchParams(location.search);
+    (BRANDING.hiddenFields || []).forEach(function(n){
+      var v = q.get(n);
+      if (v === null) return;
+      v = v.replace(/[\u0000-\u001f]/g, "").trim().slice(0, 100);
+      if (v) out[n] = v;
+    });
+  } catch(e){}
+  return out;
+}
+
 function layoutMode(){
   var m = BRANDING.layoutMode;
   return (m === "steps" || m === "one_at_a_time") ? m : "single_page";
@@ -1418,7 +1559,8 @@ function buildScreens(){
   var mode = layoutMode(), out = [];
   var kids = $("dynamic-fields").children, units = [];
   for (var i = 0; i < kids.length; i++){
-    if (kids[i]._f) units.push({els: [kids[i]], fields: kids[i]._f, core: []});
+    // fields = only the questions a rule has not hidden; a block with none is skipped below
+    if (kids[i]._f) units.push({els: [kids[i]], all: kids[i]._f, fields: kids[i]._f.filter(isVisible), core: []});
   }
   var finalEl = $("final-block");
   if (ASK_CORE){
@@ -1429,17 +1571,20 @@ function buildScreens(){
     }
   }
   if (mode === "one_at_a_time"){
-    units.forEach(function(u){ out.push(u); });
+    units.forEach(function(u){ if (u.fields.length) out.push(u); });
     out.push({els: [finalEl], fields: [], core: [], final: true});
   } else {
     // Steps: a new step wherever the admin put a step break; with no breaks
     // at all, wherever the question group (category) changes.
-    var anyBreak = units.some(function(u){ return u.fields.some(function(f){ return f.page_break; }); });
-    var cur = null, lastCat = null;
-    units.forEach(function(u, n){
+    var anyBreak = units.some(function(u){ return u.all.some(function(f){ return f.page_break; }); });
+    var cur = null, lastCat = null, carry = false;
+    units.forEach(function(u){
+      var brk = u.all.some(function(f){ return f.page_break; });
+      // a hidden question's step break moves on to the next visible question
+      if (!u.fields.length){ if (brk) carry = true; return; }
       var f0 = u.fields[0];
-      var newStep = n === 0 || (anyBreak ? u.fields.some(function(f){ return f.page_break; })
-                                         : (f0.category || "") !== lastCat);
+      var newStep = cur === null || (anyBreak ? (brk || carry) : (f0.category || "") !== lastCat);
+      carry = false;
       lastCat = f0.category || "";
       if (newStep){ cur = {els: [], fields: [], core: []}; out.push(cur); }
       cur.els = cur.els.concat(u.els);
@@ -1477,8 +1622,8 @@ function setupLayout(){
   if (on) showScreen(CUR, null, false);
 }
 
-function showScreen(i, dir, focus){
-  clearTimeout(ADV);
+function showScreen(i, dir, focus, keepTimer){
+  if (!keepTimer) clearTimeout(ADV);
   CUR = i;
   var scr = SCREENS[i];
   if (!scr) return;
@@ -1527,7 +1672,9 @@ function validateScreen(scr){
 }
 
 function goNext(){
-  if (!layoutOn() || CUR >= SCREENS.length - 1) return;
+  if (!layoutOn()) return;
+  applyLogic();                                   /* a rule may have just changed what comes next */
+  if (CUR >= SCREENS.length - 1) return;
   clearTimeout(ADV);
   var r = validateScreen(SCREENS[CUR]);
   if (!r.ok){
@@ -1727,7 +1874,7 @@ function init(){
   $("backBtn").addEventListener("click", function(){ goBack(); });
   $("startBtn").addEventListener("click", function(){ startForm(); });
   document.addEventListener("keydown", layoutKeys);
-  ["input", "change", "click"].forEach(function(ev){ $("form").addEventListener(ev, saveSoon); });
+  ["input", "change", "click"].forEach(function(ev){ $("form").addEventListener(ev, function(){ applyLogic(); saveSoon(); }); });
 
   if (TURNSTILE_SITEKEY){
     var d = document.createElement("div");

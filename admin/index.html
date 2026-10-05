@@ -110,6 +110,12 @@ textarea{resize:vertical;min-height:70px}
 .field-row .info b{display:block;font-size:14px}
 .field-row .info .meta{color:var(--muted);font-size:12px;margin-top:2px}
 .field-row .actions{display:flex;gap:6px;flex-wrap:wrap}
+.rule-row{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.rule-row select,.rule-row input[type=text],.rule-row input[type=number]{width:auto;flex:1 1 140px;min-width:120px}
+.rule-row .rule-val{flex:2 1 200px;display:flex;flex-wrap:wrap;gap:4px 14px;align-items:center}
+.rule-row .rule-val label{display:inline-flex;align-items:center;gap:5px;margin:0;font-weight:400;font-size:13px}
+.rule-warn{color:var(--err);font-size:13px;margin:4px 0 0}
+.rule-warn:empty{display:none}
 .style-preview{border:1px dashed var(--line);border-radius:8px;padding:12px;margin-top:8px;background:var(--bg)}
 .style-preview .pv-q{font-size:13px;font-weight:600;margin-bottom:8px;color:var(--ink)}
 .pv-row{display:flex;flex-wrap:wrap;gap:5px}
@@ -540,6 +546,10 @@ table.subs tr:last-child td{border-bottom:none}
               </div>
             </div>
 
+            <label for="br-hidden">Link fields (hidden)</label>
+            <input type="text" id="br-hidden" maxlength="500" placeholder="branch, source, staff" autocomplete="off">
+            <p class="hint">Names that may be filled in from the form's link, for example <code>?branch=dubai&amp;source=qr</code>. Visitors never see them. Only these names are saved, as plain text up to 100 characters, and they appear as extra columns in Submissions and in the CSV.</p>
+
             <label for="br-theme-mode" style="margin-top:14px">Light or dark</label>
             <select id="br-theme-mode">
               <option value="both">Both — follows the visitor's device, with a switch button</option>
@@ -629,7 +639,7 @@ table.subs tr:last-child td{border-bottom:none}
         </div>
         <div class="subs-wrap">
           <table class="subs">
-            <thead><tr><th>Reference</th><th>Received</th><th>Form</th><th>Name</th><th>Email</th><th>Lang</th><th>Status</th></tr></thead>
+            <thead><tr><th>Reference</th><th>Received</th><th>Form</th><th>Name</th><th>Email</th><th>Lang</th><th>Status</th><th>From link</th></tr></thead>
             <tbody id="subs-body"></tbody>
           </table>
         </div>
@@ -1098,6 +1108,20 @@ table.subs tr:last-child td{border-bottom:none}
         <option value="checkbox">Checkbox</option>
       </select>
       <div class="check-row"><input type="checkbox" id="ed-required"><label for="ed-required">Required</label></div>
+
+      <div id="ed-rule-wrap">
+        <label for="ed-rule-mode">Show this question</label>
+        <select id="ed-rule-mode">
+          <option value="always">Always</option>
+          <option value="if">Only if earlier answers match</option>
+        </select>
+        <div id="ed-rule-box" class="hidden">
+          <div id="ed-rule-rows"></div>
+          <button type="button" class="btn-outline btn-sm" id="ed-rule-add">+ Add another condition</button>
+          <p class="hint">Every condition has to be true (AND). Only questions above this one can be used. While the rule is false the question is hidden, it is not required, and nothing is saved for it.</p>
+        </div>
+        <p class="rule-warn" id="ed-rule-warn" role="status"></p>
+      </div>
 
       <div id="ed-style-wrap" class="hidden">
         <label for="ed-style">Shown as</label>
@@ -1802,7 +1826,9 @@ function renderFields(){
     row.className = "field-row";
     row.innerHTML =
       '<div class="info"><b>' + escapeHtml(f.label_en) + '</b>' +
-      '<div class="meta">' + f.field_type + (f.display_style ? ' (' + f.display_style + ')' : '') + (f.required ? ' · required' : '') + ' · key: ' + escapeHtml(f.field_key) + '</div></div>' +
+      '<div class="meta">' + f.field_type + (f.display_style ? ' (' + f.display_style + ')' : '') + (f.required ? ' · required' : '') + ' · key: ' + escapeHtml(f.field_key) +
+      (f.show_if ? ' · shown only if earlier answers match' : '') + '</div>' +
+      (f.show_if && f.active && ruleWarnings(f.show_if, f).length ? '<div class="rule-warn">Warning: ' + escapeHtml(ruleWarnings(f.show_if, f)[0]) + '</div>' : '') + '</div>' +
       '<span class="badge ' + (f.active ? "on" : "off") + '">' + (f.active ? "active" : "hidden") + '</span>';
     var actions = document.createElement("div");
     actions.className = "actions";
@@ -2410,6 +2436,156 @@ function setOptionRowsLocked(locked){
   document.querySelectorAll("#ed-options .opt-row input").forEach(function(i){ i.disabled = locked; });
   document.querySelectorAll("#ed-options .opt-row button").forEach(function(b){ b.classList.toggle("hidden", locked); });
 }
+/* ---- conditional questions: the rule builder (see logic.py for the rules) ---- */
+var RULE_OPS = [["eq", "is"], ["neq", "is not"], ["in", "is one of"], ["gte", "is at least"], ["lte", "is at most"]];
+function sortedFields(){ return STATE.fields.slice().sort(function(a, b){ return a.sort_order - b.sort_order; }); }
+function ruleSources(selfId){
+  // the visible questions above this one (a new question goes last, so all of them)
+  var out = [], list = sortedFields();
+  for (var i = 0; i < list.length; i++){
+    if (selfId && list[i].id === selfId) break;
+    if (list[i].active) out.push(list[i]);
+  }
+  return out;
+}
+function ruleWarnings(rule, self){
+  var out = [];
+  if (!rule || !rule.all) return out;
+  var byKey = {};
+  STATE.fields.forEach(function(f){ byKey[f.field_key] = f; });
+  var myOrder = self && self.id ? self.sort_order : Infinity;
+  rule.all.forEach(function(c){
+    var src = byKey[c.field];
+    if (!src) out.push("A condition points at a question that was deleted, so this question stays hidden.");
+    else if (!src.active) out.push("\"" + src.label_en + "\" is hidden from the form, so this question stays hidden.");
+    else if (src === self || src.sort_order >= myOrder) out.push("\"" + src.label_en + "\" comes after this question, so this question stays hidden. Move it above, or pick an earlier question.");
+  });
+  return out.filter(function(w, i){ return out.indexOf(w) === i; });
+}
+function ruleAnswerList(src){
+  // the answers a person can pick for a source question, or null for free text
+  if (!src) return null;
+  if (src.field_type === "select" && src.options && src.options.length)
+    return src.options.map(function(o){ return {value: o.value, label: o.label_en || o.label_ar || o.value}; });
+  if (src.field_type === "rating")
+    return [1, 2, 3, 4, 5].map(function(n){ return {value: String(n), label: n + (n === 1 ? " star" : " stars")}; });
+  if (src.field_type === "checkbox") return [{value: "true", label: "ticked"}, {value: "false", label: "not ticked"}];
+  return null;
+}
+function opsFor(src){
+  if (!src) return RULE_OPS;
+  if (src.field_type === "checkbox") return RULE_OPS.slice(0, 1);
+  if (src.field_type === "select" || src.field_type === "rating") return RULE_OPS;
+  return RULE_OPS.slice(0, 3);
+}
+function addRuleRow(cond){
+  var row = document.createElement("div");
+  row.className = "rule-row";
+  var sources = ruleSources(STATE.editingId);
+  var selSrc = document.createElement("select"), selOp = document.createElement("select"), val = document.createElement("div");
+  val.className = "rule-val";
+  selSrc.setAttribute("aria-label", "Earlier question");
+  selOp.setAttribute("aria-label", "Condition");
+  selSrc.appendChild(new Option("Choose a question...", ""));
+  sources.forEach(function(f){ selSrc.appendChild(new Option(f.label_en, f.field_key)); });
+  if (cond && cond.field && !sources.some(function(f){ return f.field_key === cond.field; })){
+    var gone = STATE.fields.find(function(f){ return f.field_key === cond.field; });
+    selSrc.appendChild(new Option(gone ? gone.label_en + " (not available above)" : cond.field + " (deleted)", cond.field));
+  }
+  selSrc.value = cond && cond.field ? cond.field : "";
+  var del = mkBtn("✕", function(){ row.remove(); ruleChanged(); });
+  del.className = "btn-outline btn-sm";
+  del.setAttribute("aria-label", "Remove this condition");
+  row.appendChild(selSrc); row.appendChild(selOp); row.appendChild(val); row.appendChild(del);
+
+  function srcField(){ return STATE.fields.find(function(f){ return f.field_key === selSrc.value; }); }
+  function buildOps(keep){
+    var src = srcField(), ops = opsFor(src);
+    selOp.innerHTML = "";
+    ops.forEach(function(o){ selOp.appendChild(new Option(o[1], o[0])); });
+    selOp.value = ops.some(function(o){ return o[0] === keep; }) ? keep : ops[0][0];
+  }
+  function buildVal(keep){
+    var src = srcField(), list = ruleAnswerList(src), op = selOp.value;
+    val.innerHTML = "";
+    row._get = function(){ return null; };
+    if (!selSrc.value) return;
+    if (list && op === "in"){
+      var have = Array.isArray(keep) ? keep : (keep ? [keep] : []);
+      list.forEach(function(a){
+        var lab = document.createElement("label"), cb = document.createElement("input");
+        cb.type = "checkbox"; cb.value = a.value; cb.checked = have.indexOf(a.value) !== -1;
+        cb.addEventListener("change", ruleChanged);
+        lab.appendChild(cb); lab.appendChild(document.createTextNode(" " + a.label));
+        val.appendChild(lab);
+      });
+      row._get = function(){
+        return Array.prototype.slice.call(val.querySelectorAll("input:checked")).map(function(c){ return c.value; });
+      };
+    } else if (list){
+      var s = document.createElement("select");
+      s.setAttribute("aria-label", "Answer");
+      s.appendChild(new Option("Choose...", ""));
+      list.forEach(function(a){ s.appendChild(new Option(a.label, a.value)); });
+      s.value = Array.isArray(keep) ? (keep[0] || "") : (keep || "");
+      s.addEventListener("change", ruleChanged);
+      val.appendChild(s);
+      row._get = function(){ return s.value; };
+    } else {
+      var t = document.createElement("input");
+      t.type = (op === "gte" || op === "lte") ? "number" : "text";
+      t.setAttribute("aria-label", "Value");
+      t.placeholder = op === "in" ? "value one, value two" : "value";
+      t.value = Array.isArray(keep) ? keep.join(", ") : (keep || "");
+      t.addEventListener("input", ruleChanged);
+      val.appendChild(t);
+      row._get = function(){
+        var v = t.value.trim();
+        return op === "in" ? v.split(",").map(function(x){ return x.trim(); }).filter(Boolean) : v;
+      };
+    }
+  }
+  selSrc.addEventListener("change", function(){ buildOps(""); buildVal(""); ruleChanged(); });
+  selOp.addEventListener("change", function(){ var prev = row._get ? row._get() : ""; buildVal(prev); ruleChanged(); });
+  buildOps(cond ? cond.op : "");
+  buildVal(cond ? cond.value : "");
+  row._cond = function(){
+    return {field: selSrc.value, op: selOp.value, value: row._get ? row._get() : null};
+  };
+  $("ed-rule-rows").appendChild(row);
+}
+function readRule(){
+  // returns {rule, error}; rule is null when the question is always shown
+  if ($("ed-rule-mode").value !== "if") return {rule: null};
+  var rows = $("ed-rule-rows").querySelectorAll(".rule-row"), all = [];
+  for (var i = 0; i < rows.length; i++){
+    var c = rows[i]._cond();
+    var empty = !c.field || c.value === null || c.value === "" || (Array.isArray(c.value) && !c.value.length);
+    if (empty) return {error: "Finish or remove the empty condition in 'Show this question'."};
+    all.push(c);
+  }
+  return {rule: all.length ? {all: all} : null};
+}
+function ruleChanged(){
+  var r = readRule(), self = STATE.editingId ? STATE.fields.find(function(f){ return f.id === STATE.editingId; }) : null;
+  $("ed-rule-warn").textContent = r.rule ? ruleWarnings(r.rule, self).join(" ") : "";
+}
+function setRuleEditor(rule){
+  $("ed-rule-rows").innerHTML = "";
+  var on = !!(rule && rule.all && rule.all.length);
+  $("ed-rule-mode").value = on ? "if" : "always";
+  $("ed-rule-box").classList.toggle("hidden", !on);
+  if (on) rule.all.forEach(addRuleRow);
+  ruleChanged();
+}
+$("ed-rule-mode").addEventListener("change", function(){
+  var on = this.value === "if";
+  $("ed-rule-box").classList.toggle("hidden", !on);
+  if (on && !$("ed-rule-rows").children.length) addRuleRow(null);
+  ruleChanged();
+});
+$("ed-rule-add").addEventListener("click", function(){ addRuleRow(null); ruleChanged(); });
+
 function openEditor(field){
   STATE.editingId = field ? field.id : null;
   $("editor-title").textContent = field ? "Edit field" : "Add a field";
@@ -2428,6 +2604,7 @@ function openEditor(field){
   }
   $("ed-options-wrap").classList.toggle("hidden", $("ed-type").value !== "select");
   fillStyleChoices(field && field.display_style ? field.display_style : "");
+  setRuleEditor(field ? field.show_if : null);
   setFieldEditorLocked(!field);
   clearFlash("editor-msg");
   show("editor-view");
@@ -2477,7 +2654,10 @@ $("ed-save").addEventListener("click", function(){
     return;
   }
   var type = $("ed-type").value;
+  var ruleRes = readRule();
+  if (ruleRes.error){ flash("editor-msg", ruleRes.error); return; }
   var payload = {
+    show_if: ruleRes.rule,
     form_id: STATE.currentFormId,
     field_key: $("ed-key").value.trim(),
     label_en: $("ed-en").value.trim(),
@@ -2545,11 +2725,12 @@ function renderSubmissions(body){
       "<td>" + escapeHtml(r.first_name + " " + r.last_name) + "</td>" +
       "<td>" + escapeHtml(r.email) + "</td>" +
       "<td>" + escapeHtml(r.language || "") + "</td>" +
-      "<td>" + escapeHtml(r.status) + "</td>";
+      "<td>" + escapeHtml(r.status) + "</td>" +
+      "<td>" + escapeHtml(Object.keys(r.hidden || {}).map(function(k){ return k + "=" + r.hidden[k]; }).join(", ")) + "</td>";
     tbody.appendChild(tr);
   });
   if (!(body.rows || []).length){
-    tbody.innerHTML = '<tr><td colspan="7" class="hint" style="padding:14px 10px">No submissions fit these filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" class="hint" style="padding:14px 10px">No submissions fit these filters.</td></tr>';
   }
   var pages = Math.max(1, Math.ceil(body.total / body.pageSize));
   $("subs-page-info").textContent = "Page " + body.page + " of " + pages + " · " + body.total + " total";
@@ -2701,6 +2882,7 @@ function loadBranding(){
     $("br-thanks-btn-en").value = b.thanks_button_en || "";
     $("br-thanks-btn-ar").value = b.thanks_button_ar || "";
     $("br-thanks-url").value = b.thanks_url || "";
+    $("br-hidden").value = b.hidden_fields || "";
     updatePreview();
     $("br-primary").value = b.primary_color;
     $("br-primary-picker").value = b.primary_color;
@@ -2765,6 +2947,7 @@ $("branding-save-btn").addEventListener("click", function(){
     thanks_button_en: $("br-thanks-btn-en").value.trim(),
     thanks_button_ar: $("br-thanks-btn-ar").value.trim(),
     thanks_url: $("br-thanks-url").value.trim(),
+    hidden_fields: $("br-hidden").value.trim(),
     primary_color: $("br-primary").value.trim(),
     ink_color: $("br-ink").value.trim(),
     theme_mode: $("br-theme-mode").value

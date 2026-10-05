@@ -202,6 +202,12 @@ MIGRATE_SQL = [
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_button_ar VARCHAR(80) NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS thanks_url VARCHAR(500) NULL",
     "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS page_break_before TINYINT(1) NOT NULL DEFAULT 0",
+    # Conditional questions and link fields (1.11.0). show_if = a JSON rule
+    # (see logic.py), NULL = always shown. hidden_fields = names allowed in the
+    # form link (?branch=dubai); hidden_json = the values a response arrived with.
+    "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS show_if TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS hidden_fields VARCHAR(500) NULL",
+    "ALTER TABLE feedback ADD COLUMN IF NOT EXISTS hidden_json TEXT NULL",
     "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS expiry_date DATE NULL",
     # 'date' questions (added in 1.3.0) — widening the list keeps every
@@ -978,9 +984,9 @@ def clone_form(source_id, name, slug, port):
                                   font, text_size, title_align, layout_mode, welcome_enabled,
                                   welcome_title_en, welcome_title_ar, welcome_text_en, welcome_text_ar,
                                   thanks_title_en, thanks_title_ar, thanks_text_en, thanks_text_ar,
-                                  thanks_button_en, thanks_button_ar, thanks_url)
+                                  thanks_button_en, thanks_button_ar, thanks_url, hidden_fields)
                VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (name, slug, port, src["org_name"], src["primary_color"], src["ink_color"],
              src["lang_en"], src["lang_ar"], src["subtitle_en"], src["subtitle_ar"],
              src["enabled_extra_langs_json"], src["expiry_date"], src.get("ask_core_fields", 1),
@@ -992,14 +998,15 @@ def clone_form(source_id, name, slug, port):
              src.get("welcome_text_en"), src.get("welcome_text_ar"),
              src.get("thanks_title_en"), src.get("thanks_title_ar"),
              src.get("thanks_text_en"), src.get("thanks_text_ar"),
-             src.get("thanks_button_en"), src.get("thanks_button_ar"), src.get("thanks_url")))
+             src.get("thanks_button_en"), src.get("thanks_button_ar"), src.get("thanks_url"),
+             src.get("hidden_fields")))
         new_id = cur.lastrowid
         cur.execute(
             """INSERT INTO form_fields
                    (form_id, field_key, label_en, label_ar, labels_extra_json, field_type,
-                    options_json, required, sort_order, active, display_style, page_break_before)
+                    options_json, required, sort_order, active, display_style, page_break_before, show_if)
                SELECT %s, field_key, label_en, label_ar, labels_extra_json, field_type,
-                      options_json, required, sort_order, active, display_style, page_break_before
+                      options_json, required, sort_order, active, display_style, page_break_before, show_if
                  FROM form_fields WHERE form_id=%s""",
             (new_id, source_id))
         copied_fields = cur.rowcount
@@ -1080,7 +1087,7 @@ def delete_form_permanently(form_id):
 BRANDING_EXTRA_COLUMNS = ("layout_mode", "welcome_enabled", "welcome_title_en", "welcome_title_ar",
                           "welcome_text_en", "welcome_text_ar", "thanks_title_en", "thanks_title_ar",
                           "thanks_text_en", "thanks_text_ar", "thanks_button_en", "thanks_button_ar",
-                          "thanks_url")
+                          "thanks_url", "hidden_fields")
 
 
 def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
@@ -1140,6 +1147,17 @@ def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
 
 # ------------------------------------------------------------- form fields
 
+def _parse_show_if(raw):
+    """The stored rule as a dict, or None (always shown / unreadable)."""
+    if not raw:
+        return None
+    try:
+        v = json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+    return v if isinstance(v, dict) and isinstance(v.get("all"), list) and v["all"] else None
+
+
 def list_fields(form_id, active_only=False):
     conn = _conn()
     try:
@@ -1158,6 +1176,7 @@ def list_fields(form_id, active_only=False):
         for r in rows:
             r["options"] = json.loads(r["options_json"]) if r["options_json"] else None
             r["labels_extra"] = json.loads(r["labels_extra_json"]) if r["labels_extra_json"] else {}
+            r["show_if"] = _parse_show_if(r.get("show_if"))
             r["required"] = bool(r["required"])
             r["active"] = bool(r["active"])
             del r["labels_extra_json"]
@@ -1177,6 +1196,7 @@ def list_all_fields():
         for r in rows:
             r["options"] = json.loads(r["options_json"]) if r["options_json"] else None
             r["labels_extra"] = json.loads(r["labels_extra_json"]) if r["labels_extra_json"] else {}
+            r["show_if"] = _parse_show_if(r.get("show_if"))
             r["required"] = bool(r["required"])
             r["active"] = bool(r["active"])
             del r["labels_extra_json"]
@@ -1193,12 +1213,13 @@ def create_field(form_id, data):
         (next_order,) = cur.fetchone()
         cur.execute(
             """INSERT INTO form_fields (form_id, field_key, label_en, label_ar, labels_extra_json, field_type,
-                   options_json, required, sort_order, active, display_style)
-               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s)""",
+                   options_json, required, sort_order, active, display_style, show_if)
+               VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,1,%s,%s)""",
             (form_id, data["field_key"], data["label_en"], data["label_ar"],
              json.dumps(data["labels_extra"]) if data.get("labels_extra") else None, data["field_type"],
              json.dumps(data["options"]) if data.get("options") else None,
-             1 if data.get("required") else 0, next_order, data.get("display_style")))
+             1 if data.get("required") else 0, next_order, data.get("display_style"),
+             json.dumps(data["show_if"]) if data.get("show_if") else None))
         conn.commit()
         new_id = cur.lastrowid
         cur.close()
@@ -1222,6 +1243,9 @@ def update_field(field_id, data):
         if "display_style" in data:
             sql += ", display_style=%s"
             params.append(data["display_style"])
+        if "show_if" in data:
+            sql += ", show_if=%s"
+            params.append(json.dumps(data["show_if"]) if data["show_if"] else None)
         cur.execute(sql + " WHERE id=%s", params + [field_id])
         conn.commit()
         cur.close()
@@ -1239,6 +1263,7 @@ def get_field(field_id):
         if row:
             row["options"] = json.loads(row["options_json"]) if row["options_json"] else None
             row["labels_extra"] = json.loads(row["labels_extra_json"]) if row["labels_extra_json"] else {}
+            row["show_if"] = _parse_show_if(row.get("show_if"))
             row["required"] = bool(row["required"])
             row["active"] = bool(row["active"])
             del row["labels_extra_json"]
@@ -1300,11 +1325,12 @@ def save_feedback(form_id, rec):
             try:
                 cur.execute(
                     """INSERT INTO feedback (form_id, reference, created_at, first_name, last_name,
-                           email, consent, language, extra_fields, ip, user_agent)
-                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                           email, consent, language, extra_fields, ip, user_agent, hidden_json)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (form_id, ref, datetime.now(timezone.utc), rec["firstName"], rec["lastName"],
                      rec["email"], 1, rec["language"], json.dumps(rec["extra"]),
-                     rec["ip"], rec["userAgent"]))
+                     rec["ip"], rec["userAgent"],
+                     json.dumps(rec["hidden"], ensure_ascii=False) if rec.get("hidden") else None))
                 conn.commit()
                 cur.close()
                 return ref
@@ -1416,6 +1442,16 @@ def _submission_filter_sql(filters, prefix=""):
     return where, params
 
 
+def _parse_hidden(raw):
+    if not raw:
+        return {}
+    try:
+        v = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
 def list_submissions(filters=None, page=1, page_size=25):
     filters = filters or {}
     where, params = _submission_filter_sql(filters, prefix="f.")
@@ -1429,11 +1465,13 @@ def list_submissions(filters=None, page=1, page_size=25):
         total = cur.fetchone()["n"]
         cur.execute(
             "SELECT f.id, f.form_id, ff.name AS form_name, f.reference, f.created_at, "
-            "f.first_name, f.last_name, f.email, f.language, f.status "
+            "f.first_name, f.last_name, f.email, f.language, f.status, f.hidden_json "
             "FROM feedback f LEFT JOIN forms ff ON ff.id = f.form_id " + where +
             " ORDER BY f.id DESC LIMIT %s OFFSET %s", params + [page_size, offset])
         rows = cur.fetchall()
         cur.close()
+        for r in rows:
+            r["hidden"] = _parse_hidden(r.pop("hidden_json", None))
         return rows, total
     finally:
         conn.close()
@@ -1458,19 +1496,24 @@ def export_rows(filters=None):
         cur = conn.cursor(dictionary=True)
         cur.execute(
             "SELECT form_id, reference, created_at, first_name, last_name, email, "
-            "extra_fields, language, status FROM feedback " + where + " ORDER BY id DESC", params)
+            "extra_fields, language, status, hidden_json FROM feedback " + where + " ORDER BY id DESC", params)
         rows = cur.fetchall()
         cur.close()
     finally:
         conn.close()
 
     seen_extra_keys = []
+    seen_hidden = []
     parsed = []
     for r in rows:
         extra = json.loads(r["extra_fields"]) if r["extra_fields"] else {}
         for k in extra:
             if k not in seen_extra_keys:
                 seen_extra_keys.append(k)
+        r["hidden"] = _parse_hidden(r.get("hidden_json"))
+        for k in r["hidden"]:
+            if k not in seen_hidden:
+                seen_hidden.append(k)
         parsed.append((r, extra))
 
     out = []
@@ -1483,6 +1526,9 @@ def export_rows(filters=None):
         for k in seen_extra_keys:
             label = label_of.get((r["form_id"], k), k)
             row[label] = extra.get(k, "")
+        # values that came from the form link, one column each
+        for k in seen_hidden:
+            row["%s (link)" % k] = r["hidden"].get(k, "")
         row["Language"] = r["language"]
         row["Status"] = r["status"]
         out.append(row)

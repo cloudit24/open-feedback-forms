@@ -3,6 +3,30 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.11.0
+
+- New: show a question only when an earlier answer matches. In a question's
+  editor, "Show this question" > "Only if earlier answers match". Pick an
+  earlier question, then "is", "is not", "is one of", "is at least" or "is at
+  most", and the answer. Add several conditions and all of them must be true.
+  Example: if the 0-10 score is at most 6, ask "What is the main reason for
+  your score?". Questions with no rule behave exactly as before.
+- A hidden question is not shown, not required and not sent. The server checks
+  the rules again on every submission, so an answer posted to a hidden question
+  is thrown away. A visitor's saved (reloaded) answers never bring back a hidden
+  answer.
+- Works in all three layouts: empty steps and screens are skipped, the "3 of 12"
+  progress counts only questions that are showing, a grid row that is hidden
+  disappears from the grid, and auto-advance goes to the next screen that shows.
+- The editor warns when a rule points at a question that is below it, hidden or
+  deleted (that question would stay hidden). The Questions list shows the same
+  warning.
+- New: link fields. Under Edit > Branding > Link fields, list names such as
+  branch, source, staff. A link like /f/main/?branch=dubai&source=qr then saves
+  those values with the response (plain text, 100 characters at most; any other
+  name is ignored). They show in the Submissions list ("From link") and as extra
+  columns in the CSV, for example "branch (link)".
+
 ## 1.10.0
 
 - New: choose how each form is laid out, under Edit > Branding > Layout.

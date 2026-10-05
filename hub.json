@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.10.0 built locally and tested: layout choice (one page / steps / one question at a time), welcome and thank-you screens; not pushed yet",
-  "next": "Review, then push and tag 1.9.0 and 1.10.0; then Prompt 5 (conditional questions + hidden fields)",
+  "status": "v1.11.0 built locally and tested: conditional questions (show-if rules) and link fields (?branch=dubai); not pushed yet",
+  "next": "Review, then push and tag 1.9.0, 1.10.0 and 1.11.0; then Prompt 6 (results dashboard)",
   "url": "http://localhost:8800/admin",
   "updated_by": "Claude, 2026-10-05"
 }
