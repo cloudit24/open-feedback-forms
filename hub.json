@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.13.0 built locally and tested: webhooks and close rules (date or response limit); not pushed yet",
-  "next": "Review, then push and tag 1.9.0 to 1.13.0",
+  "status": "v1.13.0 released: neutral templates, title/fonts, tap ratings, layouts, show-if rules, Summary charts, webhooks, full-response view, in-app editors",
+  "next": "Check the new form look with staff; client server updates with the install link (admin on 8800)",
   "url": "http://localhost:8800/admin",
   "updated_by": "Claude, 2026-10-06"
 }
