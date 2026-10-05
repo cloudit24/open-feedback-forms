@@ -517,7 +517,7 @@ class DBError(Exception):
 def _make_pool(db_cfg):
     return pooling.MySQLConnectionPool(
         pool_name="offeedback_pool_%d" % id(db_cfg),
-        pool_size=5,
+        pool_size=20,  # the admin page fires ~11 requests at once; 5 ran out
         host=db_cfg["host"],
         port=int(db_cfg.get("port") or 3306),
         user=db_cfg["user"],
