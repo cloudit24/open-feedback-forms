@@ -318,9 +318,13 @@ ensure_db_reachable() {
 # from the container, and write it into .env where it can't drift.
 ADMIN_PORT=8800
 published_port_of() {   # container port -> host port, or nothing
-    cid=$(docker ps -a -q \
-        --filter "label=com.docker.compose.project=$PROJECT" \
-        --filter "label=com.docker.compose.service=app" 2>/dev/null | head -n 1)
+    # Only the container compose itself manages. An image built by compose
+    # carries the project/service labels too, so anything started from it by
+    # hand (`docker run open-feedback-forms`) would match as well — but only
+    # compose's own service container has oneoff=False. Prefer a running one.
+    filters="--filter label=com.docker.compose.project=$PROJECT --filter label=com.docker.compose.service=app --filter label=com.docker.compose.oneoff=False"
+    cid=$(docker ps -q $filters 2>/dev/null | head -n 1)
+    [ -n "$cid" ] || cid=$(docker ps -a -q $filters 2>/dev/null | head -n 1)
     [ -n "$cid" ] || return 1
     # PortBindings is what Docker was told to publish and it survives the
     # container being stopped; NetworkSettings.Ports is empty unless it's up.

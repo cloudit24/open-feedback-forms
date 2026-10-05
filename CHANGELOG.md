@@ -3,6 +3,13 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.6.3
+
+- Fixed: running the install link a second time could stop with "Port 8800 is
+  already in use" — the port in use was the app's own. The installer mistook a
+  stray container started from the app's image for the app itself. It now
+  looks only at the container Docker Compose manages.
+
 ## 1.6.2
 
 - Removed the fixed "Fan Voice" / "صوت الجمهور" line under the name at the top
