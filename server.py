@@ -1297,6 +1297,9 @@ class AdminHandler(PublicRoutes, BaseHandler):
         m = re.match(r"^/admin/forms/(\d+)/summary$", path)
         if m:
             return self.get_form_summary(int(m.group(1)))
+        m = re.match(r"^/admin/submissions/(\d+)$", path)
+        if m:
+            return self.get_admin_submission(int(m.group(1)))
         m = re.match(r"^/admin/forms/(\d+)/webhooks$", path)
         if m:
             return self.get_form_webhooks(int(m.group(1)))
@@ -2921,6 +2924,24 @@ class AdminHandler(PublicRoutes, BaseHandler):
             return self.send_json(500, {"ok": False})
         return self.send_json(200, {"ok": True, "rows": rows, "total": total,
                                     "page": page, "pageSize": page_size})
+
+    def get_admin_submission(self, sub_id):
+        """One response, every answer - for the Submissions row click."""
+        if not self.require_admin():
+            return
+        identity = self.admin_identity()
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        try:
+            row = db.get_submission(sub_id)
+        except Exception as e:
+            log("submission %s query failed: %s" % (sub_id, e))
+            return self.send_json(500, {"ok": False})
+        if not row:
+            return self.send_json(404, {"ok": False, "error": "not found"})
+        if not self.has_permission(identity, "view_submissions", row["form_id"]):
+            return self.send_json(403, {"ok": False, "error": "you don't have access to that form"})
+        return self.send_json(200, {"ok": True, "submission": row})
 
     def get_admin_dashboard(self):
         if not self.require_admin():

@@ -72,6 +72,15 @@ button{font-family:inherit;cursor:pointer}
 .btn-outline:hover{border-color:var(--yellow);color:var(--yellow)}
 .btn-danger{color:var(--err);border-color:var(--err)}
 .btn-danger:hover{border-color:var(--err);color:var(--err);background:rgba(198,40,40,.08)}
+.sub-detail{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:50;display:flex;justify-content:flex-end}
+.sub-detail.hidden{display:none}
+.sub-detail-panel{background:var(--card,#fff);color:var(--ink);width:min(560px,100%);height:100%;overflow:auto;padding:22px;box-shadow:-8px 0 30px rgba(0,0,0,.2)}
+.sd-row{padding:10px 0;border-bottom:1px solid var(--line)}
+.sd-q{font-size:12.5px;color:var(--muted);font-weight:600}
+.sd-a{font-size:14.5px;margin-top:3px;white-space:pre-wrap;word-break:break-word}
+.sd-a.empty{color:var(--muted);font-style:italic}
+table.subs tbody tr{cursor:pointer}
+table.subs tbody tr:hover td{background:rgba(0,0,0,.03)}
 .card-top{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .card-top h2{margin:0}
 .card-top-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -714,10 +723,11 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
         </div>
         <div class="subs-wrap">
           <table class="subs">
-            <thead><tr><th>Reference</th><th>Received</th><th>Form</th><th>Name</th><th>Email</th><th>Lang</th><th>Status</th><th>From link</th></tr></thead>
+            <thead><tr><th>Reference</th><th>Received</th><th>Form</th><th>Name</th><th>Email</th><th>Answers</th><th>Lang</th><th>Status</th><th>From link</th></tr></thead>
             <tbody id="subs-body"></tbody>
           </table>
         </div>
+        <p class="hint" style="margin-top:8px">Click a row to see every answer in that response.</p>
         <div class="pager">
           <button class="btn-outline btn-sm" id="subs-prev">&larr; Prev</button>
           <span id="subs-page-info"></span>
@@ -1098,6 +1108,21 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
         <button class="btn-outline" id="mt-reset">Use the app's colors</button>
         <button class="btn" id="mt-save">Save</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ============ one response, every answer (Submissions row click) ============ -->
+  <div id="sub-detail" class="sub-detail hidden" role="dialog" aria-modal="true" aria-labelledby="sd-title">
+    <div class="sub-detail-panel">
+      <div class="card-top">
+        <h2 id="sd-title">Response</h2>
+        <div class="card-top-actions">
+          <select id="sd-lang" style="width:auto"><option value="en">English</option><option value="ar">العربية</option></select>
+          <button class="btn-outline btn-sm" id="sd-close">Close</button>
+        </div>
+      </div>
+      <div id="sd-meta" class="hint"></div>
+      <div id="sd-body"></div>
     </div>
   </div>
 
@@ -3077,21 +3102,98 @@ function renderSubmissions(body){
       "<td>" + escapeHtml(r.reference) + "</td>" +
       "<td>" + escapeHtml(formatDT(r.created_at)) + "</td>" +
       "<td>" + escapeHtml(r.form_name || "—") + "</td>" +
-      "<td>" + escapeHtml(r.first_name + " " + r.last_name) + "</td>" +
-      "<td>" + escapeHtml(r.email) + "</td>" +
+      "<td>" + (escapeHtml((r.first_name + " " + r.last_name).trim()) || '<span class="hint">—</span>') + "</td>" +
+      "<td>" + (escapeHtml(r.email) || '<span class="hint">—</span>') + "</td>" +
+      "<td>" + escapeHtml(String(r.answered || 0)) + "</td>" +
       "<td>" + escapeHtml(r.language || "") + "</td>" +
       "<td>" + escapeHtml(r.status) + "</td>" +
       "<td>" + escapeHtml(Object.keys(r.hidden || {}).map(function(k){ return k + "=" + r.hidden[k]; }).join(", ")) + "</td>";
+    tr.tabIndex = 0;
+    tr.addEventListener("click", function(){ openSubmission(r.id); });
+    tr.addEventListener("keydown", function(e){ if (e.key === "Enter") openSubmission(r.id); });
     tbody.appendChild(tr);
   });
   if (!(body.rows || []).length){
-    tbody.innerHTML = '<tr><td colspan="8" class="hint" style="padding:14px 10px">No submissions fit these filters.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="hint" style="padding:14px 10px">No submissions fit these filters.</td></tr>';
   }
   var pages = Math.max(1, Math.ceil(body.total / body.pageSize));
   $("subs-page-info").textContent = "Page " + body.page + " of " + pages + " · " + body.total + " total";
   $("subs-prev").disabled = body.page <= 1;
   $("subs-next").disabled = body.page >= pages;
 }
+// ---- one response, every answer
+var SD = { sub: null };
+function openSubmission(id){
+  api("GET", "/admin/submissions/" + id).then(function(res){
+    if (!res.body || !res.body.ok){ alert((res.body && res.body.error) || "Could not open this response."); return; }
+    SD.sub = res.body.submission;
+    $("sd-lang").value = SD.sub.language === "ar" ? "ar" : "en";
+    renderSubmissionDetail();
+    $("sub-detail").classList.remove("hidden");
+    $("sd-close").focus();
+  });
+}
+function sdAnswerText(field, v, lang){
+  if (v === undefined || v === null || v === "" || (Array.isArray(v) && !v.length)) return null;
+  if (typeof v === "boolean") return v ? (lang === "ar" ? "نعم" : "Yes") : (lang === "ar" ? "لا" : "No");
+  var opts = field && field.options;
+  function optLabel(x){
+    if (!opts) return String(x);
+    var o = opts.find(function(o){ return String(o.value) === String(x); });
+    return o ? (lang === "ar" ? (o.label_ar || o.label_en) : o.label_en) || String(x) : String(x);
+  }
+  if (Array.isArray(v)) return v.map(optLabel).join(", ");
+  return optLabel(v);
+}
+function renderSubmissionDetail(){
+  var s = SD.sub, lang = $("sd-lang").value;
+  var panel = document.querySelector("#sub-detail .sub-detail-panel");
+  panel.dir = lang === "ar" ? "rtl" : "ltr";
+  $("sd-title").textContent = (s.form_name || "Response") + " · " + s.reference;
+  var name = (s.first_name + " " + s.last_name).trim();
+  $("sd-meta").textContent = [formatDT(s.created_at), name, s.email, (s.language || "").toUpperCase(), s.status]
+    .filter(Boolean).join(" · ");
+  var html = "", shown = {};
+  var row = function(q, a){
+    html += '<div class="sd-row"><div class="sd-q">' + escapeHtml(q) + '</div>' +
+      (a === null ? '<div class="sd-a empty">' + (lang === "ar" ? "لا إجابة" : "No answer") + '</div>'
+                  : '<div class="sd-a">' + escapeHtml(a) + '</div>') + '</div>';
+  };
+  // built-in name/email (only when the form asked them at the top)
+  var builtIns = [["first_name", "First name", "الاسم الأول"], ["last_name", "Last name", "الاسم الأخير"],
+                  ["email", "Email", "البريد الإلكتروني"]];
+  var fieldKeys = s.fields.map(function(f){ return f.key; });
+  builtIns.forEach(function(b){
+    var asQuestion = b[0] === "email" ? (fieldKeys.indexOf("email_address") >= 0 || fieldKeys.indexOf("email") >= 0)
+                                      : fieldKeys.indexOf(b[0]) >= 0;
+    if (!asQuestion && s[b[0]]) row(lang === "ar" ? b[2] : b[1], s[b[0]]);
+  });
+  s.fields.forEach(function(f){
+    var has = Object.prototype.hasOwnProperty.call(s.answers, f.key);
+    if (!f.active && !has) return;          // retired question this response never saw
+    shown[f.key] = true;
+    row(lang === "ar" ? (f.label_ar || f.label_en) : f.label_en, sdAnswerText(f, s.answers[f.key], lang));
+  });
+  // answers to questions that were removed from the form since
+  Object.keys(s.answers).forEach(function(k){
+    if (!shown[k]) row(k, sdAnswerText(null, s.answers[k], lang));
+  });
+  Object.keys(s.hidden || {}).forEach(function(k){ row(k + (lang === "ar" ? " (من الرابط)" : " (from link)"), s.hidden[k]); });
+  $("sd-body").innerHTML = html || '<p class="hint">' + (lang === "ar" ? "لا توجد إجابات." : "No answers in this response.") + '</p>';
+}
+function closeSubmission(){ $("sub-detail").classList.add("hidden"); }
+$("sd-lang").addEventListener("change", renderSubmissionDetail);
+$("sd-close").addEventListener("click", closeSubmission);
+$("sub-detail").addEventListener("click", function(e){ if (e.target === $("sub-detail")) closeSubmission(); });
+document.addEventListener("keydown", function(e){
+  if (e.key === "Escape" && !$("sub-detail").classList.contains("hidden")) closeSubmission();
+});
+// a file across every form has every form's questions as columns - mostly
+// blank cells - so nudge toward picking one form first
+$("csv-link").addEventListener("click", function(e){
+  if (!$("f-form").value && !confirm("No form is selected, so the file will have every form's questions as columns " +
+      "(lots of empty cells).\n\nOK = download anyway, Cancel = pick a form first.")) e.preventDefault();
+});
 $("f-apply").addEventListener("click", function(){ STATE.subsPage = 1; loadSubmissions(); });
 $("f-clear").addEventListener("click", function(){
   $("f-form").value = ""; $("f-from").value = ""; $("f-to").value = ""; $("f-q").value = "";

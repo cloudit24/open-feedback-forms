@@ -1951,10 +1951,42 @@ def _submission_filter_sql(filters, prefix=""):
     if filters.get("q"):
         like = "%" + filters["q"] + "%"
         conditions.append("(%(p)sfirst_name LIKE %%s OR %(p)slast_name LIKE %%s OR "
-                           "%(p)semail LIKE %%s OR %(p)sreference LIKE %%s)" % {"p": prefix})
-        params += [like, like, like, like]
+                           "%(p)semail LIKE %%s OR %(p)sreference LIKE %%s OR "
+                           "%(p)sextra_fields LIKE %%s)" % {"p": prefix})
+        params += [like, like, like, like, like]
     where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
     return where, params
+
+
+# A name/email can be stored in two places: the built-in columns (forms that
+# ask them at the top) or as ordinary questions in extra_fields (forms that add
+# First name / Last name / Email address from the catalogue). Everywhere we
+# show "Name" and "Email" we take whichever one has a value, so there's one
+# name and one email per response, never two half-empty ones.
+CONTACT_KEYS = {"first_name": "first_name", "last_name": "last_name",
+                "email_address": "email", "email": "email"}
+
+
+def _parse_extra(raw):
+    if not raw:
+        return {}
+    try:
+        v = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    return v if isinstance(v, dict) else {}
+
+
+def merge_contact(row, extra):
+    """Fill row's first_name/last_name/email from the answers when the
+    built-in columns are empty."""
+    for key, col in CONTACT_KEYS.items():
+        val = extra.get(key)
+        if not (row.get(col) or "").strip() and isinstance(val, str) and val.strip():
+            row[col] = val.strip()
+    for col in ("first_name", "last_name", "email"):
+        row[col] = row.get(col) or ""
+    return row
 
 
 def _parse_hidden(raw):
@@ -1980,16 +2012,48 @@ def list_submissions(filters=None, page=1, page_size=25):
         total = cur.fetchone()["n"]
         cur.execute(
             "SELECT f.id, f.form_id, ff.name AS form_name, f.reference, f.created_at, "
-            "f.first_name, f.last_name, f.email, f.language, f.status, f.hidden_json "
+            "f.first_name, f.last_name, f.email, f.language, f.status, f.hidden_json, "
+            "f.extra_fields "
             "FROM feedback f LEFT JOIN forms ff ON ff.id = f.form_id " + where +
             " ORDER BY f.id DESC LIMIT %s OFFSET %s", params + [page_size, offset])
         rows = cur.fetchall()
         cur.close()
         for r in rows:
             r["hidden"] = _parse_hidden(r.pop("hidden_json", None))
+            extra = _parse_extra(r.pop("extra_fields", None))
+            merge_contact(r, extra)
+            r["answered"] = sum(1 for v in extra.values() if v not in (None, "", [], False))
         return rows, total
     finally:
         conn.close()
+
+
+def get_submission(sub_id):
+    """One response with every answer, plus the form's questions (labels,
+    types, options) so the admin can show it as question -> answer."""
+    conn = _conn()
+    try:
+        cur = conn.cursor(dictionary=True)
+        cur.execute(
+            "SELECT f.id, f.form_id, ff.name AS form_name, f.reference, f.created_at, "
+            "f.first_name, f.last_name, f.email, f.language, f.status, f.hidden_json, "
+            "f.extra_fields "
+            "FROM feedback f LEFT JOIN forms ff ON ff.id = f.form_id WHERE f.id = %s", (sub_id,))
+        row = cur.fetchone()
+        cur.close()
+    finally:
+        conn.close()
+    if not row:
+        return None
+    row["hidden"] = _parse_hidden(row.pop("hidden_json", None))
+    extra = _parse_extra(row.pop("extra_fields", None))
+    merge_contact(row, extra)
+    row["answers"] = extra
+    fields = list_fields(row["form_id"]) if row["form_id"] else []
+    row["fields"] = [{"key": f["field_key"], "label_en": f["label_en"], "label_ar": f["label_ar"],
+                      "type": f["field_type"], "options": f["options"], "active": f["active"]}
+                     for f in fields]
+    return row
 
 
 def export_rows(filters=None):
@@ -1998,10 +2062,15 @@ def export_rows(filters=None):
     comes back, just appended after."""
     filters = filters or {}
     all_fields = list_all_fields()
-    label_of = {}
+    label_of = {}          # field_key -> label (first form that has it wins)
     order_of = {}
+    opt_label = {}         # (form_id, field_key) -> {option value: English label}
     for f in all_fields:
-        label_of[(f["form_id"], f["field_key"])] = f["label_en"]
+        label_of.setdefault(f["field_key"], f["label_en"])
+        if f.get("options"):
+            opt_label[(f["form_id"], f["field_key"])] = {
+                str(o.get("value")): o.get("label_en") or str(o.get("value"))
+                for o in f["options"] if isinstance(o, dict)}
         order_of.setdefault(f["form_id"], []).append(f["field_key"])
     form_names = {f["id"]: f["name"] for f in list_forms(active_only=False)}
 
@@ -2017,19 +2086,34 @@ def export_rows(filters=None):
     finally:
         conn.close()
 
-    seen_extra_keys = []
+    # a one-form export lists that form's questions in the form's own order
+    seen_extra_keys = [k for k in order_of.get(filters.get("form_id"), [])
+                       if k not in CONTACT_KEYS] if filters.get("form_id") else []
     seen_hidden = []
     parsed = []
     for r in rows:
-        extra = json.loads(r["extra_fields"]) if r["extra_fields"] else {}
+        extra = _parse_extra(r["extra_fields"])
+        merge_contact(r, extra)
         for k in extra:
-            if k not in seen_extra_keys:
+            if k not in seen_extra_keys and k not in CONTACT_KEYS:
                 seen_extra_keys.append(k)
         r["hidden"] = _parse_hidden(r.get("hidden_json"))
         for k in r["hidden"]:
             if k not in seen_hidden:
                 seen_hidden.append(k)
         parsed.append((r, extra))
+
+    # column titles: the question's label; if two questions share a label,
+    # add the key so no column overwrites another
+    titles = {}
+    used = {"Form", "Reference", "Received (UTC)", "First name", "Last name", "Email",
+            "Language", "Status"}
+    for k in seen_extra_keys:
+        t = label_of.get(k, k)
+        if t in used:
+            t = "%s (%s)" % (t, k)
+        used.add(t)
+        titles[k] = t
 
     out = []
     for r, extra in parsed:
@@ -2039,8 +2123,15 @@ def export_rows(filters=None):
             "First name": r["first_name"], "Last name": r["last_name"], "Email": r["email"],
         }
         for k in seen_extra_keys:
-            label = label_of.get((r["form_id"], k), k)
-            row[label] = extra.get(k, "")
+            v = extra.get(k, "")
+            labels = opt_label.get((r["form_id"], k), {})
+            if isinstance(v, bool):
+                v = "Yes" if v else "No"
+            elif isinstance(v, list):
+                v = ", ".join(labels.get(str(x), str(x)) for x in v)
+            elif v != "" and str(v) in labels:
+                v = labels[str(v)]          # show the answer, not its internal key
+            row[titles[k]] = v
         # values that came from the form link, one column each
         for k in seen_hidden:
             row["%s (link)" % k] = r["hidden"].get(k, "")

@@ -5,6 +5,16 @@ file from GitHub to show what a new version fixes.
 
 ## 1.13.0
 
+- Fixed: Submissions showed empty Name and Email for forms that ask First name,
+  Last name and Email address as questions, and the CSV had two sets of name
+  and email columns. Now there is one Name and one Email, taken from wherever
+  the form asked them, and search finds them too.
+- New: click any row in Submissions to see the whole response - every question
+  and answer, in English or Arabic. A new "Answers" column shows how many
+  questions each response answered, so truly empty ones stand out.
+- CSV: answers show their wording ("Good") instead of internal keys, the same
+  question is one column across forms, and a one-form file follows that form's
+  question order. Downloading without picking a form now asks first.
 - Admin: "+ Add a form" and "+ Add a field" now sit at the top of their lists,
   next to a new "Field keys" shortcut that jumps straight to the catalogue.
 - New: webhooks. A form's Manage panel can send every new response to another
