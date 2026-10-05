@@ -197,6 +197,59 @@ table.subs tr:last-child td{border-bottom:none}
 .update-pill{background:var(--accent);color:#0B0B0B;border:none;border-radius:999px;
   padding:5px 12px;font-size:11.5px;font-weight:800;letter-spacing:.02em}
 .update-pill:hover{filter:brightness(1.08)}
+
+/* ---- branding: title / description editor + live preview ---- */
+@font-face{font-family:'Cairo';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/cairo-arabic-400-700.woff2) format('woff2');unicode-range:U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1}
+@font-face{font-family:'Cairo';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/cairo-latin-400-700.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'IBM Plex Sans Arabic';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/ibm-plex-sans-arabic-arabic-400.woff2) format('woff2');unicode-range:U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1}
+@font-face{font-family:'IBM Plex Sans Arabic';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/ibm-plex-sans-arabic-latin-400.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'IBM Plex Sans Arabic';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/ibm-plex-sans-arabic-arabic-700.woff2) format('woff2');unicode-range:U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1}
+@font-face{font-family:'IBM Plex Sans Arabic';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/ibm-plex-sans-arabic-latin-700.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Inter';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/inter-latin-400-700.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Noto Kufi Arabic';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/noto-kufi-arabic-arabic-400-700.woff2) format('woff2');unicode-range:U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1}
+@font-face{font-family:'Noto Kufi Arabic';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/noto-kufi-arabic-latin-400-700.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Noto Sans Arabic';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/noto-sans-arabic-arabic-400-700.woff2) format('woff2');unicode-range:U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1}
+@font-face{font-family:'Noto Sans Arabic';font-style:normal;font-weight:400 700;font-display:swap;src:url(/fonts/noto-sans-arabic-latin-400-700.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Tajawal';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/tajawal-arabic-400.woff2) format('woff2');unicode-range:U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1}
+@font-face{font-family:'Tajawal';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/tajawal-latin-400.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+@font-face{font-family:'Tajawal';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/tajawal-arabic-700.woff2) format('woff2');unicode-range:U+0600-06FF, U+0750-077F, U+0870-088E, U+0890-0891, U+0897-08E1, U+08E3-08FF, U+200C-200E, U+2010-2011, U+204F, U+2E41, U+FB50-FDFF, U+FE70-FE74, U+FE76-FEFC, U+102E0-102FB, U+10E60-10E7E, U+10EC2-10EC4, U+10EFC-10EFF, U+1EE00-1EE03, U+1EE05-1EE1F, U+1EE21-1EE22, U+1EE24, U+1EE27, U+1EE29-1EE32, U+1EE34-1EE37, U+1EE39, U+1EE3B, U+1EE42, U+1EE47, U+1EE49, U+1EE4B, U+1EE4D-1EE4F, U+1EE51-1EE52, U+1EE54, U+1EE57, U+1EE59, U+1EE5B, U+1EE5D, U+1EE5F, U+1EE61-1EE62, U+1EE64, U+1EE67-1EE6A, U+1EE6C-1EE72, U+1EE74-1EE77, U+1EE79-1EE7C, U+1EE7E, U+1EE80-1EE89, U+1EE8B-1EE9B, U+1EEA1-1EEA3, U+1EEA5-1EEA9, U+1EEAB-1EEBB, U+1EEF0-1EEF1}
+@font-face{font-family:'Tajawal';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/tajawal-latin-700.woff2) format('woff2');unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD}
+.br-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:900px){.br-grid{grid-template-columns:minmax(0,1fr)}}
+.br-preview{position:sticky;top:12px}
+.br-preview-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
+.br-preview-bar b{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:var(--card);color:var(--ink);padding:5px 12px;font-size:13px;cursor:pointer;font-family:inherit}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--card)}
+.rte{border:1px solid var(--line);border-radius:8px;background:var(--card)}
+.rte:focus-within{border-color:var(--yellow);box-shadow:0 0 0 3px var(--focus)}
+.rte-bar{display:flex;flex-wrap:wrap;gap:2px;padding:4px;border-bottom:1px solid var(--line)}
+.rte-bar button{border:0;background:transparent;color:var(--ink);min-width:32px;height:30px;border-radius:6px;cursor:pointer;font-size:14px;font-family:inherit;padding:0 8px}
+.rte-bar button:hover{background:var(--line)}
+.rte-bar button:focus-visible{outline:2px solid var(--ink)}
+.rte-area{min-height:90px;padding:9px 11px;font-size:14px;line-height:1.55;outline:none;overflow-wrap:anywhere}
+.rte-area:empty:before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
+.rte-area p{margin:0 0 .6em}
+.rte-area ul,.rte-area ol{margin:0 0 .6em;padding-inline-start:1.4em}
+.pv{--fs:1;border:1px solid var(--line);border-radius:12px;background:var(--card);overflow:hidden}
+.pv[data-size="small"]{--fs:.9}
+.pv[data-size="large"]{--fs:1.15}
+.pv[data-font="inter"]{font-family:'Inter','Noto Sans Arabic',system-ui,sans-serif}
+.pv[data-font="cairo"]{font-family:'Cairo',system-ui,sans-serif}
+.pv[data-font="tajawal"]{font-family:'Tajawal',system-ui,sans-serif}
+.pv[data-font="plex"]{font-family:'IBM Plex Sans Arabic',system-ui,sans-serif}
+.pv[data-font="kufi"]{font-family:'Noto Kufi Arabic',system-ui,sans-serif}
+.pv-head{padding:22px 20px 16px;border-bottom:1px solid var(--line)}
+.pv[data-align="center"] .pv-head{text-align:center}
+.pv-head h1{margin:0 0 6px;font-size:calc(24px*var(--fs));line-height:1.2;font-weight:700}
+.pv-desc{color:var(--muted);font-size:calc(14.5px*var(--fs));overflow-wrap:anywhere}
+.pv-desc p{margin:0 0 .6em}
+.pv-desc ul,.pv-desc ol{margin:0 0 .6em;padding-inline-start:1.4em}
+.pv-desc a{color:inherit;text-decoration:underline}
+.pv-body{padding:16px 20px 20px}
+.pv-body label{font-size:calc(14px*var(--fs));margin:0 0 6px}
+.pv-fake{border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:calc(14px*var(--fs));color:var(--muted)}
 </style>
 </head>
 <body>
@@ -394,13 +447,49 @@ table.subs tr:last-child td{border-bottom:none}
           <div id="sub-fdbranding" class="hidden">
             <p class="hint">Shown to visitors on this form's public page — its header, its browser tab, and its Terms and Conditions text.</p>
 
+            <div class="br-grid"><div class="br-form">
             <label for="br-org">Organization name</label>
             <input type="text" id="br-org" placeholder="Shown as the header title and in the terms text">
 
-            <label for="br-subtitle-en">Subtitle (English)</label>
-            <input type="text" id="br-subtitle-en" placeholder="Shown at the top of the form, e.g. how long it takes — leave blank for none">
-            <label for="br-subtitle-ar">Subtitle (Arabic)</label>
-            <input type="text" id="br-subtitle-ar" dir="rtl" placeholder="نفس النص بالعربية">
+            <label for="br-title-en">Title (English)</label>
+            <input type="text" id="br-title-en" maxlength="200" placeholder="The main heading of the form. Blank = the form's name">
+            <label for="br-title-ar">Title (Arabic)</label>
+            <input type="text" id="br-title-ar" dir="rtl" maxlength="200" placeholder="العنوان الرئيسي للنموذج">
+
+            <label id="br-desc-en-label">Description (English)</label>
+            <div id="br-desc-en"></div>
+            <label id="br-desc-ar-label">Description (Arabic)</label>
+            <div id="br-desc-ar"></div>
+            <p class="hint">Bold, italic, underline, links and bulleted lists only. Anything else is removed when you save.</p>
+
+            <div class="row" style="margin-top:14px">
+              <div>
+                <label for="br-font">Font</label>
+                <select id="br-font">
+                  <option value="system">System default</option>
+                  <option value="inter">Inter + Noto Sans Arabic</option>
+                  <option value="cairo">Cairo</option>
+                  <option value="tajawal">Tajawal</option>
+                  <option value="plex">IBM Plex Sans Arabic</option>
+                  <option value="kufi">Noto Kufi Arabic</option>
+                </select>
+              </div>
+              <div>
+                <label for="br-size">Text size</label>
+                <select id="br-size">
+                  <option value="small">Small</option>
+                  <option value="normal">Normal</option>
+                  <option value="large">Large</option>
+                </select>
+              </div>
+              <div>
+                <label for="br-align">Title position</label>
+                <select id="br-align">
+                  <option value="start">Start (left in English, right in Arabic)</option>
+                  <option value="center">Centered</option>
+                </select>
+              </div>
+            </div>
             <p class="hint">Leave either blank to use the default wording.</p>
 
             <label for="br-logo">Logo</label>
@@ -438,6 +527,18 @@ table.subs tr:last-child td{border-bottom:none}
 
             <div class="msg" id="branding-msg"></div>
             <button class="btn" id="branding-save-btn" style="margin-top:14px">Save branding</button>
+            </div>
+            <div class="br-preview" aria-label="Live preview">
+              <div class="br-preview-bar"><b>Preview</b>
+                <span class="seg" role="group" aria-label="Preview language">
+                  <button type="button" id="pv-en" aria-pressed="true">EN</button>
+                  <button type="button" id="pv-ar" aria-pressed="false">AR</button>
+                </span></div>
+              <div class="pv" id="pv" data-font="system" data-size="normal" data-align="start">
+                <div class="pv-head"><h1 id="pv-title"></h1><div class="pv-desc" id="pv-desc"></div></div>
+                <div class="pv-body"><label id="pv-q">Your feedback</label><div class="pv-fake" id="pv-a">Type your answer here</div></div>
+              </div>
+            </div></div>
           </div>
 
           <!-- alerts sub-panel -->
@@ -704,7 +805,7 @@ table.subs tr:last-child td{border-bottom:none}
         <p class="hint">Deleting a field key here only removes it from the catalog going forward; forms that already added it keep their existing questions and past submissions untouched.</p>
 
         <h2 style="margin-top:26px">Forms &amp; branding</h2>
-        <p class="hint">Each form is its own listener on its own port, with its own logo, colors, subtitle, questions and expiry date — set these from a form's <b>Edit</b> button (Questions/Branding/Alerts) and <b>Manage</b> button (name, port, languages, expiry). Point one reverse proxy or Cloudflare Tunnel hostname at each form's port to publish it. A disabled form moves to <b>Archived forms</b> at the bottom of the Forms tab — restore it any time, or permanently delete it (and everything it collected) once you're sure.</p>
+        <p class="hint">Each form is its own listener on its own port, with its own logo, colors, title and description, questions and expiry date — set these from a form's <b>Edit</b> button (Questions/Branding/Alerts) and <b>Manage</b> button (name, port, languages, expiry). Point one reverse proxy or Cloudflare Tunnel hostname at each form's port to publish it. A disabled form moves to <b>Archived forms</b> at the bottom of the Forms tab — restore it any time, or permanently delete it (and everything it collected) once you're sure.</p>
 
         <h2 style="margin-top:26px">Languages</h2>
         <p class="hint">Every form supports English and Arabic out of the box. Configuration → Language Labels lets you rename either one and add further languages — new ones are auto-translated via the free LibreTranslate API where possible (add an API key there for real translation instead of blank placeholders), and every label stays editable afterward. A form only offers the languages its own Language Labels checkboxes have enabled.</p>
@@ -742,7 +843,7 @@ table.subs tr:last-child td{border-bottom:none}
         <h2 style="margin-top:22px;font-size:15px">Highlights</h2>
         <ul class="hint" style="margin:0;padding-left:18px;line-height:1.9">
           <li>English and Arabic out of the box, plus any language you add, auto-translated via LibreTranslate and RTL-aware throughout</li>
-          <li>Per-form branding: logo, colors, subtitle, custom questions, expiry date</li>
+          <li>Per-form branding: logo, colors, title, styled description, font, custom questions, expiry date</li>
           <li>Custom roles built from a permission checklist: full access, one form only, read-only, or any combination you need</li>
           <li>SMTP and Telegram alerts: new submissions, daily digests, database disconnection, form expiry</li>
           <li>Dashboard with a daily or hourly (24h) submissions trend, filterable by form, date, language and status</li>
@@ -2297,6 +2398,98 @@ $("subs-prev").addEventListener("click", function(){ if (STATE.subsPage > 1){ ST
 $("subs-next").addEventListener("click", function(){ STATE.subsPage++; loadSubmissions(); });
 
 /* ------------------------------------------------------------ branding */
+/* Our own tiny text editor: a contenteditable box + a toolbar. The server
+   cleans whatever it sends (sanitise.py), so this only has to be handy. */
+function makeEditor(host, dir, placeholder, onChange){
+  host.className = "rte";
+  host.innerHTML = '<div class="rte-bar" role="toolbar" aria-label="Text formatting"></div>' +
+    '<div class="rte-area" contenteditable="true" role="textbox" aria-multiline="true"></div>';
+  var bar = host.firstChild, area = host.lastChild;
+  try { document.execCommand("defaultParagraphSeparator", false, "p"); } catch(e){}
+  area.setAttribute("dir", dir);
+  area.setAttribute("data-placeholder", placeholder);
+  area.setAttribute("aria-label", placeholder);
+  var tools = [
+    ["B", "Bold (Ctrl+B)", function(){ document.execCommand("bold"); }, "font-weight:800"],
+    ["I", "Italic (Ctrl+I)", function(){ document.execCommand("italic"); }, "font-style:italic"],
+    ["U", "Underline (Ctrl+U)", function(){ document.execCommand("underline"); }, "text-decoration:underline"],
+    ["Link", "Add a link", function(){
+      var sel = window.getSelection();
+      if (!sel.rangeCount || sel.isCollapsed){ alert("Select the text you want to turn into a link first."); return; }
+      var url = prompt("Link address (must start with http:// or https://)", "https://");
+      if (url === null) return;
+      url = url.trim();
+      if (!/^https?:\/\/[^\s<>"']+$/i.test(url)){ alert("Links must start with http:// or https://"); return; }
+      document.execCommand("createLink", false, url);
+    }, ""],
+    ["• List", "Bulleted list", function(){ document.execCommand("insertUnorderedList"); }, ""],
+    ["Clear", "Clear formatting", function(){
+      document.execCommand("removeFormat");
+      document.execCommand("unlink");
+      if (document.queryCommandState("insertUnorderedList")) document.execCommand("insertUnorderedList");
+    }, ""]
+  ];
+  tools.forEach(function(t){
+    var b = document.createElement("button");
+    b.type = "button"; b.textContent = t[0]; b.title = t[1]; b.setAttribute("aria-label", t[1]);
+    if (t[3]) b.setAttribute("style", t[3]);
+    b.addEventListener("mousedown", function(e){ e.preventDefault(); });   // keep the selection
+    b.addEventListener("click", function(){ area.focus(); t[2](); onChange(); });
+    bar.appendChild(b);
+  });
+  area.addEventListener("input", onChange);
+  area.addEventListener("paste", function(e){       // paste as plain text: no junk from Word or web pages
+    e.preventDefault();
+    var text = (e.clipboardData || window.clipboardData).getData("text/plain");
+    document.execCommand("insertText", false, text);
+  });
+  return {
+    getHtml: function(){
+      var h = area.innerHTML;
+      return (area.textContent.trim() || /<(ul|ol|li)/i.test(h)) ? h : "";
+    },
+    setHtml: function(h){ area.innerHTML = h || ""; }
+  };
+}
+var BR_FORM_NAME = "";
+var pvLang = "en";
+var descEn = makeEditor($("br-desc-en"), "ltr", "Shown under the title", function(){ updatePreview(); });
+var descAr = makeEditor($("br-desc-ar"), "rtl", "يظهر تحت العنوان", function(){ updatePreview(); });
+function updatePreview(){
+  var ar = pvLang === "ar";
+  var pv = $("pv");
+  pv.setAttribute("dir", ar ? "rtl" : "ltr");
+  pv.setAttribute("data-font", $("br-font").value);
+  pv.setAttribute("data-size", $("br-size").value);
+  pv.setAttribute("data-align", $("br-align").value);
+  $("pv-title").textContent = ($(ar ? "br-title-ar" : "br-title-en").value.trim()) || BR_FORM_NAME || "Feedback";
+  // Preview only: the saved copy is cleaned by the server, never trusted from here.
+  var html = (ar ? descAr : descEn).getHtml();
+  var box = $("pv-desc");
+  box.textContent = "";
+  if (html){
+    var tmp = document.createElement("template");
+    tmp.innerHTML = html;
+    tmp.content.querySelectorAll("script,style,iframe,object").forEach(function(n){ n.remove(); });
+    tmp.content.querySelectorAll("*").forEach(function(n){
+      Array.prototype.slice.call(n.attributes).forEach(function(a){ if (!(n.tagName === "A" && a.name === "href")) n.removeAttribute(a.name); });
+      if (n.tagName === "A" && !/^https?:\/\//i.test(n.getAttribute("href") || "")) n.removeAttribute("href");
+    });
+    box.appendChild(tmp.content);
+  }
+  $("pv-q").textContent = ar ? "ملاحظاتك" : "Your feedback";
+  $("pv-a").textContent = ar ? "اكتب إجابتك هنا" : "Type your answer here";
+}
+["pv-en", "pv-ar"].forEach(function(id){
+  $(id).addEventListener("click", function(){
+    pvLang = id === "pv-ar" ? "ar" : "en";
+    $("pv-en").setAttribute("aria-pressed", String(pvLang === "en"));
+    $("pv-ar").setAttribute("aria-pressed", String(pvLang === "ar"));
+    updatePreview();
+  });
+});
+["br-title-en", "br-title-ar"].forEach(function(id){ $(id).addEventListener("input", updatePreview); });
+["br-font", "br-size", "br-align"].forEach(function(id){ $(id).addEventListener("change", updatePreview); });
 var pendingLogo = null;      // {base64, ext} staged until Save is clicked
 
 function loadBranding(){
@@ -2307,8 +2500,15 @@ function loadBranding(){
     if (res.status !== 200) return;
     var b = res.body.branding;
     $("br-org").value = b.org_name || "";
-    $("br-subtitle-en").value = b.subtitle_en || "";
-    $("br-subtitle-ar").value = b.subtitle_ar || "";
+    BR_FORM_NAME = b.form_name || "";
+    $("br-title-en").value = b.title_en || "";
+    $("br-title-ar").value = b.title_ar || "";
+    descEn.setHtml(b.description_en || "");
+    descAr.setHtml(b.description_ar || "");
+    $("br-font").value = b.font || "system";
+    $("br-size").value = b.text_size || "normal";
+    $("br-align").value = b.title_align || "start";
+    updatePreview();
     $("br-primary").value = b.primary_color;
     $("br-primary-picker").value = b.primary_color;
     $("br-ink").value = b.ink_color;
@@ -2352,8 +2552,13 @@ $("branding-save-btn").addEventListener("click", function(){
   clearFlash("branding-msg");
   var payload = {
     org_name: $("br-org").value.trim(),
-    subtitle_en: $("br-subtitle-en").value.trim(),
-    subtitle_ar: $("br-subtitle-ar").value.trim(),
+    title_en: $("br-title-en").value.trim(),
+    title_ar: $("br-title-ar").value.trim(),
+    description_en: descEn.getHtml(),
+    description_ar: descAr.getHtml(),
+    font: $("br-font").value,
+    text_size: $("br-size").value,
+    title_align: $("br-align").value,
     primary_color: $("br-primary").value.trim(),
     ink_color: $("br-ink").value.trim(),
     theme_mode: $("br-theme-mode").value

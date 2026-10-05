@@ -296,7 +296,7 @@ panel.
 ### Highlights
 
 - English and Arabic out of the box, plus any language you add, auto-translated via LibreTranslate and RTL-aware throughout
-- Per-form branding: logo, colors, subtitle, custom questions, expiry date
+- Per-form branding: logo, colors, title, styled description, font and text size, custom questions, expiry date
 - Custom roles built from a permission checklist: full access, one form only, read-only, or any combination you need
 - SMTP and Telegram alerts: new submissions, daily digests, database disconnection, form expiry
 - Dashboard with a daily or hourly (24h) submissions trend, filterable by form, date, language and status

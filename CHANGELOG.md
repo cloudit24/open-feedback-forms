@@ -3,6 +3,23 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.8.0
+
+- New: every form has its own title and description, written separately in
+  English and Arabic under Edit > Branding. The title is the big heading on the
+  form and the browser tab (blank = the form's name). It no longer adds
+  "- Feedback" to the tab.
+- The description now has a small editor: bold, italic, underline, links and
+  bulleted lists. Anything else is stripped out when you save, so it is safe.
+  Old subtitles became descriptions automatically and look the same.
+- New: pick a font (six that cover both English and Arabic), a text size
+  (small, normal, large) and where the title sits (start or centered). The
+  fonts are built in, nothing is loaded from the internet.
+- Branding has a live preview with an EN / AR switch.
+- Forms made from a template (and the first form on a fresh install) now get
+  the template's title and description in both languages.
+- Fix: on a phone, the Arabic form could be dragged sideways. It no longer can.
+
 ## 1.7.0
 
 - The app is now neutral: all wording about clubs, fans, matches and stadiums

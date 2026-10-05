@@ -21,6 +21,7 @@ from datetime import datetime, timedelta, timezone
 import mysql.connector
 from mysql.connector import pooling
 
+import sanitise
 import templates
 
 _UNSET = object()   # distinguishes "not provided" from "explicitly set to None" in optional update params
@@ -165,6 +166,20 @@ MIGRATE_SQL = [
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS subtitle_en VARCHAR(300) NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS subtitle_ar VARCHAR(300) NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS enabled_extra_langs_json LONGTEXT NULL",
+    # Form title + styled description + text styling (1.8.0). The old
+    # subtitle becomes the description; the subtitle columns stay, untouched.
+    # A description the admin clears is saved as '' (not NULL), so this copy
+    # never brings an old subtitle back. The old text was plain, so its
+    # & < > are escaped on the way in and show exactly as before.
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS title_en VARCHAR(200) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS title_ar VARCHAR(200) NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS description_en TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS description_ar TEXT NULL",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS font VARCHAR(20) NOT NULL DEFAULT 'system'",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS text_size VARCHAR(10) NOT NULL DEFAULT 'normal'",
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS title_align VARCHAR(10) NOT NULL DEFAULT 'start'",
+    "UPDATE forms SET description_en=REPLACE(REPLACE(REPLACE(subtitle_en,'&','&amp;'),'<','&lt;'),'>','&gt;') WHERE description_en IS NULL AND subtitle_en IS NOT NULL AND subtitle_en<>''",
+    "UPDATE forms SET description_ar=REPLACE(REPLACE(REPLACE(subtitle_ar,'&','&amp;'),'<','&lt;'),'>','&gt;') WHERE description_ar IS NULL AND subtitle_ar IS NOT NULL AND subtitle_ar<>''",
     "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS labels_extra_json LONGTEXT NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS expiry_date DATE NULL",
@@ -703,9 +718,11 @@ def _seed_default_form_if_empty(conn, default_port):
     if count == 0:
         tpl = templates.get(templates.DEFAULT_TEMPLATE_KEY)
         cur.execute(
-            "INSERT INTO forms (id, name, slug, port, active, subtitle_en, subtitle_ar) VALUES (1,%s,%s,%s,1,%s,%s)",
+            "INSERT INTO forms (id, name, slug, port, active, title_en, title_ar, description_en, description_ar) "
+            "VALUES (1,%s,%s,%s,1,%s,%s,%s,%s)",
             (templates.DEFAULT_FORM_NAME, "main", default_port,
-             tpl["description_en"], tpl["description_ar"]))
+             tpl["title_en"], tpl["title_ar"],
+             sanitise.sanitise(tpl["description_en"]), sanitise.sanitise(tpl["description_ar"])))
         add_template_fields(cur, 1, tpl)
     cur.close()
 
@@ -889,10 +906,17 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
             (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra, expiry_date,
              public_url or None, 1 if ask_core_fields else 0))
         new_id = cur.lastrowid
-        if tpl and tpl["fields"]:
-            add_template_fields(cur, new_id, tpl)
-            cur.execute("UPDATE forms SET subtitle_en=%s, subtitle_ar=%s WHERE id=%s",
-                        (tpl["description_en"], tpl["description_ar"], new_id))
+        if tpl:
+            has_questions = bool(tpl["fields"])
+            if has_questions:
+                add_template_fields(cur, new_id, tpl)
+            # The blank template's description only explains the picker, so
+            # a blank form gets its title but no description.
+            cur.execute("UPDATE forms SET title_en=%s, title_ar=%s, description_en=%s, description_ar=%s WHERE id=%s",
+                        (tpl["title_en"], tpl["title_ar"],
+                         sanitise.sanitise(tpl["description_en"]) if has_questions else None,
+                         sanitise.sanitise(tpl["description_ar"]) if has_questions else None,
+                         new_id))
         conn.commit()
         cur.close()
         return new_id
@@ -919,12 +943,15 @@ def clone_form(source_id, name, slug, port):
             """INSERT INTO forms (name, slug, port, active, org_name, primary_color, ink_color,
                                   lang_en, lang_ar, subtitle_en, subtitle_ar,
                                   enabled_extra_langs_json, expiry_date, ask_core_fields,
-                                  theme_mode)
-               VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                                  theme_mode, title_en, title_ar, description_en, description_ar,
+                                  font, text_size, title_align)
+               VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (name, slug, port, src["org_name"], src["primary_color"], src["ink_color"],
              src["lang_en"], src["lang_ar"], src["subtitle_en"], src["subtitle_ar"],
              src["enabled_extra_langs_json"], src["expiry_date"], src.get("ask_core_fields", 1),
-             src.get("theme_mode") or "both"))
+             src.get("theme_mode") or "both",
+             src.get("title_en"), src.get("title_ar"), src.get("description_en"), src.get("description_ar"),
+             src.get("font") or "system", src.get("text_size") or "normal", src.get("title_align") or "start"))
         new_id = cur.lastrowid
         cur.execute(
             """INSERT INTO form_fields
@@ -1011,7 +1038,8 @@ def delete_form_permanently(form_id):
 
 def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
                      subtitle_en=None, subtitle_ar=None, logo_filename=None, clear_logo=False,
-                     theme_mode=None):
+                     theme_mode=None, title_en=None, title_ar=None, description_en=None,
+                     description_ar=None, font=None, text_size=None, title_align=None):
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -1028,6 +1056,21 @@ def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
             sets.append("subtitle_ar=%s"); params.append(subtitle_ar or None)
         if theme_mode is not None:
             sets.append("theme_mode=%s"); params.append(theme_mode)
+        if title_en is not None:
+            sets.append("title_en=%s"); params.append(title_en or None)
+        if title_ar is not None:
+            sets.append("title_ar=%s"); params.append(title_ar or None)
+        # '' (not NULL) = the admin cleared it on purpose; see MIGRATE_SQL.
+        if description_en is not None:
+            sets.append("description_en=%s"); params.append(description_en)
+        if description_ar is not None:
+            sets.append("description_ar=%s"); params.append(description_ar)
+        if font is not None:
+            sets.append("font=%s"); params.append(font)
+        if text_size is not None:
+            sets.append("text_size=%s"); params.append(text_size)
+        if title_align is not None:
+            sets.append("title_align=%s"); params.append(title_align)
         if clear_logo:
             sets.append("logo_filename=NULL")
         elif logo_filename is not None:

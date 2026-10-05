@@ -51,6 +51,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import db
 import config_store
 import translate_client
+import sanitise
 import templates
 import ui_strings
 import notifier
@@ -276,6 +277,12 @@ DEFAULT_ADMIN_THEME = {"primary": "#0B5273", "text": "#1F2B33"}
 # How a public form may look: light only, dark only, or both (follows the
 # visitor's device, with a switch button).
 THEME_MODES = ("both", "light", "dark")
+# Form text styling (1.8.0). The font names are the keys the pages use; the
+# .woff2 files live in public/fonts/ (self-hosted, no outside requests).
+FORM_FONTS = ("system", "inter", "cairo", "tajawal", "plex", "kufi")
+TEXT_SIZES = ("small", "normal", "large")
+TITLE_ALIGNS = ("start", "center")
+FONT_FILE_RE = re.compile(r"^[a-z0-9-]+\.woff2$")
 
 
 def identity_theme_key(identity):
@@ -345,6 +352,22 @@ def clean(value, limit):
         return ""
     value = "".join(c for c in value if c >= " " or c in "\n\t")
     return value.strip()[:limit]
+
+
+def form_look(form):
+    """The title, description and text-styling settings of a form, as the
+    pages need them. Descriptions are cleaned again on the way out, so even
+    an old plain-text subtitle can never inject markup."""
+    return {
+        "formName": form.get("name") or "",
+        "titleEn": (form.get("title_en") or "").strip(),
+        "titleAr": (form.get("title_ar") or "").strip(),
+        "descriptionEn": sanitise.sanitise(form.get("description_en")),
+        "descriptionAr": sanitise.sanitise(form.get("description_ar")),
+        "font": form.get("font") if form.get("font") in FORM_FONTS else "system",
+        "textSize": form.get("text_size") if form.get("text_size") in TEXT_SIZES else "normal",
+        "titleAlign": form.get("title_align") if form.get("title_align") in TITLE_ALIGNS else "start",
+    }
 
 
 def slugify(text):
@@ -785,6 +808,12 @@ class BaseHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def serve_font(self, name):
+        # Only plain *.woff2 names from public/fonts/ (no folders, no "..").
+        if not FONT_FILE_RE.match(name):
+            return self.fail(404)
+        return self.static_from(os.path.join(PUBLIC, "fonts"), name)
+
     def serve_logo(self, form_id):
         form = db.get_form(form_id) if db.is_connected() else None
         if not form or not form.get("logo_filename"):
@@ -816,6 +845,8 @@ class PublicRoutes:
             return self.serve_logo(form_id)
         if path in ("/", "/index.html"):
             return self.static_from(PUBLIC, "index.html")
+        if path.startswith("/fonts/"):
+            return self.serve_font(path[len("/fonts/"):])
 
         name = path.lstrip("/")
         if "/" in name or "\\" in name or ".." in name or not name:
@@ -838,7 +869,8 @@ class PublicRoutes:
             return self.send_json(500, {"ok": False})
         if form_is_expired(form):
             return self.send_json(200, {"ok": True, "expired": True, "fields": [],
-                                        "branding": {"orgName": form.get("org_name") or form.get("name") or ""},
+                                        "branding": dict(form_look(form),
+                                                         orgName=form.get("org_name") or form.get("name") or ""),
                                         "languages": {"en": True, "ar": True}, "extraLanguages": [],
                                         "languageLabels": config_store.load()["settings"].get("language_labels", {})})
         out = [{"id": f["id"], "field_key": f["field_key"], "label_en": f["label_en"],
@@ -850,10 +882,10 @@ class PublicRoutes:
             "primaryColor": (form and form.get("primary_color")) or "#FFEC01",
             "inkColor": (form and form.get("ink_color")) or "#0B0B0B",
             "logoUrl": "logo" if (form and form.get("logo_filename")) else None,
-            "subtitleEn": (form and form.get("subtitle_en")) or None,
-            "subtitleAr": (form and form.get("subtitle_ar")) or None,
             "themeMode": (form.get("theme_mode") or "both") if form else "both",
         }
+        if form:
+            branding.update(form_look(form))
         ask_core = bool(form.get("ask_core_fields", True)) if form else True
         languages = {
             "en": bool(form["lang_en"]) if form else True,
@@ -1087,6 +1119,8 @@ class AdminHandler(PublicRoutes, BaseHandler):
             return self.send_json(200, {"ok": True})
         if path in ("/", "/admin", "/admin/"):
             return self.static_from(ADMIN_DIR, "index.html")
+        if path.startswith("/fonts/"):
+            return self.serve_font(path[len("/fonts/"):])
         if path == "/admin/status":
             return self.get_admin_status()
         if path == "/admin/db-settings":
@@ -2024,8 +2058,14 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "org_name": form.get("org_name") or "",
             "primary_color": form.get("primary_color") or "#FFEC01",
             "ink_color": form.get("ink_color") or "#0B0B0B",
-            "subtitle_en": form.get("subtitle_en") or "",
-            "subtitle_ar": form.get("subtitle_ar") or "",
+            "title_en": form.get("title_en") or "",
+            "title_ar": form.get("title_ar") or "",
+            "description_en": sanitise.sanitise(form.get("description_en")),
+            "description_ar": sanitise.sanitise(form.get("description_ar")),
+            "font": form_look(form)["font"],
+            "text_size": form_look(form)["textSize"],
+            "title_align": form_look(form)["titleAlign"],
+            "form_name": form.get("name") or "",
             "theme_mode": form.get("theme_mode") or "both",
             "hasLogo": bool(form.get("logo_filename")),
         }})
@@ -2042,12 +2082,39 @@ class AdminHandler(PublicRoutes, BaseHandler):
         if org_name is not None:
             org_name = clean(org_name, 120)
 
-        subtitle_en = body.get("subtitle_en")
-        if subtitle_en is not None:
-            subtitle_en = clean(subtitle_en, 300)
-        subtitle_ar = body.get("subtitle_ar")
-        if subtitle_ar is not None:
-            subtitle_ar = clean(subtitle_ar, 300)
+        title_en = body.get("title_en")
+        if title_en is not None:
+            title_en = clean(title_en, 200)
+        title_ar = body.get("title_ar")
+        if title_ar is not None:
+            title_ar = clean(title_ar, 200)
+        # Styled text: cleaned with an allow-list before it is ever stored.
+        # An emptied description is saved as "" (not NULL) on purpose.
+        descriptions = {}
+        for key in ("description_en", "description_ar"):
+            raw = body.get(key)
+            if raw is None:
+                descriptions[key] = None
+                continue
+            if not isinstance(raw, str) or len(raw) > 6000:
+                return self.send_json(400, {"ok": False, "error": "the description is too long"})
+            safe = sanitise.sanitise(raw)
+            if len(safe) > 4000:
+                return self.send_json(400, {"ok": False, "error": "the description is too long"})
+            descriptions[key] = safe
+        font = text_size = title_align = None
+        if "font" in body:
+            font = body.get("font")
+            if font not in FORM_FONTS:
+                return self.send_json(400, {"ok": False, "error": "unknown font"})
+        if "text_size" in body:
+            text_size = body.get("text_size")
+            if text_size not in TEXT_SIZES:
+                return self.send_json(400, {"ok": False, "error": "text size must be small, normal or large"})
+        if "title_align" in body:
+            title_align = body.get("title_align")
+            if title_align not in TITLE_ALIGNS:
+                return self.send_json(400, {"ok": False, "error": "title alignment must be start or center"})
 
         primary_color = body.get("primary_color") or None
         ink_color = body.get("ink_color") or None
@@ -2082,7 +2149,10 @@ class AdminHandler(PublicRoutes, BaseHandler):
                 return self.send_json(400, {"ok": False, "error": "theme must be light, dark or both"})
 
         db.update_branding(form_id, org_name=org_name, primary_color=primary_color,
-                            ink_color=ink_color, subtitle_en=subtitle_en, subtitle_ar=subtitle_ar,
+                            ink_color=ink_color, title_en=title_en, title_ar=title_ar,
+                            description_en=descriptions["description_en"],
+                            description_ar=descriptions["description_ar"],
+                            font=font, text_size=text_size, title_align=title_align,
                             logo_filename=logo_filename, clear_logo=clear_logo,
                             theme_mode=theme_mode)
         return self.send_json(200, {"ok": True})
