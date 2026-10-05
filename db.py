@@ -44,6 +44,7 @@ SCHEMA_SQL = [
         subtitle_ar   VARCHAR(300) NULL,
         enabled_extra_langs_json LONGTEXT NULL,
         expiry_date   DATE NULL,
+        public_url    VARCHAR(300) NULL,
         created_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     """,
@@ -168,6 +169,9 @@ MIGRATE_SQL = [
     "ALTER TABLE form_fields MODIFY COLUMN field_type ENUM('text','email','tel','textarea','select','rating','checkbox','date') NOT NULL",
     "ALTER TABLE field_keys ADD COLUMN IF NOT EXISTS category VARCHAR(60) NULL",
     "ALTER TABLE field_keys MODIFY COLUMN field_type ENUM('text','email','tel','textarea','select','rating','checkbox','date') NOT NULL",
+    # The address the public actually uses for a form (a Cloudflare Tunnel
+    # hostname, say) when it isn't just this server's own host and port.
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS public_url VARCHAR(300) NULL",
 ]
 
 # Ported straight from the old hardcoded index.html, so the form looks and
@@ -271,14 +275,47 @@ DEFAULT_FIELDS = [
     ("marketing_optin",      "Yes, keep me updated with club news, match updates, ticket offers and exclusive fan experiences.", "نعم، أرغب بتلقي أخبار النادي وتحديثات المباريات وعروض التذاكر وتجارب حصرية للمشجعين.", "checkbox", None, 0),
 ]
 
+# Questions that belong in the catalog but are not put on a brand-new form,
+# because the form's built-in top section already asks for them. An admin can
+# still add one to a form from the catalog; it just isn't there by default.
+LIBRARY_ONLY_FIELDS = [
+    ("email_address",        "Email address",                                             "البريد الإلكتروني",                                "email",    None,                      0),
+]
+
+# Everything the Field keys catalog is seeded and topped up from.
+LIBRARY_FIELDS = DEFAULT_FIELDS + LIBRARY_ONLY_FIELDS
+
+# The order categories are listed in, in the catalog and in every category
+# picker: personal details first, then the visit, then what we asked about it.
+# A category an admin typed themselves comes after these, and questions with
+# no category come last of all.
+CATEGORY_ORDER = [
+    "Personal details",
+    "About the visit",
+    "Experience ratings",
+    "Overall",
+    "Consent",
+]
+
+
+def category_sort_key(category):
+    name = (category or "").strip()
+    if not name:
+        return (len(CATEGORY_ORDER) + 1, "")
+    if name in CATEGORY_ORDER:
+        return (CATEGORY_ORDER.index(name), "")
+    return (len(CATEGORY_ORDER), name.lower())
+
 
 def list_field_keys():
     conn = _conn()
     try:
         cur = conn.cursor(dictionary=True)
-        cur.execute("SELECT * FROM field_keys ORDER BY category IS NULL, category, label_en")
+        cur.execute("SELECT * FROM field_keys")
         rows = cur.fetchall()
         cur.close()
+        rows.sort(key=lambda r: category_sort_key(r.get("category"))
+                  + ((r.get("label_en") or "").lower(),))
         for r in rows:
             r["options"] = json.loads(r["options_json"]) if r["options_json"] else None
             r["labels_extra"] = json.loads(r["labels_extra_json"]) if r["labels_extra_json"] else {}
@@ -483,6 +520,7 @@ DEFAULT_CATEGORIES = {
     "exp_entry": "Experience ratings", "exp_seating": "Experience ratings",
     "exp_cleanliness": "Experience ratings", "exp_food": "Experience ratings",
     "exp_atmosphere": "Experience ratings", "exp_staff": "Experience ratings",
+    "email_address": "Personal details",
     "overall_satisfaction": "Overall", "nps": "Overall",
     "feedback_message": "Overall", "marketing_optin": "Consent",
 }
@@ -495,7 +533,7 @@ def _seed_field_key_library_if_empty(conn):
     cur.execute("SELECT COUNT(*) FROM field_keys")
     (count,) = cur.fetchone()
     if count == 0:
-        for key, en, ar, ftype, options, _required in DEFAULT_FIELDS:
+        for key, en, ar, ftype, options, _required in LIBRARY_FIELDS:
             cur.execute(
                 """INSERT INTO field_keys (field_key, label_en, label_ar, field_type, options_json, category)
                    VALUES (%s,%s,%s,%s,%s,%s)""",
@@ -510,6 +548,7 @@ BLUEPRINT_ALIASES = {
     "date_of_birth": ("dob", "birthdate", "birth_date", "date_birth", "dateofbirth"),
     "family_name": ("familyname", "surname", "family", "lastname", "last_name"),
     "phone": ("mobile", "mobile_number", "contact", "contact_number", "phone_number", "telephone"),
+    "email_address": ("email_addr", "emailaddress", "e_mail", "mail", "email_id", "mail_address"),
 }
 
 
@@ -525,7 +564,7 @@ def add_missing_library_keys():
         cur.execute("SELECT field_key FROM field_keys")
         existing = {row[0] for row in cur.fetchall()}
         added, skipped = [], []
-        for key, en, ar, ftype, options, _required in DEFAULT_FIELDS:
+        for key, en, ar, ftype, options, _required in LIBRARY_FIELDS:
             if key in existing:
                 continue
             clash = [a for a in BLUEPRINT_ALIASES.get(key, ()) if a in existing]
@@ -690,7 +729,8 @@ def used_ports(exclude_form_id=None):
         conn.close()
 
 
-def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_langs=None, expiry_date=None):
+def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_langs=None, expiry_date=None,
+                public_url=None):
     """Creates the form with no questions yet — a new form starts blank so
     an admin picks exactly the field keys it needs from the Field keys
     library, rather than inheriting the full default set."""
@@ -699,9 +739,10 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
         cur = conn.cursor()
         extra = json.dumps(enabled_extra_langs) if enabled_extra_langs else None
         cur.execute(
-            "INSERT INTO forms (name, slug, port, active, lang_en, lang_ar, enabled_extra_langs_json, expiry_date) "
-            "VALUES (%s,%s,%s,1,%s,%s,%s,%s)",
-            (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra, expiry_date))
+            "INSERT INTO forms (name, slug, port, active, lang_en, lang_ar, enabled_extra_langs_json, "
+            "expiry_date, public_url) VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s)",
+            (name, slug, port, 1 if lang_en else 0, 1 if lang_ar else 0, extra, expiry_date,
+             public_url or None))
         new_id = cur.lastrowid
         conn.commit()
         cur.close()
@@ -711,7 +752,7 @@ def create_form(name, slug, port, lang_en=True, lang_ar=True, enabled_extra_lang
 
 
 def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabled_extra_langs=None,
-                 expiry_date=_UNSET):
+                 expiry_date=_UNSET, public_url=_UNSET):
     conn = _conn()
     try:
         cur = conn.cursor()
@@ -728,6 +769,8 @@ def update_form(form_id, name=None, port=None, lang_en=None, lang_ar=None, enabl
             sets.append("enabled_extra_langs_json=%s"); params.append(json.dumps(enabled_extra_langs) if enabled_extra_langs else None)
         if expiry_date is not _UNSET:
             sets.append("expiry_date=%s"); params.append(expiry_date)   # None clears it
+        if public_url is not _UNSET:
+            sets.append("public_url=%s"); params.append(public_url or None)
         if sets:
             params.append(form_id)
             cur.execute("UPDATE forms SET " + ", ".join(sets) + " WHERE id=%s", params)

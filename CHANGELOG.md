@@ -3,6 +3,24 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.4.0
+
+- New question in the catalog: **Email address**, in English and Arabic. Every
+  form already asks for an email at the top, so this one is for when you want
+  to ask for a second address — it isn't added to a new form by default.
+- Questions are now listed **Personal details first**, then About the visit,
+  Experience ratings, Overall and Consent, in the catalog and in every
+  category picker. Your own categories follow, and anything uncategorised is
+  last.
+- A form can have a **public address** (Forms → Manage): the hostname visitors
+  really use, such as the Cloudflare Tunnel hostname pointed at that form. The
+  View button and the link beside the form then open that address.
+- Fixed: behind a tunnel or proxy, a form's link pointed at `0.0.0.0` — the
+  address the app listens on, which a browser can't open. It now uses the
+  hostname you reached the admin panel on, or the form's public address.
+- Pick a port by hand and the panel now says when Docker isn't publishing it,
+  so a form that starts but can't be reached is no longer a silent surprise.
+
 ## 1.3.0
 
 - New question type: **Date**, with a proper calendar box on phones. Dates

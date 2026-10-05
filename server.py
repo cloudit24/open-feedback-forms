@@ -85,9 +85,18 @@ _update_cache = {"at": 0, "latest": "", "notes": []}
 _update_lock = threading.Lock()
 
 HOST = os.environ.get("HOST", "127.0.0.1")
+# Addresses that mean "every interface". They're fine to bind to but useless
+# in a link, so a form's address is worked out from the request instead.
+WILDCARD_HOSTS = ("0.0.0.0", "::", "[::]", "*", "")
 ADMIN_PORT = int(os.environ.get("ADMIN_PORT", os.environ.get("PORT", "8080")))
 DEFAULT_FORM_PORT = int(os.environ.get("FORM_PORT", "8081"))
 FORM_PORT_RANGE = (8090, 8189)          # auto-assign scans this range
+# Which ports the outside world can actually reach. In Docker only published
+# ports work, however happily the listener starts inside the container — so
+# docker-compose.yml passes its published list here and the admin panel can
+# say when a hand-picked port won't be reachable. Empty = no restriction
+# (running outside Docker, where any free port works).
+PUBLISHED_PORTS_RAW = os.environ.get("PUBLISHED_PORTS", "").strip()
 TURNSTILE_SECRET = os.environ.get("TURNSTILE_SECRET", "").strip()
 RATE_LIMIT = int(os.environ.get("RATE_LIMIT", "5"))
 
@@ -258,7 +267,7 @@ def fetch_update_info():
     return latest, notes
 
 
-LIBRARY_TOPUP_MARKER = "library_keys_1_3_0"
+LIBRARY_TOPUP_MARKER = "library_keys_1_4_0"
 
 
 def topup_library_once():
@@ -453,6 +462,39 @@ def validate_submission(raw, active_fields):
 
 
 # ------------------------------------------------------------------- ports
+
+def published_ports():
+    """The set of ports reachable from outside, parsed from PUBLISHED_PORTS
+    ("8080,8081,8090-8189"). Empty set means "no restriction known"."""
+    out = set()
+    for part in PUBLISHED_PORTS_RAW.replace(" ", "").split(","):
+        if not part:
+            continue
+        if "-" in part:
+            lo, _, hi = part.partition("-")
+            try:
+                out.update(range(int(lo), int(hi) + 1))
+            except ValueError:
+                continue
+        else:
+            try:
+                out.add(int(part))
+            except ValueError:
+                continue
+    return out
+
+
+def port_reachable_warning(port):
+    """A plain-English warning when a port the admin picked by hand starts
+    fine but nothing outside the container can reach it."""
+    allowed = published_ports()
+    if not allowed or port in allowed:
+        return None
+    return ("Port %d is not published by Docker, so the form is running but "
+            "can't be reached from outside. Use a port in %s, or publish %d "
+            "in docker-compose.yml and run the installer again."
+            % (port, PUBLISHED_PORTS_RAW, port))
+
 
 def port_available(port, host=HOST):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -1550,6 +1592,29 @@ class AdminHandler(BaseHandler):
 
     # ---- forms ----------------------------------------------------------
 
+    def link_host(self):
+        """A host a browser can actually open. HOST is what we bind to, which
+        in Docker is 0.0.0.0 — no use in a link — so fall back to the host
+        this admin page was reached on (the tunnel or proxy hostname)."""
+        if HOST not in WILDCARD_HOSTS:
+            return HOST
+        raw = (self.headers.get("X-Forwarded-Host") or self.headers.get("Host") or "")
+        raw = raw.split(",")[0].strip()
+        if raw.startswith("["):                       # [::1]:8080
+            host = raw.split("]")[0] + "]"
+        else:
+            host = raw.split(":")[0]
+        return host or "localhost"
+
+    def form_url(self, form):
+        """Where the public reaches this form. A Cloudflare Tunnel or reverse
+        proxy publishes it on its own hostname, which only the admin knows —
+        so if one has been set on the form, that's the link."""
+        public = (form.get("public_url") or "").strip()
+        if public:
+            return public if public.endswith("/") else public + "/"
+        return "http://%s:%d/" % (self.link_host(), form["port"])
+
     def get_admin_forms(self):
         if not self.require_admin():
             return
@@ -1560,13 +1625,16 @@ class AdminHandler(BaseHandler):
         out = [{
             "id": f["id"], "name": f["name"], "slug": f["slug"], "port": f["port"],
             "active": f["active"], "listening": f["id"] in running,
-            "url": "http://%s:%d/" % (HOST, f["port"]),
+            "url": self.form_url(f),
+            "public_url": f.get("public_url") or "",
             "lang_en": f["lang_en"], "lang_ar": f["lang_ar"],
             "enabled_extra_langs": f.get("enabled_extra_langs") or [],
             "expiry_date": str(f["expiry_date"]) if f.get("expiry_date") else None,
             "created_at": str(f["created_at"]) if f.get("created_at") else None,
         } for f in forms]
-        return self.send_json(200, {"ok": True, "forms": out, "adminPort": ADMIN_PORT})
+        return self.send_json(200, {"ok": True, "forms": out, "adminPort": ADMIN_PORT,
+                                    "publishedPorts": PUBLISHED_PORTS_RAW,
+                                    "autoPortRange": "%d-%d" % FORM_PORT_RANGE})
 
     def post_form_create(self):
         if not self.require_permission("manage_forms"):
@@ -1596,14 +1664,30 @@ class AdminHandler(BaseHandler):
         if err:
             return self.send_json(400, {"ok": False, "error": err})
 
+        err, public_url = self._parse_public_url(body.get("public_url"))
+        if err:
+            return self.send_json(400, {"ok": False, "error": err})
+
         try:
             new_id = db.create_form(name, slug, port, lang_en=lang_en, lang_ar=lang_ar,
-                                    enabled_extra_langs=extra_langs, expiry_date=expiry_date)
+                                    enabled_extra_langs=extra_langs, expiry_date=expiry_date,
+                                    public_url=public_url)
         except Exception as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
         FORMS.sync()
         log("form created: %s (port %d)" % (name, port))
-        return self.send_json(200, {"ok": True, "id": new_id, "port": port})
+        return self.send_json(200, {"ok": True, "id": new_id, "port": port,
+                                    "warning": port_reachable_warning(port)})
+
+    def _parse_public_url(self, value):
+        """"" / None clears it. Anything else must be a plain http(s) address
+        with no path of its own. Returns (error, value_or_None)."""
+        if value in (None, ""):
+            return None, None
+        text = clean(value, 300).rstrip("/")
+        if not re.match(r"^https?://[A-Za-z0-9._~:\[\]-]+$", text):
+            return "public URL must look like https://feedback.example.com", None
+        return None, text
 
     def _parse_expiry_date(self, value):
         """value: "" / None clears it, "YYYY-MM-DD" sets it. Returns
@@ -1673,6 +1757,11 @@ class AdminHandler(BaseHandler):
             return self.send_json(400, {"ok": False, "error": "at least one language must stay enabled"})
 
         update_kwargs = {}
+        if "public_url" in body:
+            err, public_url = self._parse_public_url(body.get("public_url"))
+            if err:
+                return self.send_json(400, {"ok": False, "error": err})
+            update_kwargs["public_url"] = public_url
         if "expiry_date" in body:
             err, expiry_date = self._parse_expiry_date(body.get("expiry_date"))
             if err:
@@ -1682,7 +1771,7 @@ class AdminHandler(BaseHandler):
         db.update_form(form_id, name=name, port=port, lang_en=lang_en, lang_ar=lang_ar,
                         enabled_extra_langs=extra_langs, **update_kwargs)
         FORMS.sync()
-        return self.send_json(200, {"ok": True})
+        return self.send_json(200, {"ok": True, "warning": port_reachable_warning(port)})
 
     def post_form_delete(self, form_id):
         if not self.require_permission("manage_forms"):

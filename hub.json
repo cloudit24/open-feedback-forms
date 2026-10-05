@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.2.0 released: admin panel now uses the house admin design, and the owner is told in-panel when a new version is published",
-  "next": "On the client server, run the install link once to move it to 1.2.0 and see the new look",
+  "status": "v1.4.0 released: Email address question in both languages, Personal details listed first, and a form can carry its public (Cloudflare Tunnel) address so links no longer point at 0.0.0.0",
+  "next": "On the client server, run the install link once to move it to 1.4.0, then set each form's public address under Forms → Manage",
   "url": "http://localhost:8080/admin",
-  "updated_by": "Claude, 2026-10-03"
+  "updated_by": "Claude, 2026-10-05"
 }

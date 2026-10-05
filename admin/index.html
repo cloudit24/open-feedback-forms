@@ -828,7 +828,11 @@ table.subs tr:last-child td{border-bottom:none}
       <input type="text" id="fe-name" placeholder="e.g. Downtown Music Festival">
       <label for="fe-port">Port</label>
       <input type="number" id="fe-port" placeholder="leave blank to auto-assign">
-      <p class="hint">Each form needs its own port (1024–65535). Point a separate Cloudflare Tunnel hostname at this port to publish it.</p>
+      <p class="hint" id="fe-port-hint">Each form needs its own port (1024–65535). Point a separate Cloudflare Tunnel hostname at this port to publish it.</p>
+
+      <label for="fe-public-url">Public address <span class="hint" style="display:inline">(optional)</span></label>
+      <input type="text" id="fe-public-url" placeholder="https://feedback.example.com" dir="ltr">
+      <p class="hint">The address visitors use, if it isn't this server's own host and port — the Cloudflare Tunnel hostname you pointed at this form, for example. Set it and the <b>View</b> button and the link shown next to the form both open that address instead.</p>
 
       <label>Language Labels</label>
       <div class="check-row"><input type="checkbox" id="fe-lang-en"><label for="fe-lang-en" style="margin:0">English</label></div>
@@ -1205,6 +1209,8 @@ function loadForms(){
   api("GET", "/admin/forms").then(function(res){
     if (res.status !== 200) return;
     STATE.forms = res.body.forms;
+    STATE.publishedPorts = res.body.publishedPorts || "";
+    STATE.autoPortRange = res.body.autoPortRange || "";
     renderForms();
     populateFormSelects();
     if (STATE.currentFormId && !$("form-detail-view").classList.contains("hidden")){
@@ -1391,6 +1397,12 @@ function openFormEditor(form){
   $("fe-lang-en").checked = form ? form.lang_en : true;
   $("fe-lang-ar").checked = form ? form.lang_ar : true;
   $("fe-expiry").value = (form && form.expiry_date) || "";
+  $("fe-public-url").value = (form && form.public_url) || "";
+  $("fe-port-hint").innerHTML = STATE.publishedPorts
+    ? 'Leave blank and a free port is picked from <code>' + escapeHtml(STATE.autoPortRange) + '</code>. ' +
+      'In Docker only published ports can be reached from outside — this install publishes <code>' +
+      escapeHtml(STATE.publishedPorts) + '</code>.'
+    : 'Each form needs its own port (1024–65535). Leave blank to auto-assign.';
   renderFormEditorExtraLangs(form ? (form.enabled_extra_langs || []) : []);
   clearFlash("form-editor-msg");
   show("form-editor-view");
@@ -1436,10 +1448,14 @@ $("fe-save").addEventListener("click", function(){
   var extraLangs = collectFormEditorExtraLangs();
   if (!langEn && !langAr && !extraLangs.length){ flash("form-editor-msg", "At least one language must stay enabled."); return; }
   var payload = { name: name, port: port || undefined, lang_en: langEn, lang_ar: langAr, enabled_extra_langs: extraLangs,
-                  expiry_date: $("fe-expiry").value || "" };
+                  expiry_date: $("fe-expiry").value || "",
+                  public_url: $("fe-public-url").value.trim() };
   var url = STATE.editingFormId ? "/admin/forms/" + STATE.editingFormId + "/update" : "/admin/forms";
   api("POST", url, payload).then(function(res){
-    if (res.body.ok){ show("dash-view"); loadForms(); return; }
+    if (res.body.ok){
+      if (res.body.warning){ alert(res.body.warning); }
+      show("dash-view"); loadForms(); return;
+    }
     flash("form-editor-msg", res.body.error || "Could not save this form.");
   });
 });
@@ -1579,6 +1595,13 @@ function populatePredefinedSelect(){
 }
 // Questions in one list, under their category heading. A question with no
 // category falls under "Other", listed last.
+// The order the server lists categories in — personal details first.
+var CATEGORY_ORDER = ["Personal details", "About the visit", "Experience ratings", "Overall", "Consent"];
+function categoryRank(name){
+  var i = CATEGORY_ORDER.indexOf(name);
+  if (i !== -1) return i;
+  return name === "Other" ? CATEGORY_ORDER.length + 1 : CATEGORY_ORDER.length;
+}
 function groupByCategory(items){
   var order = [], byName = {};
   items.forEach(function(f){
@@ -1587,8 +1610,8 @@ function groupByCategory(items){
     byName[name].push(f);
   });
   order.sort(function(a, b){
-    if (a === "Other") return 1;
-    if (b === "Other") return -1;
+    var ra = categoryRank(a), rb = categoryRank(b);
+    if (ra !== rb) return ra - rb;
     return a.localeCompare(b);
   });
   return order.map(function(name){ return {name: name, items: byName[name]}; });
@@ -1599,7 +1622,11 @@ function knownCategories(){
     var c = (f.category || "").trim();
     if (c) seen[c] = true;
   });
-  return Object.keys(seen).sort();
+  return Object.keys(seen).sort(function(a, b){
+    var ra = categoryRank(a), rb = categoryRank(b);
+    if (ra !== rb) return ra - rb;
+    return a.localeCompare(b);
+  });
 }
 function renderLibrary(){
   var box = $("lib-list");
