@@ -667,6 +667,25 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
               <p class="hint">The button shows only when it has both text and a link starting with http:// or https://.</p>
             </div>
 
+            <div class="br-sect">
+              <h3>Terms and Conditions</h3>
+              <p class="hint">Shown at the end of the form, above the tick box visitors must agree to. Leave a box blank to keep the standard wording.</p>
+              <label for="br-terms-title-en">Title (English)</label>
+              <input type="text" id="br-terms-title-en" maxlength="200" placeholder="Terms and Conditions">
+              <label for="br-terms-title-ar">Title (Arabic)</label>
+              <input type="text" id="br-terms-title-ar" dir="rtl" maxlength="200" placeholder="الشروط والأحكام">
+              <label id="br-terms-text-en-label">Text (English)</label>
+              <div id="br-terms-text-en"></div>
+              <label id="br-terms-text-ar-label">Text (Arabic)</label>
+              <div id="br-terms-text-ar"></div>
+              <div class="row" style="margin-top:10px">
+                <div><label for="br-consent-en">Tick box text (English)</label>
+                  <input type="text" id="br-consent-en" maxlength="200" placeholder="I agree to terms and conditions"></div>
+                <div><label for="br-consent-ar">Tick box text (Arabic)</label>
+                  <input type="text" id="br-consent-ar" dir="rtl" maxlength="200" placeholder="أوافق على الشروط والأحكام"></div>
+              </div>
+            </div>
+
             <div class="msg" id="branding-msg"></div>
             <button class="btn" id="branding-save-btn" style="margin-top:14px">Save branding</button>
             </div>
@@ -3328,6 +3347,8 @@ var welcomeEn = makeEditor($("br-welcome-text-en"), "ltr", "Shown under the welc
 var welcomeAr = makeEditor($("br-welcome-text-ar"), "rtl", "يظهر تحت عنوان الترحيب", function(){});
 var thanksEn = makeEditor($("br-thanks-text-en"), "ltr", "Shown after the form is sent", function(){});
 var thanksAr = makeEditor($("br-thanks-text-ar"), "rtl", "يظهر بعد إرسال النموذج", function(){});
+var termsEn = makeEditor($("br-terms-text-en"), "ltr", "Blank = the standard terms text", function(){});
+var termsAr = makeEditor($("br-terms-text-ar"), "rtl", "فارغ = نص الشروط القياسي", function(){});
 var feClosedEn = makeEditor($("fe-closed-en"), "ltr", "Shown when the form is closed", function(){});
 var feClosedAr = makeEditor($("fe-closed-ar"), "rtl", "يظهر عندما يكون النموذج مغلقاً", function(){});
 var feOpensEn = makeEditor($("fe-opens-en"), "ltr", "Shown before the form opens", function(){});
@@ -3522,6 +3543,12 @@ function loadBranding(){
     $("br-thanks-btn-en").value = b.thanks_button_en || "";
     $("br-thanks-btn-ar").value = b.thanks_button_ar || "";
     $("br-thanks-url").value = b.thanks_url || "";
+    $("br-terms-title-en").value = b.terms_title_en || "";
+    $("br-terms-title-ar").value = b.terms_title_ar || "";
+    termsEn.setHtml(b.terms_text_en || "");
+    termsAr.setHtml(b.terms_text_ar || "");
+    $("br-consent-en").value = b.consent_label_en || "";
+    $("br-consent-ar").value = b.consent_label_ar || "";
     $("br-hidden").value = b.hidden_fields || "";
     updatePreview();
     $("br-primary").value = b.primary_color;
@@ -3587,6 +3614,12 @@ $("branding-save-btn").addEventListener("click", function(){
     thanks_button_en: $("br-thanks-btn-en").value.trim(),
     thanks_button_ar: $("br-thanks-btn-ar").value.trim(),
     thanks_url: $("br-thanks-url").value.trim(),
+    terms_title_en: $("br-terms-title-en").value.trim(),
+    terms_title_ar: $("br-terms-title-ar").value.trim(),
+    terms_text_en: termsEn.getHtml(),
+    terms_text_ar: termsAr.getHtml(),
+    consent_label_en: $("br-consent-en").value.trim(),
+    consent_label_ar: $("br-consent-ar").value.trim(),
     hidden_fields: $("br-hidden").value.trim(),
     primary_color: $("br-primary").value.trim(),
     ink_color: $("br-ink").value.trim(),

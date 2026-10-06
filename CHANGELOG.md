@@ -3,6 +3,12 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## Unreleased
+
+- Terms and Conditions can now be edited per form (Questions & design >
+  Branding): title, text and the tick-box wording, in English and Arabic.
+  Leave a box blank to keep the standard wording.
+
 ## 1.13.0
 
 - Admin: form settings, the question editor and the other editors now open

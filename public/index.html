@@ -723,6 +723,7 @@ function applyLang(next){
     nodes[i].textContent = text;
   }
   $("formTitle").textContent = titleText;
+  applyTermsText();
   // The server already cleaned this text with an allow-list (sanitise.py).
   $("formDesc").innerHTML = descHtml || "";
   $("formDesc").classList.toggle("hidden", !descHtml);
@@ -773,6 +774,15 @@ function applyWelcomeText(){
   var html = langPick(BRANDING.welcomeTextEn, BRANDING.welcomeTextAr);
   $("welcomeText").innerHTML = html || "";
   $("welcomeText").classList.toggle("hidden", !html);
+}
+// This form's own Terms and Conditions wording, when set (else the standard text).
+function applyTermsText(){
+  var t = langPick(BRANDING.termsTitleEn, BRANDING.termsTitleAr);
+  if (t) document.querySelector('.privacy [data-i18n="privacyTitle"]').textContent = t;
+  var html = langPick(BRANDING.termsTextEn, BRANDING.termsTextAr);
+  if (html) document.querySelector('.privacy [data-i18n="privacyBody"]').innerHTML = html;
+  var c = langPick(BRANDING.consentLabelEn, BRANDING.consentLabelAr);
+  if (c) document.querySelector('label[for="consent"] [data-i18n="consent"]').textContent = c;
 }
 function applyThanksText(){
   var strings = T[lang] || T.en;

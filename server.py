@@ -288,8 +288,10 @@ TITLE_ALIGNS = ("start", "center")
 LAYOUT_MODES = ("single_page", "steps", "one_at_a_time")
 # Welcome / thank-you screen columns on `forms`: short text, styled text, link.
 SCREEN_TEXT_COLS = ("welcome_title_en", "welcome_title_ar", "thanks_title_en", "thanks_title_ar",
-                    "thanks_button_en", "thanks_button_ar")
-SCREEN_RICH_COLS = ("welcome_text_en", "welcome_text_ar", "thanks_text_en", "thanks_text_ar")
+                    "thanks_button_en", "thanks_button_ar",
+                    "terms_title_en", "terms_title_ar", "consent_label_en", "consent_label_ar")
+SCREEN_RICH_COLS = ("welcome_text_en", "welcome_text_ar", "thanks_text_en", "thanks_text_ar",
+                    "terms_text_en", "terms_text_ar")
 URL_RE = re.compile(r"^https?://[^\s<>\"']{1,490}$", re.I)
 FONT_FILE_RE = re.compile(r"^[a-z0-9-]+\.woff2$")
 
@@ -391,6 +393,12 @@ def form_look(form):
         "thanksButtonAr": (form.get("thanks_button_ar") or "").strip(),
         # only ever a plain http(s) address; anything else is dropped here too
         "thanksUrl": (form.get("thanks_url") or "").strip() if URL_RE.match((form.get("thanks_url") or "").strip()) else "",
+        "termsTitleEn": (form.get("terms_title_en") or "").strip(),
+        "termsTitleAr": (form.get("terms_title_ar") or "").strip(),
+        "termsTextEn": sanitise.sanitise(form.get("terms_text_en")),
+        "termsTextAr": sanitise.sanitise(form.get("terms_text_ar")),
+        "consentLabelEn": (form.get("consent_label_en") or "").strip(),
+        "consentLabelAr": (form.get("consent_label_ar") or "").strip(),
     }
 
 
@@ -2376,6 +2384,12 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "thanks_button_en": form.get("thanks_button_en") or "",
             "thanks_button_ar": form.get("thanks_button_ar") or "",
             "thanks_url": form_look(form)["thanksUrl"],
+            "terms_title_en": form.get("terms_title_en") or "",
+            "terms_title_ar": form.get("terms_title_ar") or "",
+            "terms_text_en": sanitise.sanitise(form.get("terms_text_en")),
+            "terms_text_ar": sanitise.sanitise(form.get("terms_text_ar")),
+            "consent_label_en": form.get("consent_label_en") or "",
+            "consent_label_ar": form.get("consent_label_ar") or "",
             "hidden_fields": ", ".join(form_look(form)["hiddenFields"]),
             "form_name": form.get("name") or "",
             "theme_mode": form.get("theme_mode") or "both",
