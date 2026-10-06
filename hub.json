@@ -1,7 +1,7 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.13.0 released: neutral templates, title/fonts, tap ratings, layouts, show-if rules, Summary charts, webhooks, full-response view, in-app editors",
-  "next": "Push the editable Terms and Conditions change, then update the local install",
+  "status": "v1.13.1 released: editable Terms and Conditions per form",
+  "next": "Rewrite the standard terms text (it mentions mobile and nationality)",
   "url": "http://localhost:8800/admin",
   "updated_by": "Claude, 2026-10-06"
 }
