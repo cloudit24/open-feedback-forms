@@ -927,6 +927,8 @@ function fetchFields(){
 function fieldInputId(f){ return "field_" + f.field_key; }
 function fieldWrapId(f){ return "fwrap_" + f.field_key; }
 
+// A question's wording, tagged so the admin's live preview can edit it in place.
+function qLabel(f){ return '<span data-pvq="' + escapeHtml(f.field_key) + '">' + escapeHtml(String(fieldLabel(f))) + '</span>'; }
 function fieldLabel(f){
   // en/ar always come from their own dedicated columns; any language beyond
   // that lives in labels_extra, filled in by hand or by auto-translate.
@@ -986,7 +988,7 @@ function drawFields(){
     wrap.id = fieldWrapId(f);
     wrap._f = [f];
 
-    var labelHtml = '<label for="' + fieldInputId(f) + '">' + escapeHtml(fieldLabel(f)) +
+    var labelHtml = '<label for="' + fieldInputId(f) + '">' + qLabel(f) +
       (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') +
       '</label>';
 
@@ -1029,7 +1031,7 @@ function drawFields(){
 
     } else if (f.field_type === "rating"){
       wrap.innerHTML =
-        '<label id="' + fieldInputId(f) + '_label">' + escapeHtml(fieldLabel(f)) +
+        '<label id="' + fieldInputId(f) + '_label">' + qLabel(f) +
           (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') +
         '</label>' +
         '<div class="stars" id="' + fieldInputId(f) + '" role="radiogroup" aria-labelledby="' + fieldInputId(f) + '_label"></div>' +
@@ -1040,7 +1042,7 @@ function drawFields(){
 
     } else if (f.field_type === "textarea"){
       wrap.innerHTML =
-        '<label for="' + fieldInputId(f) + '">' + escapeHtml(fieldLabel(f)) +
+        '<label for="' + fieldInputId(f) + '">' + qLabel(f) +
           (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') +
           ' <span class="counter" id="' + fieldInputId(f) + '_counter">0 / 1000</span>' +
         '</label>' +
@@ -1058,7 +1060,7 @@ function drawFields(){
       wrap.className = "check";
       wrap.innerHTML =
         '<input type="checkbox" id="' + fieldInputId(f) + '">' +
-        '<label for="' + fieldInputId(f) + '">' + escapeHtml(fieldLabel(f)) + (f.required ? '<span class="req">*</span>' : '') + '</label>';
+        '<label for="' + fieldInputId(f) + '">' + qLabel(f) + (f.required ? '<span class="req">*</span>' : '') + '</label>';
       box.appendChild(wrap);
 
     } else if (f.field_type === "date"){
@@ -1137,7 +1139,7 @@ function effectiveStyle(f){
 }
 function optionSig(f){ return (f.options || []).map(function(o){ return o.value; }).join("|"); }
 function groupLabelHtml(f){
-  return '<label id="' + fieldInputId(f) + '_label">' + escapeHtml(fieldLabel(f)) +
+  return '<label id="' + fieldInputId(f) + '_label">' + qLabel(f) +
     (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') + '</label>';
 }
 
@@ -1255,7 +1257,7 @@ function buildGrid(run){
     var row = document.createElement("div");
     row.className = "field mrow";
     row.id = fieldWrapId(f);
-    row.innerHTML = '<div class="mq" id="' + fieldInputId(f) + '_label">' + escapeHtml(fieldLabel(f)) +
+    row.innerHTML = '<div class="mq" id="' + fieldInputId(f) + '_label">' + qLabel(f) +
       (f.required ? '<span class="req">*</span>' : ' <span class="opt">' + T[lang].optional + '</span>') + '</div>' +
       '<div class="mcells" id="' + fieldInputId(f) + '"></div>' +
       '<p class="err">' + escapeHtml(T[lang].errSelect) + '</p>';
@@ -1371,13 +1373,99 @@ function collectDynamicValue(f){
 // unsaved settings in with offPreview(); nothing is ever sent from here.
 var PREVIEW = /[?&]preview=1(&|$)/.test(location.search);
 window.offPreview = function(over, wantLang){
-  if (!PREVIEW) return;
+  if (!PREVIEW || PV_EDITING) return;      // never redraw under the cursor while a text is being edited
   var b = {};
   for (var k in BRANDING) b[k] = BRANDING[k];
   for (var j in over) if (over[j] !== undefined) b[j] = over[j];
   if (wantLang && LANG_LIST.indexOf(wantLang) !== -1) lang = wantLang;
   applyBranding(b);
 };
+/* Live edit (admin preview only): with editing on, a click on a text of the
+   form makes it editable in place; when done, the admin panel's matching box
+   is updated (and saved with "Save branding"). Visitors never get this. */
+var PV_EDIT = false, PV_EDITING = null;
+var PV_RICH = {desc: 1, welcomeText: 1, thanksText: 1, termsText: 1};
+var PV_UI = ["submit", "next", "back", "start", "again", "refLabel", "firstName", "lastName", "email"];
+function pvKeyOf(el){
+  if (el.getAttribute("data-pvq")) return "q:" + el.getAttribute("data-pvq");
+  var ids = {formTitle: "title", formDesc: "desc", welcomeTitle: "welcomeTitle", welcomeText: "welcomeText",
+             doneTitle: "thanksTitle", doneText: "thanksText", doneBody: "thanksText"};
+  if (ids[el.id]) return ids[el.id];
+  var k = el.getAttribute("data-i18n");
+  if (k === "privacyTitle") return "termsTitle";
+  if (k === "privacyBody") return "termsText";
+  if (k === "consent") return "consent";
+  if (k && PV_UI.indexOf(k) !== -1) return "ui:" + k;
+  return null;
+}
+function pvTarget(node){
+  for (var el = node; el && el !== document.body; el = el.parentNode){
+    if (el.nodeType === 1 && pvKeyOf(el)) return el;
+  }
+  return null;
+}
+function pvFinish(el, keep){
+  if (!el || PV_EDITING !== el) return;
+  var key = pvKeyOf(el);
+  el.removeAttribute("contenteditable");
+  el.classList.remove("pv-editing");
+  PV_EDITING = null;
+  if (!keep){ el.innerHTML = el._pvBefore; return; }
+  var value = PV_RICH[key] ? el.innerHTML : el.textContent.replace(/\s+/g, " ").trim();
+  if (value === el._pvBefore) return;
+  try { if (window.parent && window.parent.offPreviewEdited) window.parent.offPreviewEdited(key, lang, value); } catch(e){}
+}
+function pvStart(el){
+  if (PV_EDITING === el) return;
+  if (PV_EDITING) pvFinish(PV_EDITING, true);
+  if (lang !== "en" && lang !== "ar"){ banner("Live edit works in English and Arabic."); return; }
+  if (el.id === "doneBody"){ el.innerHTML = "<p>" + escapeHtml(el.textContent) + "</p>"; }
+  PV_EDITING = el;
+  el._pvBefore = PV_RICH[pvKeyOf(el)] ? el.innerHTML : el.textContent;
+  el.setAttribute("contenteditable", PV_RICH[pvKeyOf(el)] ? "true" : "plaintext-only");
+  if (el.contentEditable !== "plaintext-only" && !PV_RICH[pvKeyOf(el)]) el.setAttribute("contenteditable", "true");
+  el.classList.add("pv-editing");
+  el.focus();
+}
+if (PREVIEW){
+  document.addEventListener("click", function(e){
+    if (!PV_EDIT) return;
+    var t = pvTarget(e.target);
+    if (!t){ if (PV_EDITING && !PV_EDITING.contains(e.target)) pvFinish(PV_EDITING, true); return; }
+    e.preventDefault(); e.stopPropagation();
+    pvStart(t);
+  }, true);
+  document.addEventListener("keydown", function(e){
+    if (!PV_EDITING) return;
+    if (e.key === "Escape"){ e.preventDefault(); pvFinish(PV_EDITING, false); return; }
+    if (e.key === "Enter" && !PV_RICH[pvKeyOf(PV_EDITING)]){ e.preventDefault(); pvFinish(PV_EDITING, true); return; }
+    if (e.key === " " || e.key === "Enter") e.stopPropagation();
+  }, true);
+  document.addEventListener("keyup", function(e){ if (PV_EDITING && e.key === " ") e.preventDefault(); }, true);
+  document.addEventListener("focusout", function(e){ if (PV_EDITING && e.target === PV_EDITING) pvFinish(PV_EDITING, true); }, true);
+  var pvCss = document.createElement("style");
+  pvCss.textContent =
+    "body.pv-edit [data-pvq],body.pv-edit #formTitle,body.pv-edit #formDesc,body.pv-edit #welcomeTitle,body.pv-edit #welcomeText," +
+    "body.pv-edit #doneTitle,body.pv-edit #doneText,body.pv-edit #doneBody,body.pv-edit [data-i18n]{cursor:text}" +
+    "body.pv-edit .pv-hot{outline:2px dashed var(--yellow-deep);outline-offset:3px;border-radius:3px}" +
+    ".pv-editing{outline:2px solid var(--yellow-deep)!important;outline-offset:3px;border-radius:3px;cursor:text}";
+  document.head.appendChild(pvCss);
+  document.addEventListener("mouseover", function(e){
+    var old = document.querySelector(".pv-hot");
+    if (old) old.classList.remove("pv-hot");
+    if (!PV_EDIT) return;
+    var t = pvTarget(e.target);
+    if (t && t !== PV_EDITING) t.classList.add("pv-hot");
+  });
+}
+window.offEditMode = function(on){
+  if (!PREVIEW) return;
+  PV_EDIT = !!on;
+  document.body.classList.toggle("pv-edit", PV_EDIT);
+  if (!PV_EDIT && PV_EDITING) pvFinish(PV_EDITING, true);
+};
+window.offPreviewBusy = function(){ return !!PV_EDITING; };
+
 function submit(e){
   e.preventDefault();
   banner("");

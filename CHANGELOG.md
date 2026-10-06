@@ -3,6 +3,14 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.13.4
+
+- Edit live: in Branding, with "Click text to edit" on, click any title,
+  description, question, button, terms text or message in the preview and
+  type over it. The matching box updates, and Save branding keeps it
+  (question wording is saved too, and nothing else about the question
+  changes). Turn it off to click through the form. Visitors never get this.
+
 ## 1.13.3
 
 - Branding has a real live preview: your actual form, with your colours,

@@ -264,6 +264,10 @@ table.subs tr:last-child td{border-bottom:none}
 .br-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:900px){.br-grid{grid-template-columns:minmax(0,1fr)}}
 .br-preview{position:sticky;top:12px}
+.pv-edit-toggle{display:inline-flex;align-items:center;gap:6px;margin:0 auto 0 12px;font-size:13px;font-weight:400;cursor:pointer}
+.pv-edit-toggle input{width:auto;margin:0}
+.pv-flash{animation:pvflash 1.2s ease-out}
+@keyframes pvflash{from{box-shadow:0 0 0 3px var(--accent)}to{box-shadow:0 0 0 3px transparent}}
 .wd-group{margin:12px 0 4px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
 .wd-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:8px}
 .wd-row label{grid-column:1/-1;margin:0;font-size:13px}
@@ -711,12 +715,13 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
             </div>
             <div class="br-preview" aria-label="Live preview">
               <div class="br-preview-bar"><b>Preview</b>
+                <label class="pv-edit-toggle"><input type="checkbox" id="pv-edit-on" checked> Click text to edit</label>
                 <span class="seg" role="group" aria-label="Preview language">
                   <button type="button" id="pv-en" aria-pressed="true">EN</button>
                   <button type="button" id="pv-ar" aria-pressed="false">AR</button>
                 </span></div>
               <iframe id="pv-frame" class="pv-frame" title="Live preview of this form"></iframe>
-              <p class="hint" style="margin-top:6px">Your real form with the changes above, before saving. Nothing is sent from the preview.</p>
+              <p class="hint" style="margin-top:6px">Your real form with the changes above, before saving. With <b>Click text to edit</b> on, click any title, question, button or message and type; Enter or a click elsewhere keeps it, Esc undoes. Turn it off to click through the form. Nothing is sent from the preview, and nothing is kept until you click <b>Save branding</b>.</p>
             </div></div>
           </div>
 
@@ -3613,14 +3618,66 @@ function updatePreview(){
   pvTimer = setTimeout(function(){
     var w = null;
     try { w = $("pv-frame").contentWindow; } catch(e){}
+    if (w && typeof w.offEditMode === "function") w.offEditMode($("pv-edit-on").checked);
     if (w && typeof w.offPreview === "function") w.offPreview(previewBranding(), pvLang);
   }, 250);
+}
+$("pv-edit-on").addEventListener("change", function(){
+  var w = null;
+  try { w = $("pv-frame").contentWindow; } catch(e){}
+  if (w && w.offEditMode) w.offEditMode(this.checked);
+});
+
+/* A text edited in the preview lands in its box here (and is kept with Save
+   branding). Question wording waits in PV_LABELS until then. */
+var PV_LABELS = {};     // "fieldId:lang" -> new wording
+function pvFlash(el){
+  if (!el) return;
+  el.classList.remove("pv-flash"); void el.offsetWidth; el.classList.add("pv-flash");
+}
+window.offPreviewEdited = function(key, l, value){
+  if (l !== "en" && l !== "ar") return;
+  var editors = {desc: [descEn, descAr, "br-desc-"], welcomeText: [welcomeEn, welcomeAr, "br-welcome-text-"],
+                 thanksText: [thanksEn, thanksAr, "br-thanks-text-"], termsText: [termsEn, termsAr, "br-terms-text-"]};
+  var boxes = {title: "br-title-", welcomeTitle: "br-welcome-title-", thanksTitle: "br-thanks-title-",
+               termsTitle: "br-terms-title-", consent: "br-consent-"};
+  var shown = null;
+  if (editors[key]){
+    (l === "en" ? editors[key][0] : editors[key][1]).setHtml(pvClean(value));
+    shown = $(editors[key][2] + l);
+  } else if (boxes[key]){
+    shown = $(boxes[key] + l); shown.value = value;
+  } else if (key.indexOf("ui:") === 0){
+    shown = $("wd-" + l + "-" + key.slice(3));
+    if (shown) shown.value = value;
+  } else if (key.indexOf("q:") === 0){
+    var f = (STATE.fields || []).filter(function(x){ return x.field_key === key.slice(2); })[0];
+    if (!f || !value) return;
+    PV_LABELS[f.id + ":" + l] = value;
+  }
+  pvFlash(shown);
+  var n = Object.keys(PV_LABELS).length;
+  flash("branding-msg", "Changed in the preview — click Save branding to keep it" +
+        (n ? " (" + n + " question" + (n > 1 ? "s" : "") + " too)." : "."), true);
+};
+// question wording edited in the preview: saved one by one, only the wording
+function savePreviewLabels(){
+  var jobs = Object.keys(PV_LABELS).map(function(k){
+    var p = k.split(":");
+    return api("POST", "/admin/fields/" + p[0] + "/label", {lang: p[1], label: PV_LABELS[k]});
+  });
+  PV_LABELS = {};
+  return Promise.all(jobs).then(function(results){
+    if (jobs.length) loadFields();
+    return results.every(function(r){ return r.body && r.body.ok; });
+  });
 }
 function loadPreviewFrame(){
   var f = (STATE.forms || []).filter(function(x){ return x.id === STATE.currentFormId; })[0];
   if (!f) return;
   var src = "/f/" + encodeURIComponent(f.slug) + "/?preview=1";
   var frame = $("pv-frame");
+  PV_LABELS = {};      // question wording edited in the preview of another form is dropped
   // the wording boxes are refilled from this form's saved texts
   document.querySelectorAll("#br-wording input").forEach(function(el){ delete el.dataset.loaded; delete el.dataset.def; });
   applyWordingDefaults();
@@ -3765,7 +3822,12 @@ $("branding-save-btn").addEventListener("click", function(){
   var payload = brandingPayload();
   if (pendingLogo){ payload.logo_base64 = pendingLogo.base64; payload.logo_ext = pendingLogo.ext; }
   api("POST", "/admin/forms/" + STATE.currentFormId + "/branding", payload).then(function(res){
-    if (res.body.ok){ flash("branding-msg", "Saved.", true); pendingLogo = null; loadBranding(); return; }
+    if (res.body.ok){
+      savePreviewLabels().then(function(allOk){
+        flash("branding-msg", allOk ? "Saved." : "Saved, but some question wording could not be saved.", allOk);
+      });
+      pendingLogo = null; loadBranding(); return;
+    }
     flash("branding-msg", res.body.error || "Could not save branding.");
   });
 });

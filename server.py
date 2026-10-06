@@ -1456,6 +1456,10 @@ class AdminHandler(PublicRoutes, BaseHandler):
         if m:
             return self.post_field_page_break(int(m.group(1)))
 
+        m = re.match(r"^/admin/fields/(\d+)/label$", path)
+        if m:
+            return self.post_field_label(int(m.group(1)))
+
         m = re.match(r"^/admin/fields/(\d+)/(update|delete|restore)$", path)
         if m:
             field_id, action = int(m.group(1)), m.group(2)
@@ -2702,6 +2706,22 @@ class AdminHandler(PublicRoutes, BaseHandler):
         except Exception as e:
             return self.send_json(400, {"ok": False, "error": str(e)})
         return self.send_json(200, {"ok": True, "id": new_id})
+
+    def post_field_label(self, field_id):
+        existing = db.get_field(field_id)
+        if not existing:
+            return self.send_json(404, {"ok": False, "error": "field not found"})
+        if not self.require_permission("edit_fields", existing["form_id"]):
+            return
+        body = self.read_json_body() or {}
+        lng = body.get("lang")
+        label = clean(body.get("label"), 200)
+        if lng not in ("en", "ar"):
+            return self.send_json(400, {"ok": False, "error": "language must be en or ar"})
+        if not label:
+            return self.send_json(400, {"ok": False, "error": "a question needs some text"})
+        db.set_field_label(field_id, lng, label)
+        return self.send_json(200, {"ok": True})
 
     def post_field_update(self, field_id):
         existing = db.get_field(field_id)

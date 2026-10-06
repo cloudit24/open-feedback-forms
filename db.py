@@ -1501,6 +1501,20 @@ def update_field(field_id, data):
         conn.close()
 
 
+def set_field_label(field_id, lang, label):
+    """Only the English or Arabic wording of one question (live edit in the
+    preview). Nothing else about the question is touched."""
+    col = {"en": "label_en", "ar": "label_ar"}[lang]
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        cur.execute("UPDATE form_fields SET " + col + "=%s WHERE id=%s", (label, field_id))
+        conn.commit()
+        cur.close()
+    finally:
+        conn.close()
+
+
 def get_field(field_id):
     conn = _conn()
     try:
