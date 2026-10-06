@@ -3,6 +3,21 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.13.3
+
+- Branding has a real live preview: your actual form, with your colours,
+  logo, questions, layout, terms and buttons, updates as you type. Nothing
+  is sent from the preview; it shows the thank-you screen instead.
+- New "Form wording" section: every fixed text on the form (Send, Next,
+  Back, Start, labels, error messages) can be changed in English and Arabic.
+- Text boxes for the terms, tick box, thank-you screen and wording now start
+  with the text the form shows today, so you edit it instead of retyping it.
+  A box left unchanged keeps the standard wording, so existing forms look
+  exactly as before.
+- The version is shown next to the title, with "up to date" or "update
+  available". Click it to check again. Updates now show within an hour (was
+  six).
+
 ## 1.13.2
 
 - Terms and Conditions can be switched per form (Questions & design >

@@ -55,6 +55,9 @@ body{
   margin:0 -32px;padding:14px 32px;background:var(--header-bg);color:#fff;
   box-shadow:0 0 0 100vmax var(--header-bg);clip-path:inset(0 -100vmax)}
 .top h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+.ver-badge{vertical-align:middle;margin-inline-start:6px;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;font-family:inherit;cursor:default}
+.ver-badge.can-check{cursor:pointer}.ver-badge.can-check:hover{color:var(--ink);border-color:var(--ink-soft)}
+.ver-badge.has-update{background:var(--accent);border-color:var(--accent);color:#0B0B0B;cursor:pointer}
 .top .sub{color:rgba(255,255,255,.75);font-size:13px;margin-top:2px}
 .top .btn-outline{color:#fff;border-color:rgba(255,255,255,.35);background:transparent}
 .top .btn-outline:hover{border-color:#fff;background:rgba(255,255,255,.08)}
@@ -261,6 +264,11 @@ table.subs tr:last-child td{border-bottom:none}
 .br-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:900px){.br-grid{grid-template-columns:minmax(0,1fr)}}
 .br-preview{position:sticky;top:12px}
+.wd-group{margin:12px 0 4px;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.wd-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px;margin-bottom:8px}
+.wd-row label{grid-column:1/-1;margin:0;font-size:13px}
+.wd-row input{margin:0}
+.pv-frame{display:block;width:100%;height:calc(100vh - 120px);min-height:520px;border:1px solid var(--line);border-radius:12px;background:var(--card)}
 .br-preview-bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}
 .br-preview-bar b{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
@@ -393,7 +401,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
   <div id="dash-view" class="hidden">
     <div class="top">
       <div>
-        <h1>Open Feedback Forms — Admin</h1>
+        <h1>Open Feedback Forms — Admin <button type="button" class="ver-badge hidden" id="ver-badge"></button></h1>
         <div class="sub"><span class="status-dot" id="conn-dot"></span><span id="conn-text">checking…</span></div>
       </div>
       <div style="display:flex;gap:8px">
@@ -668,6 +676,12 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
             </div>
 
             <div class="br-sect">
+              <h3>Form wording</h3>
+              <p class="hint">Every fixed text on the form: buttons, labels and messages. Change what you need; a box left as it is (or emptied) keeps the standard wording.</p>
+              <div id="br-wording"></div>
+            </div>
+
+            <div class="br-sect">
               <h3>Terms and Conditions</h3>
               <label for="br-terms-mode">Show</label>
               <select id="br-terms-mode">
@@ -675,7 +689,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
                 <option value="show">Terms only, no tick box</option>
                 <option value="off">Off — no terms, no tick box</option>
               </select>
-              <p class="hint">Shown at the end of the form. Leave a box blank to keep the standard wording.</p>
+              <p class="hint">Shown at the end of the form. Edit the wording below; emptying a box brings back the standard wording.</p>
               <label for="br-terms-title-en">Title (English)</label>
               <input type="text" id="br-terms-title-en" maxlength="200" placeholder="Terms and Conditions">
               <label for="br-terms-title-ar">Title (Arabic)</label>
@@ -701,10 +715,8 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
                   <button type="button" id="pv-en" aria-pressed="true">EN</button>
                   <button type="button" id="pv-ar" aria-pressed="false">AR</button>
                 </span></div>
-              <div class="pv" id="pv" data-font="system" data-size="normal" data-align="start">
-                <div class="pv-head"><h1 id="pv-title"></h1><div class="pv-desc" id="pv-desc"></div></div>
-                <div class="pv-body"><label id="pv-q">Your feedback</label><div class="pv-fake" id="pv-a">Type your answer here</div></div>
-              </div>
+              <iframe id="pv-frame" class="pv-frame" title="Live preview of this form"></iframe>
+              <p class="hint" style="margin-top:6px">Your real form with the changes above, before saving. Nothing is sent from the preview.</p>
             </div></div>
           </div>
 
@@ -1487,6 +1499,7 @@ function boot(){
     STATE.version = s.version || "";
     var aboutVersion = document.getElementById("about-version");
     if (aboutVersion) aboutVersion.textContent = STATE.version ? ("v" + STATE.version) : "";
+    setVersionBadge(STATE.version ? "v" + STATE.version : "", "");
     applyPermissionVisibility();
     show("dash-view");
     renderStatus(s);
@@ -3482,31 +3495,143 @@ var LAYOUT_HINTS = {
 };
 function updateLayoutHint(){ $("br-layout-hint").textContent = LAYOUT_HINTS[$("br-layout").value] || ""; }
 $("br-layout").addEventListener("change", updateLayoutHint);
-function updatePreview(){
-  var ar = pvLang === "ar";
-  var pv = $("pv");
-  pv.setAttribute("dir", ar ? "rtl" : "ltr");
-  pv.setAttribute("data-font", $("br-font").value);
-  pv.setAttribute("data-size", $("br-size").value);
-  pv.setAttribute("data-align", $("br-align").value);
-  $("pv-title").textContent = ($(ar ? "br-title-ar" : "br-title-en").value.trim()) || BR_FORM_NAME || "Feedback";
-  // Preview only: the saved copy is cleaned by the server, never trusted from here.
-  var html = (ar ? descAr : descEn).getHtml();
-  var box = $("pv-desc");
-  box.textContent = "";
-  if (html){
-    var tmp = document.createElement("template");
-    tmp.innerHTML = html;
-    tmp.content.querySelectorAll("script,style,iframe,object").forEach(function(n){ n.remove(); });
-    tmp.content.querySelectorAll("*").forEach(function(n){
-      Array.prototype.slice.call(n.attributes).forEach(function(a){ if (!(n.tagName === "A" && a.name === "href")) n.removeAttribute(a.name); });
-      if (n.tagName === "A" && !/^https?:\/\//i.test(n.getAttribute("href") || "")) n.removeAttribute("href");
-    });
-    box.appendChild(tmp.content);
-  }
-  $("pv-q").textContent = ar ? "ملاحظاتك" : "Your feedback";
-  $("pv-a").textContent = ar ? "اكتب إجابتك هنا" : "Type your answer here";
+/* Live preview: the form's real public page (served by this admin panel at
+   /f/<slug>/?preview=1, so same origin) is shown in a frame, and the unsaved
+   settings are pushed into it. The page itself refuses to send in preview. */
+// Preview only: the saved copy is cleaned by the server, never trusted from here.
+function pvClean(html){
+  if (!html) return "";
+  var tmp = document.createElement("template");
+  tmp.innerHTML = html;
+  tmp.content.querySelectorAll("script,style,iframe,object,embed,img,svg").forEach(function(n){ n.remove(); });
+  tmp.content.querySelectorAll("*").forEach(function(n){
+    Array.prototype.slice.call(n.attributes).forEach(function(a){ if (!(n.tagName === "A" && a.name === "href")) n.removeAttribute(a.name); });
+    if (n.tagName === "A" && !/^https?:\/\//i.test(n.getAttribute("href") || "")) n.removeAttribute("href");
+  });
+  var d = document.createElement("div");
+  d.appendChild(tmp.content);
+  return d.innerHTML;
 }
+function previewBranding(){
+  var p = brandingPayload();
+  var out = {
+    orgName: p.org_name, primaryColor: /^#[0-9a-f]{6}$/i.test(p.primary_color) ? p.primary_color : undefined,
+    inkColor: /^#[0-9a-f]{6}$/i.test(p.ink_color) ? p.ink_color : undefined, themeMode: p.theme_mode,
+    titleEn: p.title_en, titleAr: p.title_ar,
+    descriptionEn: pvClean(p.description_en), descriptionAr: pvClean(p.description_ar),
+    font: p.font, textSize: p.text_size, titleAlign: p.title_align, layoutMode: p.layout_mode,
+    welcomeEnabled: p.welcome_enabled, welcomeTitleEn: p.welcome_title_en, welcomeTitleAr: p.welcome_title_ar,
+    welcomeTextEn: pvClean(p.welcome_text_en), welcomeTextAr: pvClean(p.welcome_text_ar),
+    thanksTitleEn: p.thanks_title_en, thanksTitleAr: p.thanks_title_ar,
+    thanksTextEn: pvClean(p.thanks_text_en), thanksTextAr: pvClean(p.thanks_text_ar),
+    thanksButtonEn: p.thanks_button_en, thanksButtonAr: p.thanks_button_ar,
+    thanksUrl: /^https?:\/\//i.test(p.thanks_url) ? p.thanks_url : "",
+    termsMode: p.terms_mode, termsTitleEn: p.terms_title_en, termsTitleAr: p.terms_title_ar,
+    termsTextEn: pvClean(p.terms_text_en), termsTextAr: pvClean(p.terms_text_ar),
+    consentLabelEn: p.consent_label_en, consentLabelAr: p.consent_label_ar,
+    uiText: p.ui_text
+  };
+  if (pendingLogo) out.logoUrl = "data:image/" + (pendingLogo.ext === "svg" ? "svg+xml" : pendingLogo.ext) + ";base64," + pendingLogo.base64;
+  return out;
+}
+/* Standard wording shown in the boxes. Every box starts with the text the form
+   shows today (its own, or the standard one), so it is edited rather than
+   retyped. The standard texts come from the form page itself (T_BASE, in the
+   preview frame). A box still holding the standard text is saved as blank,
+   which keeps the standard wording: forms nobody edits stay exactly as before. */
+var BR_UI_TEXT = {};
+var WORDING_GROUPS = [
+  ["Buttons", [["submit", "Send button"], ["sending", "Send button while sending"], ["start", "Start button (welcome screen)"], ["next", "Next button"], ["back", "Back button"], ["again", "Send-again button (thank-you screen)"], ["refLabel", "Reference label (thank-you screen)"], ["progress", "Progress, e.g. 3 of 10 — keep {n} and {total}"]]],
+  ["Name and email", [["firstName", "First name"], ["lastName", "Last name"], ["email", "Email address"], ["optional", "Marker on optional questions"], ["choose", "Dropdown prompt"], ["scaleLow", "0–10 scale, low end"], ["scaleHigh", "0–10 scale, high end"]]],
+  ["Messages", [["errRequired", "A required question is empty"], ["errFirst", "First name missing"], ["errLast", "Last name missing"], ["errEmail", "Email missing"], ["errEmailFormat", "Email not valid"], ["errPhoneFormat", "Mobile number not valid"], ["errShort", "Answer too short"], ["errSelect", "No choice made"], ["errRating", "No rating given"], ["errConsent", "Agree box not ticked"], ["errFix", "Something to fix before sending"], ["errNet", "Could not send (connection)"], ["errRate", "Too many sends"], ["errBot", "Verification check failed"]]]
+];
+(function(){
+  var html = "";
+  WORDING_GROUPS.forEach(function(g){
+    html += '<div class="wd-group">' + g[0] + '</div>';
+    g[1].forEach(function(r){
+      html += '<div class="wd-row"><label for="wd-en-' + r[0] + '">' + escapeHtml(r[1]) + '</label>' +
+        '<input type="text" id="wd-en-' + r[0] + '" maxlength="300" aria-label="' + escapeHtml(r[1]) + ' (English)">' +
+        '<input type="text" id="wd-ar-' + r[0] + '" maxlength="300" dir="rtl" aria-label="' + escapeHtml(r[1]) + ' (Arabic)"></div>';
+    });
+  });
+  $("br-wording").innerHTML = html;
+})();
+function ownVal(id){
+  var el = $(id), v = el.value.trim();
+  return (el.dataset.def !== undefined && v === el.dataset.def) ? "" : v;
+}
+function ownHtml(ed){
+  var h = ed.getHtml();
+  return (ed.defHtml !== undefined && h === ed.defHtml) ? "" : h;
+}
+function wordingPayload(){
+  var out = {en: {}, ar: {}};
+  WORDING_GROUPS.forEach(function(g){ g[1].forEach(function(r){
+    ["en", "ar"].forEach(function(l){ var v = ownVal("wd-" + l + "-" + r[0]); if (v) out[l][r[0]] = v; });
+  }); });
+  return out;
+}
+// Fill a box with the standard text when it has nothing of its own.
+function fillDefault(id, def){
+  var el = $(id);
+  el.dataset.def = def || "";
+  if (!el.value.trim()) el.value = def || "";
+}
+function fillDefaultHtml(ed, text){
+  var cur = ed.getHtml();
+  if (cur){ if (cur !== ed.defHtml) ed.defHtml = undefined; return; }   // own text, or the default already in place
+  ed.setHtml(text ? "<p>" + escapeHtml(text) + "</p>" : "");
+  ed.defHtml = ed.getHtml();
+}
+function applyWordingDefaults(){
+  var w = null;
+  try { w = $("pv-frame").contentWindow; } catch(e){}
+  var base = w && w.T_BASE;
+  WORDING_GROUPS.forEach(function(g){ g[1].forEach(function(r){
+    ["en", "ar"].forEach(function(l){
+      var el = $("wd-" + l + "-" + r[0]);
+      if (!el.dataset.loaded){ el.value = (BR_UI_TEXT[l] && BR_UI_TEXT[l][r[0]]) || ""; el.dataset.loaded = "1"; }
+      if (base) fillDefault("wd-" + l + "-" + r[0], base[l][r[0]]);
+    });
+  }); });
+  if (!base) return;
+  var org = $("br-org").value.trim() || BR_FORM_NAME || "";
+  var bodyKey = w.ASK_CORE === false ? "privacyBodyNoContact" : "privacyBody";
+  [["en", termsEn, thanksEn], ["ar", termsAr, thanksAr]].forEach(function(x){
+    var l = x[0];
+    fillDefault("br-terms-title-" + l, base[l].privacyTitle);
+    fillDefault("br-consent-" + l, base[l].consent);
+    fillDefault("br-thanks-title-" + l, base[l].doneTitle);
+    fillDefaultHtml(x[1], base[l][bodyKey].split("{org}").join(org || base[l].org));
+    fillDefaultHtml(x[2], base[l].doneBody);
+  });
+}
+var pvTimer = null;
+function updatePreview(){
+  clearTimeout(pvTimer);
+  pvTimer = setTimeout(function(){
+    var w = null;
+    try { w = $("pv-frame").contentWindow; } catch(e){}
+    if (w && typeof w.offPreview === "function") w.offPreview(previewBranding(), pvLang);
+  }, 250);
+}
+function loadPreviewFrame(){
+  var f = (STATE.forms || []).filter(function(x){ return x.id === STATE.currentFormId; })[0];
+  if (!f) return;
+  var src = "/f/" + encodeURIComponent(f.slug) + "/?preview=1";
+  var frame = $("pv-frame");
+  // the wording boxes are refilled from this form's saved texts
+  document.querySelectorAll("#br-wording input").forEach(function(el){ delete el.dataset.loaded; delete el.dataset.def; });
+  applyWordingDefaults();
+  if (frame.getAttribute("src") !== src) frame.setAttribute("src", src);
+  else updatePreview();
+}
+$("pv-frame").addEventListener("load", function(){ applyWordingDefaults(); updatePreview(); });
+// any edit in the Branding panel (typing, ticking, the text toolbar) refreshes it
+["input", "change", "click"].forEach(function(ev){
+  $("sub-fdbranding").addEventListener(ev, function(e){ if (e.target.id !== "pv-en" && e.target.id !== "pv-ar") updatePreview(); });
+});
 ["pv-en", "pv-ar"].forEach(function(id){
   $(id).addEventListener("click", function(){
     pvLang = id === "pv-ar" ? "ar" : "en";
@@ -3550,6 +3675,7 @@ function loadBranding(){
     $("br-thanks-btn-ar").value = b.thanks_button_ar || "";
     $("br-thanks-url").value = b.thanks_url || "";
     $("br-terms-mode").value = b.terms_mode || "agree";
+    BR_UI_TEXT = b.ui_text || {};
     $("br-terms-title-en").value = b.terms_title_en || "";
     $("br-terms-title-ar").value = b.terms_title_ar || "";
     termsEn.setHtml(b.terms_text_en || "");
@@ -3557,7 +3683,7 @@ function loadBranding(){
     $("br-consent-en").value = b.consent_label_en || "";
     $("br-consent-ar").value = b.consent_label_ar || "";
     $("br-hidden").value = b.hidden_fields || "";
-    updatePreview();
+    loadPreviewFrame();
     $("br-primary").value = b.primary_color;
     $("br-primary-picker").value = b.primary_color;
     $("br-ink").value = b.ink_color;
@@ -3597,9 +3723,8 @@ $("br-remove-logo").addEventListener("click", function(){
     loadBranding();
   });
 });
-$("branding-save-btn").addEventListener("click", function(){
-  clearFlash("branding-msg");
-  var payload = {
+function brandingPayload(){
+  return {
     org_name: $("br-org").value.trim(),
     title_en: $("br-title-en").value.trim(),
     title_ar: $("br-title-ar").value.trim(),
@@ -3614,25 +3739,30 @@ $("branding-save-btn").addEventListener("click", function(){
     welcome_title_ar: $("br-welcome-title-ar").value.trim(),
     welcome_text_en: welcomeEn.getHtml(),
     welcome_text_ar: welcomeAr.getHtml(),
-    thanks_title_en: $("br-thanks-title-en").value.trim(),
-    thanks_title_ar: $("br-thanks-title-ar").value.trim(),
-    thanks_text_en: thanksEn.getHtml(),
-    thanks_text_ar: thanksAr.getHtml(),
+    thanks_title_en: ownVal("br-thanks-title-en"),
+    thanks_title_ar: ownVal("br-thanks-title-ar"),
+    thanks_text_en: ownHtml(thanksEn),
+    thanks_text_ar: ownHtml(thanksAr),
     thanks_button_en: $("br-thanks-btn-en").value.trim(),
     thanks_button_ar: $("br-thanks-btn-ar").value.trim(),
     thanks_url: $("br-thanks-url").value.trim(),
     terms_mode: $("br-terms-mode").value,
-    terms_title_en: $("br-terms-title-en").value.trim(),
-    terms_title_ar: $("br-terms-title-ar").value.trim(),
-    terms_text_en: termsEn.getHtml(),
-    terms_text_ar: termsAr.getHtml(),
-    consent_label_en: $("br-consent-en").value.trim(),
-    consent_label_ar: $("br-consent-ar").value.trim(),
+    ui_text: wordingPayload(),
+    terms_title_en: ownVal("br-terms-title-en"),
+    terms_title_ar: ownVal("br-terms-title-ar"),
+    terms_text_en: ownHtml(termsEn),
+    terms_text_ar: ownHtml(termsAr),
+    consent_label_en: ownVal("br-consent-en"),
+    consent_label_ar: ownVal("br-consent-ar"),
     hidden_fields: $("br-hidden").value.trim(),
     primary_color: $("br-primary").value.trim(),
     ink_color: $("br-ink").value.trim(),
     theme_mode: $("br-theme-mode").value
   };
+}
+$("branding-save-btn").addEventListener("click", function(){
+  clearFlash("branding-msg");
+  var payload = brandingPayload();
   if (pendingLogo){ payload.logo_base64 = pendingLogo.base64; payload.logo_ext = pendingLogo.ext; }
   api("POST", "/admin/forms/" + STATE.currentFormId + "/branding", payload).then(function(res){
     if (res.body.ok){ flash("branding-msg", "Saved.", true); pendingLogo = null; loadBranding(); return; }
@@ -4259,20 +4389,40 @@ $("au-save").addEventListener("click", function(){
 /* ----------------------------------------------------- update check --- */
 // Owner account only. "Not now" hides this one version until the next one
 // comes out; Configuration → Time turns the check off for good.
-function checkForUpdate(){
-  api("GET", "/admin/update-check").then(function(res){
+// The version next to the title, for everyone. For the owner it also says
+// whether this is the latest, and a click checks GitHub again right away.
+function setVersionBadge(text, title, cls){
+  var b = $("ver-badge");
+  b.textContent = text;
+  b.title = title || "";
+  b.classList.toggle("hidden", !text);
+  b.classList.remove("has-update", "can-check");
+  if (cls) b.classList.add(cls);
+}
+$("ver-badge").addEventListener("click", function(){
+  if (this.classList.contains("has-update")){ $("update-banner").classList.remove("hidden"); window.scrollTo({top: 0, behavior: "smooth"}); return; }
+  if (!STATE.isBootstrap) return;
+  setVersionBadge("v" + STATE.version + " · checking…", "");
+  checkForUpdate(true);
+});
+function checkForUpdate(fresh){
+  api("GET", "/admin/update-check" + (fresh ? "?fresh=1" : "")).then(function(res){
     var u = res.body || {};
-    if (!u.updateAvailable) return;
+    var v = "v" + (u.current || STATE.version);
+    if (u.enabled === false){ setVersionBadge(v, "Update check is off (Configuration → Time)"); return; }
+    if (!u.updateAvailable){
+      setVersionBadge(v + (u.latest ? " · up to date" : ""),
+        u.latest ? "This is the latest version. Click to check again." : "Could not reach GitHub. Click to try again.", "can-check");
+      return;
+    }
+    setVersionBadge(v + " · update " + u.latest + " available", "Show what the update changes", "has-update");
     // The pill stays visible even once the banner is dismissed, so "there is
     // an update" is never lost from the screen.
-    $("update-pill").classList.remove("hidden");
+    // (the version badge next to the title now carries "update available")
     $("update-pill").textContent = "Update available: " + u.latest;
     $("update-pill").onclick = function(){ $("update-banner").classList.remove("hidden"); window.scrollTo({top: 0, behavior: "smooth"}); };
     var aboutVersion = document.getElementById("about-version");
     if (aboutVersion) aboutVersion.textContent = "v" + u.current + " — version " + u.latest + " is available";
-    var skipped = null;
-    try { skipped = localStorage.getItem("offSkipUpdate"); } catch(e){}
-    if (skipped === u.latest) return;
     $("update-title").textContent = "Version " + u.latest + " is available — you have " + u.current;
     var list = $("update-notes");
     list.innerHTML = "";
@@ -4287,6 +4437,9 @@ function checkForUpdate(){
       try { localStorage.setItem("offSkipUpdate", u.latest); } catch(e){}
       $("update-banner").classList.add("hidden");
     };
+    var skipped = null;
+    try { skipped = localStorage.getItem("offSkipUpdate"); } catch(e){}
+    if (skipped === u.latest) return;
     $("update-banner").classList.remove("hidden");
   });
 }

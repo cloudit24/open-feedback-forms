@@ -591,6 +591,9 @@ var T = {
   }
 };
 
+// The standard wording, kept as-is; a form's own wording is laid over a copy.
+var T_BASE = JSON.parse(JSON.stringify(T));
+
 /* Country codes for the phone widget. Not admin-managed — this is a fixed
    convenience list for the 'tel' field type, not a form question itself. */
 var CODES = ["+971","+966","+965","+974","+973","+968","+20","+962","+961","+963","+964",
@@ -776,6 +779,7 @@ function applyWelcomeText(){
   $("welcomeText").classList.toggle("hidden", !html);
 }
 // This form's own Terms and Conditions wording, when set (else the standard text).
+function submitLabel(){ return (T[lang] || T.en).submit; }
 function applyTermsText(){
   var mode = BRANDING.termsMode || "agree";
   document.querySelector(".privacy").classList.toggle("hidden", mode === "off");
@@ -842,6 +846,13 @@ function applyBrandInk(){
 }
 function applyBranding(b){
   BRANDING = b || {};
+  ["en", "ar"].forEach(function(l){
+    var own = (BRANDING.uiText && BRANDING.uiText[l]) || {};
+    var merged = {};
+    for (var k in T_BASE[l]) merged[k] = T_BASE[l][k];
+    for (var j in own) if (own[j]) merged[j] = own[j];
+    T[l] = merged;
+  });
   var rootEl = document.documentElement;
   if (BRANDING.font && BRANDING.font !== "system") rootEl.setAttribute("data-font", BRANDING.font);
   else rootEl.removeAttribute("data-font");
@@ -1356,6 +1367,17 @@ function collectDynamicValue(f){
   return $(fieldInputId(f)).value.trim();
 }
 
+// Admin live preview (?preview=1 inside the admin panel): the admin pushes
+// unsaved settings in with offPreview(); nothing is ever sent from here.
+var PREVIEW = /[?&]preview=1(&|$)/.test(location.search);
+window.offPreview = function(over, wantLang){
+  if (!PREVIEW) return;
+  var b = {};
+  for (var k in BRANDING) b[k] = BRANDING[k];
+  for (var j in over) if (over[j] !== undefined) b[j] = over[j];
+  if (wantLang && LANG_LIST.indexOf(wantLang) !== -1) lang = wantLang;
+  applyBranding(b);
+};
 function submit(e){
   e.preventDefault();
   banner("");
@@ -1393,6 +1415,17 @@ function submit(e){
   if (!ok){
     banner(T[lang].errFix);
     if (firstBadEl && firstBadEl.focus){ try { firstBadEl.focus(); } catch(err){} }
+    return;
+  }
+
+  // Preview: everything is checked as usual, then the thank-you screen is
+  // shown without sending anything.
+  if (PREVIEW){
+    $("refNo").textContent = "PREVIEW";
+    $("form").style.display = "none";
+    $("progress").classList.remove("show");
+    document.body.classList.remove("lay-oaat-on");
+    $("done").classList.add("show");
     return;
   }
 
@@ -1446,7 +1479,7 @@ function submit(e){
   .catch(function(){ banner(T[lang].errNet); })
   .then(function(){
     btn.disabled = false;
-    btn.textContent = T[lang].submit;
+    btn.textContent = submitLabel();
   });
 }
 

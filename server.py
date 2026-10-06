@@ -86,7 +86,8 @@ VERSION = _read_version()
 # (Configuration → Time → "Check for updates").
 UPDATE_VERSION_URL = "https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/VERSION"
 UPDATE_CHANGELOG_URL = "https://raw.githubusercontent.com/cloudit24/open-feedback-forms/main/CHANGELOG.md"
-UPDATE_CACHE_TTL = 6 * 3600
+UPDATE_CACHE_TTL = 3600          # a new release shows within the hour
+UPDATE_FRESH_MIN = 60            # "Check now" asks GitHub at most once a minute
 _update_cache = {"at": 0, "latest": "", "notes": []}
 _update_lock = threading.Lock()
 
@@ -245,11 +246,13 @@ def changelog_notes(markdown, current):
     return notes[:12]
 
 
-def fetch_update_info():
+def fetch_update_info(fresh=False):
     """Latest published version + what it changes. Cached, fail-soft: any
-    network trouble just means "no update known", never an error page."""
+    network trouble just means "no update known", never an error page.
+    fresh = the owner clicked "Check now" (still no more than once a minute)."""
     with _update_lock:
-        if time.time() - _update_cache["at"] < UPDATE_CACHE_TTL and _update_cache["latest"]:
+        ttl = UPDATE_FRESH_MIN if fresh else UPDATE_CACHE_TTL
+        if time.time() - _update_cache["at"] < ttl and _update_cache["latest"]:
             return _update_cache["latest"], _update_cache["notes"]
     latest, notes = "", []
     try:
@@ -291,6 +294,39 @@ TERMS_MODES = ("agree", "show", "off")
 SCREEN_TEXT_COLS = ("welcome_title_en", "welcome_title_ar", "thanks_title_en", "thanks_title_ar",
                     "thanks_button_en", "thanks_button_ar",
                     "terms_title_en", "terms_title_ar", "consent_label_en", "consent_label_ar")
+# Fixed wording of the public form that a form may replace with its own
+# (see public/index.html, T.en / T.ar). Plain text only; shown with textContent.
+UI_TEXT_KEYS = ("submit", "sending", "start", "next", "back", "again", "refLabel", "progress",
+                "firstName", "lastName", "email", "optional", "choose", "scaleLow", "scaleHigh",
+                "errRequired", "errFirst", "errLast", "errEmail", "errEmailFormat", "errPhoneFormat",
+                "errShort", "errSelect", "errRating", "errConsent", "errFix", "errNet", "errRate", "errBot")
+
+
+def parse_ui_text(raw):
+    """{"en": {key: text}, "ar": {...}} with only known keys and short plain
+    text; anything else is dropped. Accepts a dict or its JSON string."""
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except ValueError:
+            return {}
+    out = {}
+    if not isinstance(raw, dict):
+        return out
+    for lng in ("en", "ar"):
+        texts = raw.get(lng)
+        if not isinstance(texts, dict):
+            continue
+        keep = {}
+        for k in UI_TEXT_KEYS:
+            v = texts.get(k)
+            if isinstance(v, str):
+                v = clean(v, 300)
+                if v:
+                    keep[k] = v
+        if keep:
+            out[lng] = keep
+    return out
 SCREEN_RICH_COLS = ("welcome_text_en", "welcome_text_ar", "thanks_text_en", "thanks_text_ar",
                     "terms_text_en", "terms_text_ar")
 URL_RE = re.compile(r"^https?://[^\s<>\"']{1,490}$", re.I)
@@ -401,6 +437,7 @@ def form_look(form):
         "consentLabelEn": (form.get("consent_label_en") or "").strip(),
         "consentLabelAr": (form.get("consent_label_ar") or "").strip(),
         "termsMode": form.get("terms_mode") if form.get("terms_mode") in TERMS_MODES else "agree",
+        "uiText": parse_ui_text(form.get("ui_text_json") or ""),
     }
 
 
@@ -831,14 +868,17 @@ class BaseHandler(BaseHTTPRequestHandler):
 
     def security_headers(self):
         self.send_header("X-Content-Type-Options", "nosniff")
-        self.send_header("X-Frame-Options", "DENY")
+        # SAMEORIGIN: the admin panel shows a form's own page in its live
+        # preview; no other site may frame either.
+        self.send_header("X-Frame-Options", "SAMEORIGIN")
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Content-Security-Policy",
                          "default-src 'self'; "
                          "script-src 'self' 'unsafe-inline' https://challenges.cloudflare.com; "
                          "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
                          "font-src 'self' https://fonts.gstatic.com; "
-                         "frame-src https://challenges.cloudflare.com; "
+                         "frame-src 'self' https://challenges.cloudflare.com; "
+                         "frame-ancestors 'self'; "
                          "connect-src 'self' https://challenges.cloudflare.com; "
                          "img-src 'self' data:; base-uri 'none'; form-action 'self'")
 
@@ -1483,7 +1523,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
         cfg = config_store.load()
         if not cfg["settings"].get("update_check", True):
             return self.send_json(200, {"ok": True, "enabled": False, "current": VERSION})
-        latest, notes = fetch_update_info()
+        latest, notes = fetch_update_info(fresh=self.query_one("fresh") == "1")
         return self.send_json(200, {
             "ok": True, "enabled": True, "current": VERSION, "latest": latest,
             "updateAvailable": bool(latest) and version_tuple(latest) > version_tuple(VERSION),
@@ -2396,6 +2436,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "consent_label_en": form.get("consent_label_en") or "",
             "consent_label_ar": form.get("consent_label_ar") or "",
             "terms_mode": form_look(form)["termsMode"],
+            "ui_text": parse_ui_text(form.get("ui_text_json") or ""),
             "hidden_fields": ", ".join(form_look(form)["hiddenFields"]),
             "form_name": form.get("name") or "",
             "theme_mode": form.get("theme_mode") or "both",
@@ -2464,6 +2505,9 @@ class AdminHandler(PublicRoutes, BaseHandler):
         for col in SCREEN_TEXT_COLS:
             if col in body:
                 extra[col] = clean(body.get(col), 80 if col.startswith("thanks_button") else 200) or None
+        if "ui_text" in body:
+            ui = parse_ui_text(body.get("ui_text"))
+            extra["ui_text_json"] = json.dumps(ui, ensure_ascii=False) if ui else None
         for col in SCREEN_RICH_COLS:
             if col in body:
                 raw = body.get(col)
