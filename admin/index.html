@@ -669,7 +669,13 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
 
             <div class="br-sect">
               <h3>Terms and Conditions</h3>
-              <p class="hint">Shown at the end of the form, above the tick box visitors must agree to. Leave a box blank to keep the standard wording.</p>
+              <label for="br-terms-mode">Show</label>
+              <select id="br-terms-mode">
+                <option value="agree">Terms with an "I agree" tick box (required)</option>
+                <option value="show">Terms only, no tick box</option>
+                <option value="off">Off — no terms, no tick box</option>
+              </select>
+              <p class="hint">Shown at the end of the form. Leave a box blank to keep the standard wording.</p>
               <label for="br-terms-title-en">Title (English)</label>
               <input type="text" id="br-terms-title-en" maxlength="200" placeholder="Terms and Conditions">
               <label for="br-terms-title-ar">Title (Arabic)</label>
@@ -3543,6 +3549,7 @@ function loadBranding(){
     $("br-thanks-btn-en").value = b.thanks_button_en || "";
     $("br-thanks-btn-ar").value = b.thanks_button_ar || "";
     $("br-thanks-url").value = b.thanks_url || "";
+    $("br-terms-mode").value = b.terms_mode || "agree";
     $("br-terms-title-en").value = b.terms_title_en || "";
     $("br-terms-title-ar").value = b.terms_title_ar || "";
     termsEn.setHtml(b.terms_text_en || "");
@@ -3614,6 +3621,7 @@ $("branding-save-btn").addEventListener("click", function(){
     thanks_button_en: $("br-thanks-btn-en").value.trim(),
     thanks_button_ar: $("br-thanks-btn-ar").value.trim(),
     thanks_url: $("br-thanks-url").value.trim(),
+    terms_mode: $("br-terms-mode").value,
     terms_title_en: $("br-terms-title-en").value.trim(),
     terms_title_ar: $("br-terms-title-ar").value.trim(),
     terms_text_en: termsEn.getHtml(),

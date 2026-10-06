@@ -3,6 +3,13 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.13.2
+
+- Terms and Conditions can be switched per form (Questions & design >
+  Branding): terms with a required "I agree" box (as before), terms only
+  with no tick box, or off. Without the tick box, agreement is no longer
+  required and responses are saved as consent not asked.
+
 ## 1.13.1
 
 - Terms and Conditions can now be edited per form (Questions & design >

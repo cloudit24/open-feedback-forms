@@ -113,6 +113,14 @@ class SubmitChecksTests(unittest.TestCase):
               options=[{"value": "a"}, {"value": "b"}]),
     ]
 
+    def test_consent_required_only_with_agree_box(self):
+        d = raw({"nps": 5}); d["consent"] = False
+        rec, err = server.validate_submission(d, self.FIELDS)
+        self.assertEqual(err, "consent not given")
+        rec, err = server.validate_submission(d, self.FIELDS, require_consent=False)
+        self.assertIsNone(err)
+        self.assertFalse(rec["consent"])
+
     def test_hidden_required_question_is_not_required(self):
         rec, err = server.validate_submission(raw({"nps": 5}), self.FIELDS)
         self.assertIsNone(err)

@@ -249,6 +249,8 @@ MIGRATE_SQL = [
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS terms_text_ar TEXT NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS consent_label_en VARCHAR(200) NULL",
     "ALTER TABLE forms ADD COLUMN IF NOT EXISTS consent_label_ar VARCHAR(200) NULL",
+    # agree = terms + a required "I agree" box; show = terms only; off = neither
+    "ALTER TABLE forms ADD COLUMN IF NOT EXISTS terms_mode VARCHAR(10) NOT NULL DEFAULT 'agree'",
     "ALTER TABLE form_fields ADD COLUMN IF NOT EXISTS page_break_before TINYINT(1) NOT NULL DEFAULT 0",
     # Conditional questions and link fields (1.11.0). show_if = a JSON rule
     # (see logic.py), NULL = always shown. hidden_fields = names allowed in the
@@ -1205,9 +1207,9 @@ def clone_form(source_id, name, slug, port):
                                   thanks_title_en, thanks_title_ar, thanks_text_en, thanks_text_ar,
                                   thanks_button_en, thanks_button_ar, thanks_url, hidden_fields,
                                   terms_title_en, terms_title_ar, terms_text_en, terms_text_ar,
-                                  consent_label_en, consent_label_ar)
+                                  consent_label_en, consent_label_ar, terms_mode)
                VALUES (%s,%s,%s,1,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,
-                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                       %s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
             (name, slug, port, src["org_name"], src["primary_color"], src["ink_color"],
              src["lang_en"], src["lang_ar"], src["subtitle_en"], src["subtitle_ar"],
              src["enabled_extra_langs_json"], src["expiry_date"], src.get("ask_core_fields", 1),
@@ -1223,7 +1225,8 @@ def clone_form(source_id, name, slug, port):
              src.get("hidden_fields"),
              src.get("terms_title_en"), src.get("terms_title_ar"),
              src.get("terms_text_en"), src.get("terms_text_ar"),
-             src.get("consent_label_en"), src.get("consent_label_ar")))
+             src.get("consent_label_en"), src.get("consent_label_ar"),
+             src.get("terms_mode") or "agree"))
         new_id = cur.lastrowid
         cur.execute(
             """INSERT INTO form_fields
@@ -1328,7 +1331,7 @@ BRANDING_EXTRA_COLUMNS = ("layout_mode", "welcome_enabled", "welcome_title_en", 
                           "thanks_text_en", "thanks_text_ar", "thanks_button_en", "thanks_button_ar",
                           "thanks_url", "hidden_fields",
                           "terms_title_en", "terms_title_ar", "terms_text_en", "terms_text_ar",
-                          "consent_label_en", "consent_label_ar")
+                          "consent_label_en", "consent_label_ar", "terms_mode")
 
 
 def update_branding(form_id, org_name=None, primary_color=None, ink_color=None,
@@ -1627,7 +1630,7 @@ def save_feedback_full(form_id, rec):
                            email, consent, language, extra_fields, ip, user_agent, hidden_json)
                        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
                     (form_id, ref, created, rec["firstName"], rec["lastName"],
-                     rec["email"], 1, rec["language"], json.dumps(rec["extra"]),
+                     rec["email"], 1 if rec.get("consent", True) else 0, rec["language"], json.dumps(rec["extra"]),
                      rec["ip"], rec["userAgent"],
                      json.dumps(rec["hidden"], ensure_ascii=False) if rec.get("hidden") else None))
                 new_id = cur.lastrowid

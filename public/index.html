@@ -777,6 +777,10 @@ function applyWelcomeText(){
 }
 // This form's own Terms and Conditions wording, when set (else the standard text).
 function applyTermsText(){
+  var mode = BRANDING.termsMode || "agree";
+  document.querySelector(".privacy").classList.toggle("hidden", mode === "off");
+  document.querySelector("#final-block .check").classList.toggle("hidden", mode !== "agree");
+  if (mode !== "agree") $("consentErr").style.display = "none";
   var t = langPick(BRANDING.termsTitleEn, BRANDING.termsTitleAr);
   if (t) document.querySelector('.privacy [data-i18n="privacyTitle"]').textContent = t;
   var html = langPick(BRANDING.termsTextEn, BRANDING.termsTextAr);
@@ -1279,6 +1283,7 @@ function checkCore(name){
       if (!validEmail($("email").value.trim())){ setErr("f-email"); return false; }
       clearErr("f-email"); return true;
     case "consent":
+      if ((BRANDING.termsMode || "agree") !== "agree") return true;
       if (!$("consent").checked){ $("consentErr").style.display = "block"; return false; }
       $("consentErr").style.display = "none"; return true;
   }

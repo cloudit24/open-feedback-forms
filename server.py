@@ -286,6 +286,7 @@ FORM_FONTS = ("system", "inter", "cairo", "tajawal", "plex", "kufi")
 TEXT_SIZES = ("small", "normal", "large")
 TITLE_ALIGNS = ("start", "center")
 LAYOUT_MODES = ("single_page", "steps", "one_at_a_time")
+TERMS_MODES = ("agree", "show", "off")
 # Welcome / thank-you screen columns on `forms`: short text, styled text, link.
 SCREEN_TEXT_COLS = ("welcome_title_en", "welcome_title_ar", "thanks_title_en", "thanks_title_ar",
                     "thanks_button_en", "thanks_button_ar",
@@ -399,6 +400,7 @@ def form_look(form):
         "termsTextAr": sanitise.sanitise(form.get("terms_text_ar")),
         "consentLabelEn": (form.get("consent_label_en") or "").strip(),
         "consentLabelAr": (form.get("consent_label_ar") or "").strip(),
+        "termsMode": form.get("terms_mode") if form.get("terms_mode") in TERMS_MODES else "agree",
     }
 
 
@@ -455,10 +457,11 @@ def normalize_filter_dt(value, end_of_range):
     return value
 
 
-def validate_core(raw, require_core=True):
+def validate_core(raw, require_core=True, require_consent=True):
     """The built-in block: first name, last name, email, consent. A form can
     turn the three name/email boxes off (ask_core_fields), in which case they
-    arrive empty and are stored empty; consent is always required."""
+    arrive empty and are stored empty. Consent is required unless the form
+    has no "I agree" box (terms_mode show/off); then it is stored as 0."""
     rec = {
         "firstName": clean(raw.get("firstName"), 60),
         "lastName":  clean(raw.get("lastName"), 60),
@@ -476,8 +479,9 @@ def validate_core(raw, require_core=True):
         # Nothing was asked, so nothing is kept — a stray value in the request
         # can't sneak into the record.
         rec["firstName"] = rec["lastName"] = rec["email"] = ""
-    if raw.get("consent") is not True:
+    if require_consent and raw.get("consent") is not True:
         return None, "consent not given"
+    rec["consent"] = bool(require_consent)
     return rec, None
 
 
@@ -584,11 +588,11 @@ def close_info(form, st):
             "messageAr": sanitise.sanitise(form.get("closed_message_ar" if closed else "opens_message_ar"))}
 
 
-def validate_submission(raw, active_fields, require_core=True, hidden_names=()):
+def validate_submission(raw, active_fields, require_core=True, hidden_names=(), require_consent=True):
     if raw.get("website"):
         return None, "honeypot"
 
-    core, err = validate_core(raw, require_core=require_core)
+    core, err = validate_core(raw, require_core=require_core, require_consent=require_consent)
     if err:
         return None, err
 
@@ -1019,7 +1023,8 @@ class PublicRoutes:
 
         rec, err = validate_submission(raw, active_fields,
                                        require_core=bool(form and form.get("ask_core_fields", True)),
-                                       hidden_names=logic.parse_hidden_names((form or {}).get("hidden_fields") or "")[0])
+                                       hidden_names=logic.parse_hidden_names((form or {}).get("hidden_fields") or "")[0],
+                                       require_consent=(form or {}).get("terms_mode", "agree") not in ("show", "off"))
         if err == "honeypot":
             log("honeypot caught a submission from %s" % ip)
             return self.send_json(200, {"ok": True, "reference": db.make_reference()})
@@ -2390,6 +2395,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "terms_text_ar": sanitise.sanitise(form.get("terms_text_ar")),
             "consent_label_en": form.get("consent_label_en") or "",
             "consent_label_ar": form.get("consent_label_ar") or "",
+            "terms_mode": form_look(form)["termsMode"],
             "hidden_fields": ", ".join(form_look(form)["hiddenFields"]),
             "form_name": form.get("name") or "",
             "theme_mode": form.get("theme_mode") or "both",
@@ -2449,6 +2455,10 @@ class AdminHandler(PublicRoutes, BaseHandler):
             if body.get("layout_mode") not in LAYOUT_MODES:
                 return self.send_json(400, {"ok": False, "error": "layout must be one page, steps or one question at a time"})
             extra["layout_mode"] = body["layout_mode"]
+        if "terms_mode" in body:
+            if body.get("terms_mode") not in TERMS_MODES:
+                return self.send_json(400, {"ok": False, "error": "unknown Terms and Conditions setting"})
+            extra["terms_mode"] = body["terms_mode"]
         if "welcome_enabled" in body:
             extra["welcome_enabled"] = 1 if body.get("welcome_enabled") else 0
         for col in SCREEN_TEXT_COLS:
