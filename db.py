@@ -2034,6 +2034,34 @@ def _parse_hidden(raw):
     return v if isinstance(v, dict) else {}
 
 
+def submission_stats(filters, since_utc):
+    """Numbers for the Submissions page. `filters` as for list_submissions.
+    Returns (total, languages, hourly): total and languages honour every
+    filter; hourly = [(hour "YYYY-MM-DD HH" in UTC, count)] since since_utc,
+    honouring every filter except the dates (so "today" and the trend always
+    mean the real today and the real last 30 days)."""
+    no_dates = dict(filters or {})
+    no_dates.pop("date_from", None)
+    no_dates.pop("date_to", None)
+    conn = _conn()
+    try:
+        cur = conn.cursor()
+        where, params = _submission_filter_sql(filters or {})
+        cur.execute("SELECT COUNT(*) FROM feedback " + where, params)
+        total = cur.fetchone()[0]
+        cur.execute("SELECT language, COUNT(*) FROM feedback " + where + " GROUP BY language", params)
+        languages = {(r[0] or ""): r[1] for r in cur.fetchall()}
+        where2, params2 = _submission_filter_sql(no_dates)
+        where2 = (where2 + " AND " if where2 else "WHERE ") + "created_at >= %s"
+        cur.execute("SELECT DATE(created_at), HOUR(created_at), COUNT(*) FROM feedback " + where2 +
+                    " GROUP BY DATE(created_at), HOUR(created_at)", params2 + [since_utc])
+        hourly = [("%s %02d" % (r[0], r[1]), r[2]) for r in cur.fetchall()]
+        cur.close()
+        return total, languages, hourly
+    finally:
+        conn.close()
+
+
 def list_submissions(filters=None, page=1, page_size=25):
     filters = filters or {}
     where, params = _submission_filter_sql(filters, prefix="f.")

@@ -118,6 +118,11 @@ SESSION_TTL = 8 * 3600        # admin login lasts 8 hours
 SESSION_COOKIE = "off_session"
 
 HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+# A theme (the app's, under Configuration -> Themes, or an account's own):
+# colors plus a plain, gradient or wallpaper background.
+THEME_STYLES = ("plain", "gradient", "wallpaper")
+WALLPAPER_EXT = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "webp": "image/webp"}
+WALLPAPER_FILE_RE = re.compile(r"^wallpaper_[0-9a-f]{16}\.(png|jpg|jpeg|webp)$")
 EMAIL_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$")
 PHONE_RE = re.compile(r"^\+[1-9][0-9]{6,17}$")
 FIELD_KEY_RE = re.compile(r"^[a-z][a-z0-9_]{1,63}$")
@@ -342,6 +347,48 @@ def identity_theme_key(identity):
     if identity["kind"] == "bootstrap":
         return "bootstrap"
     return "user:%s" % identity.get("user_id", identity["username"])
+
+
+def wallpaper_base(owner):
+    """File name (no extension) of a wallpaper: derived from its owner ("app"
+    or an account), so a request can never name some other file."""
+    import hashlib
+    return "wallpaper_" + hashlib.sha256(owner.encode("utf-8")).hexdigest()[:16]
+
+
+def clean_theme(body, old):
+    """(theme, error). Keeps the old wallpaper so switching style and back
+    needs no new upload. Older themes (just primary + text) stay valid."""
+    if not isinstance(body, dict):
+        return None, "invalid theme"
+    primary = clean(body.get("primary"), 7)
+    text = clean(body.get("text"), 7) or "#1F2B33"
+    if not HEX_COLOR_RE.match(primary or "") or not HEX_COLOR_RE.match(text):
+        return None, "colors must be a 6-digit hex code, like #0B5273"
+    theme = {"primary": primary, "text": text}
+    style = body.get("style") or "plain"
+    if style not in THEME_STYLES:
+        return None, "unknown background style"
+    theme["style"] = style
+    g1, g2 = clean(body.get("from"), 7), clean(body.get("to"), 7)
+    if HEX_COLOR_RE.match(g1 or "") and HEX_COLOR_RE.match(g2 or ""):
+        theme["from"], theme["to"] = g1, g2
+    elif style == "gradient":
+        return None, "gradient colors must be 6-digit hex codes"
+    try:
+        theme["angle"] = int(body.get("angle", 135)) % 360
+    except (TypeError, ValueError):
+        theme["angle"] = 135
+    try:
+        theme["dim"] = max(0, min(80, int(body.get("dim", 25))))
+    except (TypeError, ValueError):
+        theme["dim"] = 25
+    old = old or {}
+    if old.get("wallpaper"):
+        theme["wallpaper"] = old["wallpaper"]
+    if style == "wallpaper" and not theme.get("wallpaper"):
+        return None, "upload a picture first"
+    return theme, None
 
 
 def theme_for_identity(cfg, identity):
@@ -1315,6 +1362,9 @@ class AdminHandler(PublicRoutes, BaseHandler):
             return self.get_db_settings()
         if path == "/admin/backup":
             return self.get_backup()
+        m = re.match(r"^/admin/wallpaper/([A-Za-z0-9_.]+)$", path)
+        if m:
+            return self.get_wallpaper(m.group(1))
         if path == "/admin/update-check":
             return self.get_update_check()
         if path == "/admin/app-settings":
@@ -1350,6 +1400,8 @@ class AdminHandler(PublicRoutes, BaseHandler):
         m = re.match(r"^/admin/forms/(\d+)/summary$", path)
         if m:
             return self.get_form_summary(int(m.group(1)))
+        if path == "/admin/submissions/stats":
+            return self.get_admin_submission_stats()
         m = re.match(r"^/admin/submissions/(\d+)$", path)
         if m:
             return self.get_admin_submission(int(m.group(1)))
@@ -1385,6 +1437,7 @@ class AdminHandler(PublicRoutes, BaseHandler):
             "/admin/logout": self.post_admin_logout,
             "/admin/account/password": self.post_account_password,
             "/admin/account/theme": self.post_account_theme,
+            "/admin/wallpaper": self.post_wallpaper,
             "/admin/port-test": self.post_port_test,
             "/admin/db-settings/test": self.post_db_test,
             "/admin/db-settings": self.post_db_settings,
@@ -1596,11 +1649,10 @@ class AdminHandler(PublicRoutes, BaseHandler):
         if theme is not None:
             if not isinstance(theme, dict):
                 return self.send_json(400, {"ok": False, "error": "invalid admin theme"})
-            primary = clean(theme.get("primary"), 7) or "#0B5273"
-            text = clean(theme.get("text"), 7) or "#1F2B33"
-            if not re.match(r"^#[0-9a-fA-F]{6}$", primary) or not re.match(r"^#[0-9a-fA-F]{6}$", text):
-                return self.send_json(400, {"ok": False, "error": "colors must be a 6-digit hex code, like #FFEC01"})
-            cfg["settings"]["admin_theme"] = {"primary": primary, "text": text}
+            clean_t, err = clean_theme(theme, cfg["settings"].get("admin_theme"))
+            if err:
+                return self.send_json(400, {"ok": False, "error": err})
+            cfg["settings"]["admin_theme"] = clean_t
         if "translate_api_key" in body:
             cfg["settings"]["translate_api_key"] = clean(body.get("translate_api_key"), 200)
         if "update_check" in body:
@@ -3013,6 +3065,44 @@ class AdminHandler(PublicRoutes, BaseHandler):
         return self.send_json(200, {"ok": True, "rows": rows, "total": total,
                                     "page": page, "pageSize": page_size})
 
+    def get_admin_submission_stats(self):
+        """Today / last 7 days / a 30-day trend for the Submissions page, in
+        the app's own timezone, for whatever the page is filtered to."""
+        if not self.require_admin():
+            return
+        identity = self.admin_identity()
+        if not db.is_connected():
+            return self.send_json(503, {"ok": False, "error": "database not connected"})
+        filters = self._filters_from_query()
+        filters, err = self._restrict_filters_to_identity(identity, filters, "view_submissions")
+        if err:
+            return self.send_json(err[0], {"ok": False, "error": err[1]})
+        try:
+            tz = zoneinfo.ZoneInfo(config_store.load()["settings"].get("timezone") or "UTC")
+        except Exception:
+            tz = timezone.utc
+        today = datetime.now(tz).date()
+        first_day = today - timedelta(days=29)
+        since = datetime(first_day.year, first_day.month, first_day.day, tzinfo=tz).astimezone(timezone.utc)
+        try:
+            total, languages, hourly = db.submission_stats(filters, since.strftime("%Y-%m-%d %H:%M:%S"))
+        except Exception as e:
+            log("submission stats failed: %s" % e)
+            return self.send_json(500, {"ok": False})
+        days = {}
+        for hour, n in hourly:
+            local = datetime.strptime(hour, "%Y-%m-%d %H").replace(tzinfo=timezone.utc).astimezone(tz).date()
+            days[local] = days.get(local, 0) + n
+        trend = [{"day": str(first_day + timedelta(days=i)), "n": days.get(first_day + timedelta(days=i), 0)}
+                 for i in range(30)]
+        busiest = max(trend, key=lambda d: d["n"])
+        return self.send_json(200, {
+            "ok": True, "total": total, "languages": languages, "trend": trend,
+            "today": trend[-1]["n"], "last7": sum(d["n"] for d in trend[-7:]),
+            "last30": sum(d["n"] for d in trend),
+            "busiest": busiest if busiest["n"] else None,
+        })
+
     def get_admin_submission(self, sub_id):
         """One response, every answer - for the Submissions row click."""
         if not self.require_admin():
@@ -3230,13 +3320,74 @@ class AdminHandler(PublicRoutes, BaseHandler):
             config_store.save(cfg)
             return self.send_json(200, {"ok": True, "theme": theme_for_identity(cfg, identity),
                                         "isOwn": False})
-        primary = clean(body.get("primary"), 7)
-        text = clean(body.get("text"), 7)
-        if not HEX_COLOR_RE.match(primary or "") or not HEX_COLOR_RE.match(text or ""):
-            return self.send_json(400, {"ok": False, "error": "colors must be a 6-digit hex code, like #0B5273"})
-        themes[key] = {"primary": primary, "text": text}
+        theme, err = clean_theme(body, themes.get(key))
+        if err:
+            return self.send_json(400, {"ok": False, "error": err})
+        themes[key] = theme
         config_store.save(cfg)
         return self.send_json(200, {"ok": True, "theme": themes[key], "isOwn": True})
+
+    def post_wallpaper(self):
+        """Upload the picture behind the panel: {"target": "mine"} for the
+        signed-in account, {"target": "app"} for everyone's default (needs the
+        app-settings permission). PNG, JPG or WEBP up to 2 MB."""
+        identity = self.admin_identity()
+        if not identity:
+            return self.send_json(401, {"ok": False, "error": "not signed in"})
+        body = self.read_json_body(max_body=MAX_LOGO_BODY) or {}
+        target = body.get("target")
+        if target == "app":
+            if not self.require_permission("manage_app_settings"):
+                return
+            owner = "app"
+        elif target == "mine":
+            owner = identity_theme_key(identity)
+        else:
+            return self.send_json(400, {"ok": False, "error": "unknown target"})
+        ext = (body.get("ext") or "").lower().lstrip(".")
+        if ext not in WALLPAPER_EXT:
+            return self.send_json(400, {"ok": False, "error": "the picture must be PNG, JPG or WEBP"})
+        try:
+            raw = base64.b64decode(body.get("base64") or "", validate=True)
+        except Exception:
+            return self.send_json(400, {"ok": False, "error": "could not read that picture"})
+        if not raw or len(raw) > MAX_LOGO_BYTES:
+            return self.send_json(400, {"ok": False, "error": "the picture must be under 2 MB"})
+        base = wallpaper_base(owner)
+        updir = config_store.uploads_dir()
+        for e in WALLPAPER_EXT:
+            try:
+                os.remove(os.path.join(updir, base + "." + e))
+            except OSError:
+                pass
+        with open(os.path.join(updir, base + "." + ext), "wb") as f:
+            f.write(raw)
+        cfg = config_store.load()
+        if owner == "app":
+            theme = dict(cfg["settings"].get("admin_theme") or DEFAULT_ADMIN_THEME)
+        else:
+            themes = cfg["settings"].setdefault("user_themes", {})
+            theme = dict(themes.get(owner) or theme_for_identity(cfg, identity))
+        theme["wallpaper"] = "%s.%s?v=%d" % (base, ext, int(time.time()))
+        theme["style"] = "wallpaper"
+        if owner == "app":
+            cfg["settings"]["admin_theme"] = theme
+        else:
+            themes[owner] = theme
+        config_store.save(cfg)
+        return self.send_json(200, {"ok": True, "theme": theme})
+
+    def get_wallpaper(self, name):
+        # Signed-in accounts only; the name can only ever be a wallpaper file.
+        if not self.admin_identity():
+            return self.fail(401, "Not signed in")
+        if not WALLPAPER_FILE_RE.match(name):
+            return self.fail(404)
+        path = os.path.join(config_store.uploads_dir(), name)
+        if not os.path.isfile(path):
+            return self.fail(404)
+        with open(path, "rb") as f:
+            return self.send_file_bytes(f.read(), WALLPAPER_EXT[name.rsplit(".", 1)[1]], cache=True)
 
     def post_port_test(self):
         """Checks a port before a form is saved — the one the admin typed, or

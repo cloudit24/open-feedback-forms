@@ -1,6 +1,6 @@
 {
   "about": "Self-hosted bilingual (English/Arabic) feedback forms, one admin panel, runs in Docker",
-  "status": "v1.13.4 released: edit text live in the preview, live preview, editable wording, version badge",
+  "status": "v1.14.0 released: visual Submissions, Branding tabs, themes with gradients and wallpaper, Field keys in Forms, tooltips and guide",
   "next": "Rewrite the standard terms text (it mentions mobile and nationality); client server update",
   "url": "http://localhost:8800/admin",
   "updated_by": "Claude, 2026-10-06"

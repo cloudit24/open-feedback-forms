@@ -3,6 +3,25 @@
 What changed in each release, in plain English. The admin panel reads this
 file from GitHub to show what a new version fixes.
 
+## 1.14.0
+
+- Submissions, rebuilt for everyday use: numbers at the top (in this view,
+  today, last 7 days, busiest day), a 30-day chart and a language split;
+  one-click periods (Today, 7 days, 30 days, All time); search as you type;
+  responses as easy-to-read cards (or the compact table); friendly times
+  like "2 hours ago". "Download for Excel" downloads exactly what is shown.
+- Branding is split into tabs: Title & text, Look, Layout & screens, Terms &
+  wording, Link fields. The preview and the Save button stay in view.
+- Themes: My colors is now My theme, with ready-made themes, gradients and
+  your own wallpaper picture. The header and tab bar now follow the theme.
+  Configuration > Appearance is now Themes, with the same choices for
+  everyone's default.
+- Field keys moved into the Forms tab (Forms > Field keys); it is no longer
+  under Configuration.
+- Guidance: tooltips on tabs, buttons and settings (point at anything, or at
+  a small ?), and a Getting started guide on the Dashboard that you can
+  hide.
+
 ## 1.13.4
 
 - Edit live: in Branding, with "Click text to edit" on, click any title,

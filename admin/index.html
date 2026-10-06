@@ -11,7 +11,7 @@
    titles, pill buttons, one blue for actions, gold only for the current tab,
    red only for alerts and deleting. Works in light and dark.
    --yellow/--yellow-deep/--on-yellow are the brand colour slots (named from
-   the original theme); Configuration → Appearance overrides them. */
+   the original theme); Configuration → Themes overrides them. */
 :root{
   --yellow:#0B5273; --yellow-deep:#084560; --on-yellow:#FFFFFF;
   --accent:#C9A84C;
@@ -55,6 +55,30 @@ body{
   margin:0 -32px;padding:14px 32px;background:var(--header-bg);color:#fff;
   box-shadow:0 0 0 100vmax var(--header-bg);clip-path:inset(0 -100vmax)}
 .top h1{font-size:19px;margin:0;font-weight:700;letter-spacing:.2px}
+/* Themes with a gradient or wallpaper: the background shows around the cards,
+   and the header and tab bar become tinted glass over it. */
+body.themed{background-attachment:fixed !important;min-height:100vh}
+body.themed .top,body.themed .tabs{backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}
+body.themed .card{box-shadow:0 10px 30px rgba(0,0,0,.18)}
+/* Tooltips: anything with data-tip shows a short explanation on hover or
+   keyboard focus; a small "?" (.tip-i) marks extra help next to a label. */
+.tip-i{display:inline-flex;align-items:center;justify-content:center;width:17px;height:17px;border-radius:50%;
+  border:1px solid var(--muted);color:var(--muted);font-size:11px;font-weight:700;cursor:help;vertical-align:1px;margin-inline-start:4px;text-transform:none;letter-spacing:0}
+.tip-i:hover,.tip-i:focus-visible{border-color:var(--yellow);color:var(--yellow);outline:none}
+#tip{position:fixed;z-index:1000;max-width:280px;padding:8px 11px;border-radius:8px;background:#1C2429;color:#F2F6F8;
+  font-size:12.5px;line-height:1.45;font-weight:400;box-shadow:0 8px 24px rgba(0,0,0,.25);pointer-events:none;opacity:0;transition:opacity .12s;text-transform:none;letter-spacing:0}
+#tip.on{opacity:1}
+.te-presets{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:6px 0 4px}
+.te-preset{border:2px solid var(--line);border-radius:12px;padding:0;overflow:hidden;background:var(--card);text-align:start;font-size:12.5px;color:var(--ink)}
+.te-preset .sw{display:block;height:54px}
+.te-preset .nm{display:block;padding:6px 9px;font-weight:600}
+.te-preset:hover,.te-preset:focus-visible{border-color:var(--yellow)}
+.te-preset[aria-pressed="true"]{border-color:var(--yellow);box-shadow:0 0 0 3px var(--focus)}
+.te-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:4px 16px}
+.te-color{display:flex;gap:8px;align-items:center}
+.te-color input[type=color]{width:44px;height:38px;padding:2px;flex:0 0 auto}
+.te-wall{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.te-thumb{width:120px;height:68px;border-radius:8px;border:1px solid var(--line);background:var(--bg) center/cover no-repeat}
 .ver-badge{vertical-align:middle;margin-inline-start:6px;border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600;font-family:inherit;cursor:default}
 .ver-badge.can-check{cursor:pointer}.ver-badge.can-check:hover{color:var(--ink);border-color:var(--ink-soft)}
 .ver-badge.has-update{background:var(--accent);border-color:var(--accent);color:#0B0B0B;cursor:pointer}
@@ -199,6 +223,53 @@ table.subs th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5p
 table.subs td{padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 table.subs tr:last-child td{border-bottom:none}
 .subs-wrap{overflow-x:auto}
+.guide{border-color:var(--yellow);border-width:2px}
+.guide-steps{margin:10px 0 0;padding-inline-start:22px}
+.guide-steps li{margin:0 0 10px;line-height:1.6}
+.guide-steps .btn-outline{margin-inline-start:8px;vertical-align:1px}
+.subs-quick{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-top:14px}
+.subs-quick > div{min-width:0}
+.subs-quick-form{flex:1 1 220px}
+.subs-quick-search{flex:2 1 240px}
+.subs-quick label{margin:0 0 5px}
+.subs-quick .seg button{padding:8px 12px}
+.subs-more{margin-top:12px}
+.subs-more summary{cursor:pointer;font-size:13px;font-weight:600;color:var(--ink-soft)}
+.linkish{border:0;background:none;color:var(--muted);font-size:12.5px;text-decoration:underline;padding:2px 0;font-family:inherit;cursor:pointer}
+.linkish:hover{color:var(--ink)}
+.subs-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin:14px 0}
+.subs-kpi{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--bg)}
+.subs-kpi .n{font-size:26px;font-weight:800;line-height:1.1;color:var(--ink)}
+.subs-kpi .l{font-size:12.5px;color:var(--muted);margin-top:3px}
+.subs-kpi.lead{background:var(--yellow);border-color:var(--yellow)}
+.subs-kpi.lead .n,.subs-kpi.lead .l{color:var(--on-yellow)}
+.subs-charts{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px}
+@media (max-width:800px){.subs-charts{grid-template-columns:minmax(0,1fr)}}
+.subs-chart{border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.subs-chart-h{font-size:12.5px;font-weight:700;color:var(--ink-soft);margin-bottom:8px}
+.subs-bars{display:flex;align-items:flex-end;gap:3px;height:90px}
+.subs-bars span{flex:1;background:var(--yellow);border-radius:3px 3px 0 0;min-height:2px;opacity:.85}
+.subs-bars span:hover{opacity:1}
+.subs-bars span.zero{background:var(--line)}
+.subs-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
+.lang-row{display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0}
+.lang-row .lb{width:70px;flex:0 0 auto}
+.lang-row .tr{flex:1;height:10px;background:var(--line);border-radius:6px;overflow:hidden}
+.lang-row .tr i{display:block;height:100%;background:var(--yellow)}
+.lang-row .ct{width:56px;text-align:end;color:var(--muted);flex:0 0 auto}
+.subs-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:12px}
+.sub-card{display:flex;gap:12px;align-items:flex-start;text-align:start;border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:var(--card);color:var(--ink);font-family:inherit;font-size:14px;cursor:pointer;width:100%}
+.sub-card:hover,.sub-card:focus-visible{border-color:var(--yellow);box-shadow:0 4px 14px rgba(0,0,0,.08);outline:none}
+.sub-av{flex:0 0 auto;width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:#fff}
+.sub-main{min-width:0;flex:1}
+.sub-name{font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub-mail{font-size:12.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sub-tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+.sub-tag{font-size:11.5px;border-radius:999px;padding:2px 8px;background:var(--bg);border:1px solid var(--line);color:var(--ink-soft)}
+.sub-tag.form{background:var(--yellow);border-color:var(--yellow);color:var(--on-yellow)}
+.sub-when{flex:0 0 auto;font-size:12px;color:var(--muted);white-space:nowrap}
+.subs-empty{text-align:center;padding:30px 10px;color:var(--muted)}
+.subs-empty b{display:block;color:var(--ink);font-size:16px;margin-bottom:4px}
 .filters{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:14px}
 .filters > div{flex:1;min-width:150px}
 .filters label{margin:0 0 5px}
@@ -264,6 +335,14 @@ table.subs tr:last-child td{border-bottom:none}
 .br-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start}
 @media (max-width:900px){.br-grid{grid-template-columns:minmax(0,1fr)}}
 .br-preview{position:sticky;top:12px}
+.br-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:4px;margin:0 0 14px;background:var(--bg);border:1px solid var(--line);border-radius:12px}
+.br-tabs button{flex:1 1 auto;border:0;background:transparent;color:var(--ink-soft);padding:8px 12px;border-radius:9px;font-size:13.5px;font-weight:600;font-family:inherit;cursor:pointer;white-space:nowrap}
+.br-tabs button:hover{color:var(--ink);background:var(--card)}
+.br-tabs button[aria-selected="true"]{background:var(--yellow);color:var(--on-yellow)}
+.br-pane-hint{margin-top:0}
+.br-save{position:sticky;bottom:0;z-index:4;display:flex;align-items:center;justify-content:flex-end;gap:12px;flex-wrap:wrap;
+  margin-top:16px;padding:12px 0;background:var(--card);border-top:1px solid var(--line)}
+.br-save .msg{margin:0;flex:1 1 200px}
 .pv-edit-toggle{display:inline-flex;align-items:center;gap:6px;margin:0 auto 0 12px;font-size:13px;font-weight:400;cursor:pointer}
 .pv-edit-toggle input{width:auto;margin:0}
 .pv-flash{animation:pvflash 1.2s ease-out}
@@ -411,7 +490,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
       <div style="display:flex;gap:8px">
         <button class="btn-outline btn-sm" id="theme-btn" aria-label="Switch theme">Dark</button>
         <button class="update-pill hidden" id="update-pill" type="button" title="Show what the update changes">Update available</button>
-        <button class="btn-outline btn-sm" id="mytheme-btn">My colors</button>
+        <button class="btn-outline btn-sm" id="mytheme-btn" data-tip="Your own colors, gradient or wallpaper for this panel. Only you see it.">My theme</button>
         <button class="btn-outline btn-sm" id="password-btn">Change password</button>
         <button class="btn-outline btn-sm" id="logout-btn">Log out</button>
       </div>
@@ -432,18 +511,32 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
     </div>
 
     <div class="tabs">
-      <button class="tab active" data-tab="dashboard">Dashboard</button>
-      <button class="tab" data-tab="forms">Forms</button>
-      <button class="tab" data-tab="summary">Summary</button>
-      <button class="tab" data-tab="subs">Submissions</button>
-      <button class="tab" data-tab="config">Configuration</button>
-      <button class="tab hidden" id="tab-btn-admin" data-tab="administration">Administration</button>
-      <button class="tab" data-tab="help">Help</button>
-      <button class="tab" data-tab="about">About us</button>
+      <button class="tab active" data-tab="dashboard" data-tip="The overview: how many responses came in, and how they are going.">Dashboard</button>
+      <button class="tab" data-tab="forms" data-tip="Your forms: add one, change its questions and look, or manage the question library (Field keys).">Forms</button>
+      <button class="tab" data-tab="summary" data-tip="Results at a glance for one form: charts for every question.">Summary</button>
+      <button class="tab" data-tab="subs" data-tip="Every response, one by one. Click one to read all its answers, or download them for Excel.">Submissions</button>
+      <button class="tab" data-tab="config" data-tip="App settings: database, languages, themes, time, alerts and backup.">Configuration</button>
+      <button class="tab hidden" id="tab-btn-admin" data-tab="administration" data-tip="Who can sign in, and what each person may do (roles).">Administration</button>
+      <button class="tab" data-tab="help" data-tip="How things work, step by step.">Help</button>
+      <button class="tab" data-tab="about" data-tip="About this app and its version.">About us</button>
     </div>
 
     <!-- ---- dashboard tab ---- -->
     <div id="tab-dashboard">
+      <div class="card guide hidden" id="guide">
+        <div class="card-top">
+          <h2 style="margin:0">Getting started</h2>
+          <div class="card-top-actions"><button class="linkish" id="guide-hide" data-tip="Hide this guide. Help (top tabs) has the full instructions.">Hide this guide</button></div>
+        </div>
+        <p class="hint" style="margin-top:4px">Three steps from nothing to your first responses. Point at anything with a <span class="tip-i" style="cursor:default">?</span> or hover a button to see what it does.</p>
+        <ol class="guide-steps">
+          <li><b>Make a form.</b> Go to <i>Forms</i> and click <i>+ Add a form</i>. Start from a ready-made template or from blank.
+            <button class="btn-outline btn-sm" data-go="forms">Go to Forms</button></li>
+          <li><b>Make it yours.</b> On the form, click <i>Questions &amp; design</i>. Add questions, then use <i>Branding</i>: the preview on the right is your real form, and you can click any text in it to change it.</li>
+          <li><b>Share it and read the answers.</b> Click <i>View</i> to open the form and copy its address. Responses appear under <i>Submissions</i>, and <i>Summary</i> shows the charts.
+            <button class="btn-outline btn-sm" data-go="subs">Go to Submissions</button></li>
+        </ol>
+      </div>
       <div class="card">
         <h2>Overview</h2>
         <p class="hint" id="dash-clock" style="margin-top:-8px"></p>
@@ -486,12 +579,24 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
 
       <!-- forms list -->
       <div id="forms-list-view">
+        <div class="subtabs" style="margin-top:0">
+          <button class="subtab active" data-subtab="formlist" data-tip="Your forms: open one to edit its questions, look and alerts.">Forms</button>
+          <button class="subtab" data-subtab="formkeys" data-tip="The question library every form picks from.">Field keys</button>
+        </div>
+        <div id="sub-formkeys" class="hidden"><div class="card">          <h2>Field keys <span class="tip-i" tabindex="0" data-tip="A field key is a reusable question (for example Nationality or Overall rating). Define it once here, then add it to any form.">?</span></h2>
+          <p class="hint">Your library of questions, shared by every form (nationality, gender, experience ratings...). Questions are defined and edited here; a form picks from this list. To put one on a form, choose the form below and click <b>Add</b> next to the question.</p>
+          <label for="lib-form-select">Add to form</label>
+          <select id="lib-form-select" class="form-select"></select>
+          <div class="msg bad" id="lib-msg" style="margin-top:10px"></div>
+          <div id="lib-list" style="margin-top:8px"></div>
+          <button class="btn" id="add-key-btn" style="margin-top:14px">+ Add a field key</button>
+        </div></div>
+        <div id="sub-formlist">
         <div class="card">
           <div class="card-top">
             <h2>Feedback forms</h2>
             <div class="card-top-actions">
-              <button class="btn-outline btn-sm keys-shortcut">Field keys</button>
-              <button class="btn" id="add-form-btn">+ Add a form</button>
+              <button class="btn" id="add-form-btn" data-tip="Start a new form from a template or from blank.">+ Add a form</button>
             </div>
           </div>
           <p class="hint">Each form runs as its own listener on its own port — point one Cloudflare Tunnel hostname at each port to publish it. Give a form a specific port, or leave it blank to auto-assign one.</p>
@@ -512,6 +617,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
           <h2>Archived forms</h2>
           <p class="hint">Disabled forms land here instead of cluttering the active list above — no longer accepting submissions, but everything they collected is untouched. Restore one to bring it back, or permanently delete it once you're sure you don't need it (or its data) anymore.</p>
           <div id="archived-forms-list"></div>
+        </div>
         </div>
       </div>
 
@@ -555,16 +661,17 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
             <p class="hint">Shown to visitors on this form's public page — its header, its browser tab, and its Terms and Conditions text.</p>
 
             <div class="br-grid"><div class="br-form">
-            <label for="br-org">Organization name</label>
+            <div class="br-tabs" role="tablist" aria-label="Branding sections">
+              <button type="button" role="tab" data-pane="text" aria-selected="true" data-tip="Organization name, title and description">Title &amp; text</button>
+              <button type="button" role="tab" data-pane="look" aria-selected="false" data-tip="Font, colors, logo, light or dark">Look</button>
+              <button type="button" role="tab" data-pane="screens" aria-selected="false" data-tip="Layout, welcome screen and thank-you screen">Layout &amp; screens</button>
+              <button type="button" role="tab" data-pane="terms" aria-selected="false" data-tip="Terms and Conditions, the Send button and every other fixed text">Terms &amp; wording</button>
+              <button type="button" role="tab" data-pane="advanced" aria-selected="false" data-tip="Link fields for tracking where responses come from">Link fields</button>
+            </div>
+            <div class="br-pane" data-pane="text">
+              <p class="hint br-pane-hint">What visitors read at the top of the form.</p>
+            <label for="br-org">Organization name <span class="tip-i" tabindex="0" data-tip="Your organisation&#39;s name. It appears at the bottom of the form and inside the standard terms text.">?</span></label>
             <input type="text" id="br-org" placeholder="Shown as the header title and in the terms text">
-
-            <label for="br-layout">Layout</label>
-            <select id="br-layout">
-              <option value="single_page">One page: every question on one page</option>
-              <option value="steps">Steps: groups of questions with Next and Back</option>
-              <option value="one_at_a_time">One question at a time</option>
-            </select>
-            <p class="hint" id="br-layout-hint"></p>
 
             <label for="br-title-en">Title (English)</label>
             <input type="text" id="br-title-en" maxlength="200" placeholder="The main heading of the form. Blank = the form's name">
@@ -577,6 +684,9 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
             <div id="br-desc-ar"></div>
             <p class="hint">Bold, italic, underline, links and bulleted lists only. Anything else is removed when you save.</p>
 
+            </div>
+            <div class="br-pane" data-pane="look" hidden>
+              <p class="hint br-pane-hint">How the form looks: font, colors, logo and light or dark.</p>
             <div class="row" style="margin-top:14px">
               <div>
                 <label for="br-font">Font</label>
@@ -605,7 +715,6 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
                 </select>
               </div>
             </div>
-            <p class="hint">Leave either blank to use the default wording.</p>
 
             <label for="br-logo">Logo</label>
             <div style="display:flex;align-items:center;gap:14px;margin-top:4px">
@@ -632,17 +741,24 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
               </div>
             </div>
 
-            <label for="br-hidden">Link fields (hidden)</label>
-            <input type="text" id="br-hidden" maxlength="500" placeholder="branch, source, staff" autocomplete="off">
-            <p class="hint">Names that may be filled in from the form's link, for example <code>?branch=dubai&amp;source=qr</code>. Visitors never see them. Only these names are saved, as plain text up to 100 characters, and they appear as extra columns in Submissions and in the CSV.</p>
-
-            <label for="br-theme-mode" style="margin-top:14px">Light or dark</label>
+            <label for="br-theme-mode">Light or dark</label>
             <select id="br-theme-mode">
               <option value="both">Both — follows the visitor's device, with a switch button</option>
               <option value="light">Light only</option>
               <option value="dark">Dark only</option>
             </select>
             <p class="hint">"Light only" or "Dark only" keeps the form that way on every device and hides the switch button.</p>
+
+            </div>
+            <div class="br-pane" data-pane="screens" hidden>
+              <p class="hint br-pane-hint">How visitors move through the form, and the screens before and after it.</p>
+            <label for="br-layout">Layout <span class="tip-i" tabindex="0" data-tip="How visitors move through the questions. Try each one: the preview changes straight away.">?</span></label>
+            <select id="br-layout">
+              <option value="single_page">One page: every question on one page</option>
+              <option value="steps">Steps: groups of questions with Next and Back</option>
+              <option value="one_at_a_time">One question at a time</option>
+            </select>
+            <p class="hint" id="br-layout-hint"></p>
 
             <div class="br-sect">
               <h3>Welcome screen</h3>
@@ -679,12 +795,9 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
               <p class="hint">The button shows only when it has both text and a link starting with http:// or https://.</p>
             </div>
 
-            <div class="br-sect">
-              <h3>Form wording</h3>
-              <p class="hint">Every fixed text on the form: buttons, labels and messages. Change what you need; a box left as it is (or emptied) keeps the standard wording.</p>
-              <div id="br-wording"></div>
             </div>
-
+            <div class="br-pane" data-pane="terms" hidden>
+              <p class="hint br-pane-hint">The agreement at the end of the form, and every fixed text: buttons, labels and messages.</p>
             <div class="br-sect">
               <h3>Terms and Conditions</h3>
               <label for="br-terms-mode">Show</label>
@@ -710,8 +823,24 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
               </div>
             </div>
 
-            <div class="msg" id="branding-msg"></div>
-            <button class="btn" id="branding-save-btn" style="margin-top:14px">Save branding</button>
+            <div class="br-sect">
+              <h3>Form wording</h3>
+              <p class="hint">Every fixed text on the form: buttons, labels and messages. Change what you need; a box left as it is (or emptied) keeps the standard wording.</p>
+              <div id="br-wording"></div>
+            </div>
+
+            </div>
+            <div class="br-pane" data-pane="advanced" hidden>
+              <p class="hint br-pane-hint">For tracking where responses come from. Most forms do not need this.</p>
+            <label for="br-hidden">Link fields (hidden) <span class="tip-i" tabindex="0" data-tip="Track where a response came from, for example which branch or which QR code, without asking the visitor.">?</span></label>
+            <input type="text" id="br-hidden" maxlength="500" placeholder="branch, source, staff" autocomplete="off">
+            <p class="hint">Names that may be filled in from the form's link, for example <code>?branch=dubai&amp;source=qr</code>. Visitors never see them. Only these names are saved, as plain text up to 100 characters, and they appear as extra columns in Submissions and in the CSV.</p>
+
+            </div>
+            <div class="br-save">
+              <div class="msg" id="branding-msg"></div>
+              <button class="btn" id="branding-save-btn" data-tip="Keeps every change on all five tabs, including text edited in the preview.">Save branding</button>
+            </div>
             </div>
             <div class="br-preview" aria-label="Live preview">
               <div class="br-preview-bar"><b>Preview</b>
@@ -760,43 +889,84 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
     <!-- ---- submissions / dashboard tab ---- -->
     <div id="tab-subs" class="hidden">
       <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap">
-          <h2 style="margin:0">Submissions</h2>
-          <a class="csv-link" id="csv-link" href="/admin/export.csv" target="_blank" rel="noopener">Download filtered results as CSV</a>
+        <div class="card-top">
+          <h2 style="margin:0">Responses</h2>
+          <div class="card-top-actions">
+            <a class="btn-outline btn-sm" id="csv-link" href="/admin/export.csv" target="_blank" rel="noopener" data-tip="Downloads exactly what is shown below (same form, dates and search) as a spreadsheet file that opens in Excel.">&#8681; Download for Excel</a>
+          </div>
         </div>
-        <div class="filters" style="margin-top:14px">
-          <div><label for="f-form">Form</label><select id="f-form"><option value="">All forms</option></select></div>
-          <div><label for="f-from">From</label><input type="datetime-local" id="f-from"></div>
-          <div><label for="f-to">To</label><input type="datetime-local" id="f-to"></div>
-          <div><label for="f-lang">Language</label><select id="f-lang"><option value="">All languages</option></select></div>
-          <div><label for="f-status">Status</label><select id="f-status"><option value="">All statuses</option></select></div>
-          <div><label for="f-q">Search</label><input type="text" id="f-q" placeholder="name, email or reference"></div>
-          <div style="flex:0 0 auto"><button class="btn-outline" id="f-apply">Apply</button></div>
-          <div style="flex:0 0 auto"><button class="btn-outline" id="f-clear">Clear</button></div>
+        <p class="hint" style="margin-top:4px">Every response people sent through your forms. Pick a form and a time period, then click a response to read all its answers.</p>
+
+        <div class="subs-quick">
+          <div class="subs-quick-form">
+            <label for="f-form">Form <span class="tip-i" tabindex="0" data-tip="Show one form&#39;s responses, or all of them together.">?</span></label>
+            <select id="f-form"><option value="">All forms</option></select>
+          </div>
+          <div>
+            <label>Period</label>
+            <span class="seg" role="group" aria-label="Period" id="f-period">
+              <button type="button" data-days="1">Today</button>
+              <button type="button" data-days="7">Last 7 days</button>
+              <button type="button" data-days="30">Last 30 days</button>
+              <button type="button" data-days="0" aria-pressed="true">All time</button>
+            </span>
+          </div>
+          <div class="subs-quick-search">
+            <label for="f-q">Search</label>
+            <input type="search" id="f-q" placeholder="A name, email or reference">
+          </div>
         </div>
-        <div class="subs-wrap">
+        <details class="subs-more">
+          <summary>More filters</summary>
+          <div class="filters" style="margin-top:10px">
+            <div><label for="f-from">From</label><input type="datetime-local" id="f-from"></div>
+            <div><label for="f-to">To</label><input type="datetime-local" id="f-to"></div>
+            <div><label for="f-lang">Language</label><select id="f-lang"><option value="">All languages</option></select></div>
+            <div><label for="f-status">Status</label><select id="f-status"><option value="">All statuses</option></select></div>
+            <div style="flex:0 0 auto"><button class="btn-outline" id="f-apply">Apply</button></div>
+          </div>
+        </details>
+        <div style="display:flex;justify-content:flex-end;margin-top:-4px"><button type="button" class="linkish" id="f-clear" data-tip="Show every response again: all forms, all time, no search.">Clear all filters</button></div>
+
+        <div class="subs-kpis" id="subs-kpis"></div>
+        <div class="subs-charts">
+          <div class="subs-chart"><div class="subs-chart-h">Responses per day, last 30 days <span class="tip-i" tabindex="0" data-tip="Each bar is one day. Point at a bar to see its date and count. Follows the form you picked, not the dates.">?</span></div><div id="subs-trend"></div></div>
+          <div class="subs-chart"><div class="subs-chart-h">Language</div><div id="subs-langs"></div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-top">
+          <h2 style="margin:0" id="subs-list-title">Latest responses</h2>
+          <div class="card-top-actions">
+            <span class="seg" role="group" aria-label="View">
+              <button type="button" id="subs-view-cards" aria-pressed="true" data-tip="Easy to read: one card per response">Cards</button>
+              <button type="button" id="subs-view-table" aria-pressed="false" data-tip="Compact: one row per response">Table</button>
+            </span>
+          </div>
+        </div>
+        <div id="subs-cards" class="subs-cards"></div>
+        <div class="subs-wrap hidden" id="subs-table-wrap">
           <table class="subs">
             <thead><tr><th>Reference</th><th>Received</th><th>Form</th><th>Name</th><th>Email</th><th>Answers</th><th>Lang</th><th>Status</th><th>From link</th></tr></thead>
             <tbody id="subs-body"></tbody>
           </table>
         </div>
-        <p class="hint" style="margin-top:8px">Click a row to see every answer in that response.</p>
         <div class="pager">
-          <button class="btn-outline btn-sm" id="subs-prev">&larr; Prev</button>
+          <button class="btn-outline btn-sm" id="subs-prev">&larr; Newer</button>
           <span id="subs-page-info"></span>
-          <button class="btn-outline btn-sm" id="subs-next">Next &rarr;</button>
+          <button class="btn-outline btn-sm" id="subs-next">Older &rarr;</button>
         </div>
       </div>
     </div>
 
-    <!-- ---- configuration tab (db connection + field keys + help) ---- -->
+    <!-- ---- configuration tab (db connection, languages, themes, time, alerts, backup) ---- -->
     <div id="tab-config" class="hidden">
       <div class="card">
         <div class="subtabs">
           <button class="subtab active" data-subtab="cfgdb">Database connection</button>
-          <button class="subtab" data-subtab="cfgkeys">Field keys</button>
           <button class="subtab" data-subtab="cfglang">Language Labels</button>
-          <button class="subtab" data-subtab="cfgtheme">Appearance</button>
+          <button class="subtab" data-subtab="cfgtheme">Themes</button>
           <button class="subtab" data-subtab="cfgtime">Time</button>
           <button class="subtab" data-subtab="cfgalerts">Alerts</button>
           <button class="subtab" data-subtab="cfgbackup">Backup</button>
@@ -821,17 +991,6 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
             <button class="btn-outline" id="db-test-btn">Test connection</button>
             <button class="btn" id="db-save-btn">Save &amp; connect</button>
           </div>
-        </div>
-
-        <!-- field keys library -->
-        <div id="sub-cfgkeys" class="hidden">
-          <h2>Field keys</h2>
-          <p class="hint">The catalog of questions available to every form (nationality, gender, experience ratings...). This is the only place field keys are defined or edited — a form's field editor can only pick from this list, never type a new one.</p>
-          <label for="lib-form-select">Add to form</label>
-          <select id="lib-form-select" class="form-select"></select>
-          <div class="msg bad" id="lib-msg" style="margin-top:10px"></div>
-          <div id="lib-list" style="margin-top:8px"></div>
-          <button class="btn" id="add-key-btn" style="margin-top:14px">+ Add a field key</button>
         </div>
 
         <!-- language labels -->
@@ -884,30 +1043,13 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
           <div class="msg" id="lang-add-msg" style="margin-top:10px"></div>
         </div>
 
-        <!-- admin panel appearance -->
+        <!-- admin panel theme (everyone's default) -->
         <div id="sub-cfgtheme" class="hidden">
-          <h2>Appearance</h2>
-          <p class="hint">This colors the admin panel itself — buttons, tabs, the calendar picker's selected day — not any individual public feedback form (set each form's own colors and logo from its Manage panel instead).</p>
-          <div class="row">
-            <div>
-              <label for="theme-primary">Primary color</label>
-              <div style="display:flex;gap:8px">
-                <input type="color" id="theme-primary-picker" style="width:44px;padding:2px">
-                <input type="text" id="theme-primary" placeholder="#0B5273">
-              </div>
-            </div>
-            <div>
-              <label for="theme-text">Text color (light mode only)</label>
-              <div style="display:flex;gap:8px">
-                <input type="color" id="theme-text-picker" style="width:44px;padding:2px">
-                <input type="text" id="theme-text" placeholder="#1F2B33">
-              </div>
-            </div>
-          </div>
-          <p class="hint">Dark mode keeps its own light-on-dark text color no matter what's set here, so it stays readable.</p>
-          <p class="hint">These are the colors everyone starts from. Anyone signed in can set their own instead with <b>My colors</b>, top right — that only changes their own view, and leaves these alone.</p>
+          <h2>Themes</h2>
+          <p class="hint">The theme everyone sees in this admin panel, unless they pick their own with <b>My theme</b> (top right). Public forms are never affected: each form's look is set in its Branding.</p>
+          <div id="app-theme-editor"></div>
           <div class="msg" id="theme-msg" style="margin-top:10px"></div>
-          <button class="btn" id="theme-save-btn" style="margin-top:6px">Save</button>
+          <button class="btn" id="theme-save-btn" style="margin-top:6px">Save for everyone</button>
         </div>
 
         <!-- time & timezone -->
@@ -1007,7 +1149,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
         <h2>What are field keys?</h2>
         <p class="hint">A field key is one reusable question definition — its key (a stable internal id like <code>nationality</code>), its English and Arabic labels, its type (short text, dropdown, rating...), and its options if it's a dropdown.</p>
         <p class="hint">Every form picks its questions from this shared catalog instead of typing them out each time. When a field key is added to a form, its current label/type/options are copied onto that form — so editing a key here changes what a <em>future</em> "+ Add a field" picks up, but doesn't retroactively change a question a form already added. Edit that form's own copy from its Questions list if you need to change wording on a form that's already using it.</p>
-        <p class="hint">New forms start with no questions at all — add whichever field keys the form actually needs from the Field keys tab or from the form's own Questions list.</p>
+        <p class="hint">New forms start with no questions at all — add whichever field keys the form actually needs from Forms &rarr; Field keys or from the form's own Questions list.</p>
         <p class="hint">Deleting a field key here only removes it from the catalog going forward; forms that already added it keep their existing questions and past submissions untouched.</p>
 
         <h2 style="margin-top:26px">Forms &amp; branding</h2>
@@ -1028,8 +1170,8 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
         <h2 style="margin-top:26px">Alerts</h2>
         <p class="hint">Configuration → Alerts holds the shared SMTP server and Telegram bot used to send every alert, plus the one global "database disconnected" alert. Each form's own Alerts panel then picks a destination for any of three triggers: a new submission, a daily digest, and that form reaching its expiry date — add as many rules as you need, mixing channels and triggers freely.</p>
 
-        <h2 style="margin-top:26px">Appearance &amp; time</h2>
-        <p class="hint">Configuration → Appearance sets this admin panel's own primary/text colors (separate from any individual form's branding). Configuration → Time sets the timezone used to display dates here and an NTP server reference (this app can't change your OS clock itself).</p>
+        <h2 style="margin-top:26px">Themes &amp; time</h2>
+        <p class="hint">Configuration → Themes sets how this admin panel looks for everyone: colors, a gradient or a wallpaper picture (separate from any form's own Branding). Anyone can pick their own with <b>My theme</b>, top right; only they see it. Configuration → Time sets the timezone used to display dates here and an NTP server reference (this app can't change your OS clock itself).</p>
       </div>
     </div>
 
@@ -1140,25 +1282,14 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
 
   <!-- ============ this account's own colors ============ -->
   <div id="mytheme-view" class="hidden">
-    <div class="card" style="max-width:420px;margin:0 auto">
-      <h2>My colors</h2>
-      <p class="hint">Your own colors for this admin panel. Only you see them — everyone else keeps the app's colors, and the forms your visitors fill in are never affected. Each form's own look is set under its Branding.</p>
-      <label for="mt-primary">Primary color</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="color" id="mt-primary-picker" style="width:44px;padding:2px">
-        <input type="text" id="mt-primary" placeholder="#0B5273">
-      </div>
-      <label for="mt-text" style="margin-top:12px">Text color (light mode only)</label>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input type="color" id="mt-text-picker" style="width:44px;padding:2px">
-        <input type="text" id="mt-text" placeholder="#1F2B33">
-      </div>
-      <label style="margin-top:14px">Ready-made</label>
-      <div id="mt-presets" style="display:flex;gap:8px;flex-wrap:wrap"></div>
+    <div class="card" style="max-width:760px;margin:0 auto">
+      <h2>My theme</h2>
+      <p class="hint">How this admin panel looks to you: colors, a gradient or your own wallpaper. Only you see it. Everyone else keeps the app's theme (Configuration &rarr; Themes), and the forms your visitors fill in are never affected.</p>
+      <div id="mt-editor"></div>
       <div class="msg" id="mt-msg" style="margin-top:10px"></div>
       <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap">
-        <button class="btn-outline" id="mt-cancel">Cancel</button>
-        <button class="btn-outline" id="mt-reset">Use the app's colors</button>
+        <button class="btn-outline" id="mt-cancel" data-tip="Leave without saving. The panel goes back to how it was.">Cancel</button>
+        <button class="btn-outline" id="mt-reset" data-tip="Forget your own theme and use the app's theme again.">Use the app's theme</button>
         <button class="btn" id="mt-save">Save</button>
       </div>
     </div>
@@ -1316,7 +1447,7 @@ html[dir="rtl"] .sv-bar{transform:scaleX(-1)}
       <div id="ed-key-wrap">
         <label for="ed-key">Field key</label>
         <input type="text" id="ed-key" placeholder="e.g. eventDate" disabled>
-        <p class="hint">Set from the Field keys tab. Can't be changed here.</p>
+        <p class="hint">Set in Forms &rarr; Field keys. Can't be changed here.</p>
       </div>
       <label for="ed-en">Label (English)</label>
       <input type="text" id="ed-en" disabled>
@@ -1468,8 +1599,8 @@ var STATE = { fields: [], editingId: null, forms: [], currentFormId: null,
               timezone: "UTC",
               languageLabels: { en: { name: "English", dir: "ltr" }, ar: { name: "Arabic", dir: "rtl" } },
               // adminTheme = what this account sees; appTheme = the app-wide
-              // colors under Configuration -> Appearance. They're the same
-              // until the account picks its own under "My colors".
+              // theme under Configuration -> Themes. They're the same
+              // until the account picks its own under "My theme".
               adminTheme: { primary: "#0B5273", text: "#1F2B33" },
               appTheme: { primary: "#0B5273", text: "#1F2B33" },
               adminThemeIsOwn: false, translateApiKey: "",
@@ -1532,7 +1663,7 @@ function applyPermissionVisibility(){
     var btn = document.querySelector('.subtab[data-subtab="' + t + '"]');
     if (btn) btn.classList.toggle("hidden", !hasPermission("manage_app_settings"));
   });
-  document.querySelector('.subtab[data-subtab="cfgkeys"]').classList.toggle(
+  document.querySelector('.subtab[data-subtab="formkeys"]').classList.toggle(
     "hidden", !hasAnyPermission(["manage_field_keys", "manage_app_settings"]));
   document.querySelector('.subtab[data-subtab="cfgalerts"]').classList.toggle(
     "hidden", !hasPermission("manage_global_alerts"));
@@ -1654,7 +1785,7 @@ document.querySelectorAll(".subtabs").forEach(function(group){
         $("sub-" + b.dataset.subtab).classList.toggle("hidden", b !== btn);
       });
       if (btn.dataset.subtab === "fdbranding") loadBranding();
-      if (btn.dataset.subtab === "cfgkeys") loadFieldLibrary();
+      if (btn.dataset.subtab === "formkeys") loadFieldLibrary();
       if (btn.dataset.subtab === "cfgtime") loadAppSettings();
       if (btn.dataset.subtab === "cfglang") loadLanguageLabels();
       if (btn.dataset.subtab === "cfgtheme") loadAdminTheme();
@@ -1774,18 +1905,22 @@ function renderForms(){
       '</div></div>';
     var actions = document.createElement("div");
     actions.className = "actions";
-    var view = mkBtn("View", function(){ window.open(f.url, "_blank", "noopener"); });
-    var viewHere = mkBtn("View on this address", function(){ window.open(sharedFormUrl(f), "_blank", "noopener"); });
+    var view = mkBtn("View", function(){ window.open(f.url, "_blank", "noopener"); },
+      "Open the form the way visitors see it, in a new tab.");
+    var viewHere = mkBtn("View on this address", function(){ window.open(sharedFormUrl(f), "_blank", "noopener"); },
+      "Open the form through this admin panel's own address (/f/...), handy when only one address is published.");
     var buttons = [view, viewHere];
     if (hasAnyPermission(["edit_fields", "edit_branding"], f.id)){
-      buttons.push(mkBtn("Questions & design", function(){ openFormDetail(f); }));         // questions & branding
+      buttons.push(mkBtn("Questions & design", function(){ openFormDetail(f); },
+        "Change the questions, the look, the wording and the alerts of this form."));
     }
     if (hasAnyPermission(["manage_forms", "manage_form_settings"], f.id)){
-      buttons.push(mkBtn("Settings", function(){ openFormEditor(f); }));       // name, port, languages
+      buttons.push(mkBtn("Settings", function(){ openFormEditor(f); },
+        "Name, languages, address, opening and closing dates, response limit and webhooks."));
     }
     if (hasPermission("manage_forms")){
-      buttons.push(mkBtn("Clone", function(){ cloneForm(f); }));
-      buttons.push(mkBtn("Archive", function(){ toggleFormActive(f); }));
+      buttons.push(mkBtn("Clone", function(){ cloneForm(f); }, "Make a copy of this form with the same questions and look. Responses are not copied."));
+      buttons.push(mkBtn("Archive", function(){ toggleFormActive(f); }, "Stop accepting responses and move the form to Archived. Its responses are kept, and you can restore it."));
     }
     buttons.forEach(function(b){ b.className = "btn-outline btn-sm"; actions.appendChild(b); });
     row.appendChild(actions);
@@ -2132,9 +2267,10 @@ function renderFields(){
     box.innerHTML = '<p class="hint">No extra fields yet — first name, last name and email are always shown.</p>';
   }
 }
-function mkBtn(label, onClick){
+function mkBtn(label, onClick, tip){
   var b = document.createElement("button");
   b.type = "button"; b.textContent = label;
+  if (tip) b.setAttribute("data-tip", tip);
   b.addEventListener("click", onClick);
   return b;
 }
@@ -2812,11 +2948,12 @@ $("sum-print").addEventListener("click", function(){ window.print(); });
 
 /* ------------------------------------------------------- field editor */
 $("add-field-btn").addEventListener("click", function(){ openEditor(null); });
-// Shortcut from Forms / a form's Questions straight to Configuration -> Field keys
+// Shortcut from a form's Questions to Forms -> Field keys
 document.querySelectorAll(".keys-shortcut").forEach(function(b){
   b.addEventListener("click", function(){
-    document.querySelector('.tab[data-tab="config"]').click();
-    document.querySelector('.subtab[data-subtab="cfgkeys"]').click();
+    document.querySelector('.tab[data-tab="forms"]').click();
+    closeFormDetail();
+    document.querySelector('.subtab[data-subtab="formkeys"]').click();
     window.scrollTo(0, 0);
   });
 });
@@ -3197,9 +3334,132 @@ function loadSubmissions(){
     if (res.status !== 200){ return; }
     renderSubmissions(res.body);
   });
+  loadSubmissionStats();
   $("csv-link").href = "/admin/export.csv" + (subsQueryString() ? "?" + subsQueryString() : "");
 }
+// Cards (default, easier to read) or the compact table; remembered per browser.
+var SUBS_VIEW = "cards";
+try { SUBS_VIEW = localStorage.getItem("offSubsView") === "table" ? "table" : "cards"; } catch(e){}
+function setSubsView(v){
+  SUBS_VIEW = v;
+  try { localStorage.setItem("offSubsView", v); } catch(e){}
+  $("subs-view-cards").setAttribute("aria-pressed", String(v === "cards"));
+  $("subs-view-table").setAttribute("aria-pressed", String(v === "table"));
+  $("subs-cards").classList.toggle("hidden", v !== "cards");
+  $("subs-table-wrap").classList.toggle("hidden", v !== "table");
+}
+$("subs-view-cards").addEventListener("click", function(){ setSubsView("cards"); });
+$("subs-view-table").addEventListener("click", function(){ setSubsView("table"); });
+setSubsView(SUBS_VIEW);
+
+// "3 hours ago" style times; the exact time is in the tooltip.
+function timeAgo(raw){
+  var iso = String(raw || "");
+  if (iso.indexOf("Z") === -1 && iso.indexOf("+") === -1) iso += "Z";
+  var d = new Date(iso.replace(" ", "T"));
+  if (isNaN(d.getTime())) return "";
+  var sec = Math.max(0, (Date.now() - d.getTime()) / 1000);
+  if (sec < 60) return "just now";
+  var m = Math.floor(sec / 60); if (m < 60) return m + (m === 1 ? " minute ago" : " minutes ago");
+  var h = Math.floor(m / 60); if (h < 24) return h + (h === 1 ? " hour ago" : " hours ago");
+  var dd = Math.floor(h / 24); if (dd === 1) return "yesterday"; if (dd < 30) return dd + " days ago";
+  try { return d.toLocaleDateString("en-GB", {timeZone: STATE.timezone, day: "numeric", month: "short", year: "numeric"}); }
+  catch(e){ return formatDT(raw).slice(0, 10); }
+}
+var AV_COLORS = ["#0B5273", "#7A2230", "#2F5D3A", "#5B2A6B", "#B45309", "#0F6B6B", "#4338CA", "#BE185D"];
+function avatarFor(name, email){
+  var src = (name || email || "?").trim();
+  var parts = src.split(/[\s@._-]+/).filter(Boolean);
+  var ini = ((parts[0] || "?")[0] + (parts[1] ? parts[1][0] : "")).toUpperCase();
+  var h = 0; for (var i = 0; i < src.length; i++) h = (h * 31 + src.charCodeAt(i)) >>> 0;
+  return {ini: name || email ? ini : "?", color: name || email ? AV_COLORS[h % AV_COLORS.length] : "#8A97A0"};
+}
+function renderSubmissionCards(rows){
+  var box = $("subs-cards");
+  box.innerHTML = "";
+  if (!rows.length){
+    var filtered = $("f-form").value || $("f-from").value || $("f-to").value || $("f-q").value || $("f-lang").value || $("f-status").value;
+    box.innerHTML = '<div class="subs-empty" style="grid-column:1/-1"><b>' + (filtered ? "Nothing matches these filters" : "No responses yet") + '</b>' +
+      (filtered ? 'Try a longer period, another form, or <button type="button" class="linkish" id="subs-empty-clear">clear all filters</button>.'
+                : "When someone sends one of your forms, it shows up here straight away.") + '</div>';
+    var c = $("subs-empty-clear"); if (c) c.addEventListener("click", function(){ $("f-clear").click(); });
+    return;
+  }
+  rows.forEach(function(r){
+    var name = ((r.first_name || "") + " " + (r.last_name || "")).trim();
+    var av = avatarFor(name, r.email);
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "sub-card";
+    b.setAttribute("aria-label", "Open response " + r.reference + (name ? " from " + name : ""));
+    var tags = '<span class="sub-tag form">' + escapeHtml(r.form_name || "Form") + '</span>' +
+      '<span class="sub-tag" data-tip="How many questions this person answered">' + escapeHtml(String(r.answered || 0)) + ' answers</span>' +
+      (r.language ? '<span class="sub-tag">' + escapeHtml((r.language || "").toUpperCase()) + '</span>' : '') +
+      (r.status && r.status !== "new" ? '<span class="sub-tag">' + escapeHtml(r.status) + '</span>' : '') +
+      Object.keys(r.hidden || {}).map(function(k){ return '<span class="sub-tag" data-tip="Filled in from the form&#39;s link">' + escapeHtml(k + ": " + r.hidden[k]) + '</span>'; }).join("");
+    b.innerHTML = '<span class="sub-av" style="background:' + av.color + '">' + escapeHtml(av.ini) + '</span>' +
+      '<span class="sub-main"><span class="sub-name">' + (escapeHtml(name) || "Anonymous") + '</span>' +
+      '<span class="sub-mail">' + (escapeHtml(r.email) || escapeHtml(r.reference)) + '</span>' +
+      '<span class="sub-tags">' + tags + '</span></span>' +
+      '<span class="sub-when" data-tip="' + escapeHtml(formatDT(r.created_at) + " · " + r.reference) + '">' + escapeHtml(timeAgo(r.created_at)) + '</span>';
+    b.addEventListener("click", function(){ openSubmission(r.id); });
+    box.appendChild(b);
+  });
+}
+function loadSubmissionStats(){
+  var qs = subsQueryString();
+  api("GET", "/admin/submissions/stats" + (qs ? "?" + qs : "")).then(function(res){
+    if (!res.body || !res.body.ok) return;
+    var st = res.body;
+    var fmtDay = function(d){ var p = d.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]).toLocaleDateString(undefined, {weekday: "short", day: "numeric", month: "short"}); };
+    var k = function(n, l, tip, lead){ return '<div class="subs-kpi' + (lead ? " lead" : "") + '"' + (tip ? ' data-tip="' + escapeHtml(tip) + '"' : "") + '><div class="n">' + n + '</div><div class="l">' + l + '</div></div>'; };
+    $("subs-kpis").innerHTML =
+      k(st.total, "responses in this view", "Everything that matches the form, period and search above.", true) +
+      k(st.today, "today") + k(st.last7, "in the last 7 days") +
+      k(st.busiest ? st.busiest.n : "—", st.busiest ? "busiest day: " + escapeHtml(fmtDay(st.busiest.day)) : "busiest day", "The day with the most responses in the last 30 days.");
+    var max = Math.max.apply(null, st.trend.map(function(d){ return d.n; }).concat([1]));
+    $("subs-trend").innerHTML = '<div class="subs-bars">' + st.trend.map(function(d){
+      return '<span class="' + (d.n ? "" : "zero") + '" style="height:' + Math.max(2, Math.round(d.n / max * 100)) + '%" data-tip="' + escapeHtml(fmtDay(d.day) + ": " + d.n + (d.n === 1 ? " response" : " responses")) + '"></span>';
+    }).join("") + '</div><div class="subs-axis"><span>' + escapeHtml(fmtDay(st.trend[0].day)) + '</span><span>Today</span></div>';
+    var langs = Object.keys(st.languages).sort(function(a, b){ return st.languages[b] - st.languages[a]; });
+    var tot = langs.reduce(function(a, l){ return a + st.languages[l]; }, 0) || 1;
+    var names = {en: "English", ar: "Arabic"};
+    $("subs-langs").innerHTML = langs.length ? langs.map(function(l){
+      var pct = Math.round(st.languages[l] / tot * 100);
+      return '<div class="lang-row"><span class="lb">' + escapeHtml(names[l] || l.toUpperCase() || "—") + '</span><span class="tr"><i style="width:' + pct + '%"></i></span><span class="ct">' + pct + '%</span></div>';
+    }).join("") : '<p class="hint" style="margin:0">No responses yet.</p>';
+  });
+}
+// Period buttons fill From/To (in the app's timezone) and reload at once.
+function localInputValue(d){
+  var parts = {};
+  try {
+    new Intl.DateTimeFormat("en-CA", {timeZone: STATE.timezone, year: "numeric", month: "2-digit", day: "2-digit"})
+      .formatToParts(d).forEach(function(p){ parts[p.type] = p.value; });
+  } catch(e){ parts = {year: d.getFullYear(), month: String(d.getMonth() + 1).padStart(2, "0"), day: String(d.getDate()).padStart(2, "0")}; }
+  return parts.year + "-" + parts.month + "-" + parts.day + "T00:00";
+}
+function markPeriod(days){
+  document.querySelectorAll("#f-period button").forEach(function(b){ b.setAttribute("aria-pressed", String(days !== null && +b.dataset.days === days)); });
+}
+document.querySelectorAll("#f-period button").forEach(function(b){
+  b.addEventListener("click", function(){
+    var days = +b.dataset.days;
+    $("f-from").value = days ? localInputValue(new Date(Date.now() - (days - 1) * 86400000)) : "";
+    $("f-to").value = "";
+    markPeriod(days);
+    STATE.subsPage = 1; loadSubmissions();
+  });
+});
+["f-from", "f-to"].forEach(function(id){ $(id).addEventListener("change", function(){ markPeriod(null); }); });
+$("f-form").addEventListener("change", function(){ STATE.subsPage = 1; loadSubmissions(); });
+["f-lang", "f-status"].forEach(function(id){ $(id).addEventListener("change", function(){ STATE.subsPage = 1; loadSubmissions(); }); });
+var subsSearchTimer = null;
+$("f-q").addEventListener("input", function(){
+  clearTimeout(subsSearchTimer);
+  subsSearchTimer = setTimeout(function(){ STATE.subsPage = 1; loadSubmissions(); }, 350);
+});
 function renderSubmissions(body){
+  renderSubmissionCards(body.rows || []);
   var tbody = $("subs-body");
   tbody.innerHTML = "";
   (body.rows || []).forEach(function(r){
@@ -3223,7 +3483,9 @@ function renderSubmissions(body){
     tbody.innerHTML = '<tr><td colspan="9" class="hint" style="padding:14px 10px">No submissions fit these filters.</td></tr>';
   }
   var pages = Math.max(1, Math.ceil(body.total / body.pageSize));
-  $("subs-page-info").textContent = "Page " + body.page + " of " + pages + " · " + body.total + " total";
+  var from = body.total ? (body.page - 1) * body.pageSize + 1 : 0, to = Math.min(body.total, body.page * body.pageSize);
+  $("subs-page-info").textContent = body.total ? "Showing " + from + "–" + to + " of " + body.total : "";
+  $("subs-list-title").textContent = body.page > 1 ? "Older responses" : "Latest responses";
   $("subs-prev").disabled = body.page <= 1;
   $("subs-next").disabled = body.page >= pages;
 }
@@ -3304,6 +3566,7 @@ $("f-apply").addEventListener("click", function(){ STATE.subsPage = 1; loadSubmi
 $("f-clear").addEventListener("click", function(){
   $("f-form").value = ""; $("f-from").value = ""; $("f-to").value = ""; $("f-q").value = "";
   $("f-lang").value = ""; $("f-status").value = "";
+  markPeriod(0);
   STATE.subsPage = 1; loadSubmissions();
 });
 $("subs-prev").addEventListener("click", function(){ if (STATE.subsPage > 1){ STATE.subsPage--; loadSubmissions(); } });
@@ -3504,6 +3767,13 @@ $("br-layout").addEventListener("change", updateLayoutHint);
    /f/<slug>/?preview=1, so same origin) is shown in a frame, and the unsaved
    settings are pushed into it. The page itself refuses to send in preview. */
 // Preview only: the saved copy is cleaned by the server, never trusted from here.
+// Branding sections: one at a time, picked from the tab strip.
+document.querySelectorAll(".br-tabs button").forEach(function(b){
+  b.addEventListener("click", function(){
+    document.querySelectorAll(".br-tabs button").forEach(function(x){ x.setAttribute("aria-selected", String(x === b)); });
+    document.querySelectorAll(".br-pane").forEach(function(p){ p.hidden = p.dataset.pane !== b.dataset.pane; });
+  });
+});
 function pvClean(html){
   if (!html) return "";
   var tmp = document.createElement("template");
@@ -4090,6 +4360,7 @@ function relativeLuminance(hex){
 function applyAdminTheme(theme){
   var root = document.documentElement.style;
   var primary = (theme && theme.primary) || "#0B5273";
+  paintThemeBackground(theme || {}, primary);
   root.setProperty("--yellow", primary);
   root.setProperty("--yellow-deep", darken(primary, 0.12));
   root.setProperty("--on-yellow", relativeLuminance(primary) > 0.45 ? "#0B0B0B" : "#FFFFFF");
@@ -4107,73 +4378,245 @@ function applyAdminTheme(theme){
     root.setProperty("--focus", primary);
   }
 }
+// Header, tab bar and page background follow the theme: plain = shades of
+// the main color; gradient / wallpaper = shown behind everything, with the
+// header and tab bar as tinted glass so their white text stays readable.
+function paintThemeBackground(t, primary){
+  var root = document.documentElement.style;
+  var style = t.style || "plain";
+  if (style === "wallpaper" && !t.wallpaper) style = "plain";
+  if (style === "gradient" && !(t.from && t.to)) style = "plain";
+  var dark = effectiveTheme() === "dark";
+  if (style === "plain"){
+    root.setProperty("--header-bg", darken(primary, dark ? 0.62 : 0.2));
+    root.setProperty("--bar-bg", dark ? darken(primary, 0.45) : primary);
+    root.setProperty("--bar-fg", relativeLuminance(dark ? darken(primary, 0.45) : primary) > 0.45 ? "#0B0B0B" : "#E6F1F7");
+    document.body.style.background = "";
+  } else {
+    root.setProperty("--header-bg", "rgba(0,0,0,.34)");
+    root.setProperty("--bar-bg", "rgba(0,0,0,.2)");
+    root.setProperty("--bar-fg", "#F2F6F8");
+    var dim = Math.max(0, Math.min(80, t.dim == null ? 25 : t.dim)) / 100;
+    var shade = "linear-gradient(rgba(0,0,0," + dim + "),rgba(0,0,0," + dim + "))";
+    document.body.style.background = style === "gradient"
+      ? shade + ",linear-gradient(" + (t.angle == null ? 135 : t.angle) + "deg," + t.from + "," + t.to + ")"
+      : shade + ",url('/admin/wallpaper/" + encodeURI(t.wallpaper) + "') center/cover no-repeat";
+  }
+  document.body.classList.toggle("themed", style !== "plain");
+}
+
+/* ---------------------------------------------- getting started ---- */
+// Shown on the Dashboard until hidden (remembered per browser).
+(function(){
+  var hidden = false;
+  try { hidden = localStorage.getItem("offGuideHidden") === "1"; } catch(e){}
+  $("guide").classList.toggle("hidden", hidden);
+  $("guide-hide").addEventListener("click", function(){
+    try { localStorage.setItem("offGuideHidden", "1"); } catch(e){}
+    $("guide").classList.add("hidden");
+  });
+  document.querySelectorAll("#guide [data-go]").forEach(function(b){
+    b.addEventListener("click", function(){ document.querySelector('.tab[data-tab="' + b.dataset.go + '"]').click(); window.scrollTo(0, 0); });
+  });
+})();
+
+/* ------------------------------------------------------- tooltips --- */
+(function(){
+  var tip = document.createElement("div");
+  tip.id = "tip"; tip.setAttribute("role", "tooltip");
+  document.body.appendChild(tip);
+  var current = null, timer = null;
+  function place(el){
+    var r = el.getBoundingClientRect(), tr = tip.getBoundingClientRect();
+    var top = r.bottom + 8;
+    if (top + tr.height > window.innerHeight - 8) top = r.top - tr.height - 8;
+    var left = Math.min(Math.max(8, r.left + r.width / 2 - tr.width / 2), window.innerWidth - tr.width - 8);
+    tip.style.top = top + "px"; tip.style.left = left + "px";
+  }
+  function showTip(el){
+    current = el;
+    tip.textContent = el.getAttribute("data-tip");
+    tip.classList.add("on");
+    place(el);
+    el.setAttribute("aria-describedby", "tip");
+  }
+  function hideTip(){
+    clearTimeout(timer);
+    if (current) current.removeAttribute("aria-describedby");
+    current = null; tip.classList.remove("on");
+  }
+  function find(node){ return node && node.closest ? node.closest("[data-tip]") : null; }
+  document.addEventListener("mouseover", function(e){
+    var el = find(e.target);
+    if (el === current) return;
+    hideTip();
+    if (el) timer = setTimeout(function(){ showTip(el); }, 350);
+  });
+  document.addEventListener("focusin", function(e){ var el = find(e.target); hideTip(); if (el) showTip(el); });
+  document.addEventListener("focusout", hideTip);
+  document.addEventListener("scroll", hideTip, true);
+  document.addEventListener("keydown", function(e){ if (e.key === "Escape") hideTip(); });
+  // the small "?" marks are announced with their text
+  new MutationObserver(function(){
+    document.querySelectorAll(".tip-i:not([aria-label])").forEach(function(i){ i.setAttribute("role", "img"); i.setAttribute("aria-label", "Help: " + i.getAttribute("data-tip")); });
+  }).observe(document.body, {childList: true, subtree: true});
+})();
+
+/* Theme editor, used twice: My theme (your own) and Configuration -> Themes
+   (everyone's default). Every change shows at once on the whole panel. */
+var THEME_PRESETS = [
+  {name: "Classic blue", primary: "#0B5273", text: "#1F2B33", style: "plain"},
+  {name: "Ocean", primary: "#0B5273", text: "#1F2B33", style: "gradient", from: "#0B5273", to: "#2BB3C0", angle: 135},
+  {name: "Sunset", primary: "#C2410C", text: "#2A1A12", style: "gradient", from: "#F97316", to: "#DB2777", angle: 135},
+  {name: "Aurora", primary: "#4338CA", text: "#1E1B3A", style: "gradient", from: "#4338CA", to: "#06B6D4", angle: 120},
+  {name: "Forest", primary: "#2F5D3A", text: "#1B2A1F", style: "gradient", from: "#14532D", to: "#65A30D", angle: 150},
+  {name: "Royal", primary: "#6D28D9", text: "#241B2A", style: "gradient", from: "#5B21B6", to: "#DB2777", angle: 135},
+  {name: "Midnight", primary: "#334155", text: "#1C2429", style: "gradient", from: "#0F172A", to: "#334155", angle: 160},
+  {name: "Desert", primary: "#B45309", text: "#2B2116", style: "gradient", from: "#D97706", to: "#FDE68A", angle: 135},
+  {name: "Graphite", primary: "#34434D", text: "#1C2429", style: "plain"},
+  {name: "Burgundy", primary: "#7A2230", text: "#2A1419", style: "plain"}
+];
+function makeThemeEditor(host, target){
+  var id = function(x){ return host.id + "-" + x; };
+  host.innerHTML =
+    '<label>Ready-made themes <span class="tip-i" tabindex="0" data-tip="Pick one to start from, then change anything below. Nothing is kept until you save.">?</span></label>' +
+    '<div class="te-presets" id="' + id("presets") + '"></div>' +
+    '<label>Background <span class="tip-i" tabindex="0" data-tip="Plain uses your main color for the header and tabs. Gradient and Wallpaper show behind the whole panel.">?</span></label>' +
+    '<span class="seg" role="group" aria-label="Background"><button type="button" data-style="plain">Plain</button><button type="button" data-style="gradient">Gradient</button><button type="button" data-style="wallpaper">Wallpaper</button></span>' +
+    '<div id="' + id("grad") + '" class="te-grid" style="margin-top:10px">' +
+      '<div><label for="' + id("from") + '">Gradient start</label><div class="te-color"><input type="color" id="' + id("from") + '"><span class="hint" style="margin:0">left / top</span></div></div>' +
+      '<div><label for="' + id("to") + '">Gradient end</label><div class="te-color"><input type="color" id="' + id("to") + '"><span class="hint" style="margin:0">right / bottom</span></div></div>' +
+      '<div><label for="' + id("angle") + '">Direction</label><input type="range" id="' + id("angle") + '" min="0" max="359" step="5"></div>' +
+    '</div>' +
+    '<div id="' + id("wall") + '" style="margin-top:10px">' +
+      '<div class="te-wall"><div class="te-thumb" id="' + id("thumb") + '"></div>' +
+      '<div><input type="file" id="' + id("file") + '" accept="image/png,image/jpeg,image/webp" class="hidden">' +
+      '<button type="button" class="btn-outline btn-sm" id="' + id("pick") + '">Choose a picture…</button>' +
+      '<p class="hint" style="margin:6px 0 0">PNG, JPG or WEBP, up to 2 MB. A wide photo works best.</p></div></div>' +
+    '</div>' +
+    '<div id="' + id("dimwrap") + '"><label for="' + id("dim") + '">Darken the background <span class="tip-i" tabindex="0" data-tip="More darkening makes the header and tabs easier to read over a bright picture or gradient.">?</span></label><input type="range" id="' + id("dim") + '" min="0" max="80" step="5"></div>' +
+    '<div class="te-grid" style="margin-top:6px">' +
+      '<div><label for="' + id("primary") + '">Main color <span class="tip-i" tabindex="0" data-tip="Buttons, links, the selected tab and, with a plain background, the header and tab bar.">?</span></label><div class="te-color"><input type="color" id="' + id("primary") + '-picker"><input type="text" id="' + id("primary") + '" maxlength="7"></div></div>' +
+      '<div><label for="' + id("text") + '">Text color <span class="tip-i" tabindex="0" data-tip="Body text in light mode. Dark mode keeps its own light text so it stays readable.">?</span></label><div class="te-color"><input type="color" id="' + id("text") + '-picker"><input type="text" id="' + id("text") + '" maxlength="7"></div></div>' +
+    '</div>';
+  var cur = {primary: "#0B5273", text: "#1F2B33", style: "plain", from: "#0B5273", to: "#2BB3C0", angle: 135, dim: 25};
+  var hex = /^#[0-9a-fA-F]{6}$/;
+  function sync(){
+    host.querySelectorAll(".seg button").forEach(function(b){ b.setAttribute("aria-pressed", String(b.dataset.style === cur.style)); });
+    $(id("grad")).classList.toggle("hidden", cur.style !== "gradient");
+    $(id("wall")).classList.toggle("hidden", cur.style !== "wallpaper");
+    $(id("dimwrap")).classList.toggle("hidden", cur.style === "plain");
+    $(id("from")).value = cur.from || "#0B5273"; $(id("to")).value = cur.to || "#2BB3C0";
+    $(id("angle")).value = cur.angle == null ? 135 : cur.angle;
+    $(id("dim")).value = cur.dim == null ? 25 : cur.dim;
+    $(id("primary")).value = cur.primary; $(id("primary") + "-picker").value = cur.primary;
+    $(id("text")).value = cur.text; $(id("text") + "-picker").value = cur.text;
+    $(id("thumb")).style.backgroundImage = cur.wallpaper ? "url('/admin/wallpaper/" + encodeURI(cur.wallpaper) + "')" : "";
+    host.querySelectorAll(".te-preset").forEach(function(b, i){
+      var p = THEME_PRESETS[i];
+      b.setAttribute("aria-pressed", String(p.primary === cur.primary && p.style === cur.style && (p.style === "plain" || (p.from === cur.from && p.to === cur.to))));
+    });
+  }
+  function changed(){ sync(); applyAdminTheme(cur); }
+  THEME_PRESETS.forEach(function(p){
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "te-preset";
+    var bg = p.style === "gradient" ? "linear-gradient(" + p.angle + "deg," + p.from + "," + p.to + ")" : p.primary;
+    b.innerHTML = '<span class="sw" style="background:' + bg + '"></span><span class="nm">' + escapeHtml(p.name) + '</span>';
+    b.addEventListener("click", function(){
+      var keep = cur.wallpaper;
+      cur = Object.assign({}, p, {dim: cur.dim == null ? 25 : cur.dim});
+      if (keep) cur.wallpaper = keep;
+      changed();
+    });
+    $(id("presets")).appendChild(b);
+  });
+  host.querySelectorAll(".seg button").forEach(function(b){
+    b.addEventListener("click", function(){
+      cur.style = b.dataset.style;
+      if (cur.style === "wallpaper" && !cur.wallpaper){ sync(); $(id("file")).click(); return; }
+      changed();
+    });
+  });
+  $(id("from")).addEventListener("input", function(){ cur.from = this.value; changed(); });
+  $(id("to")).addEventListener("input", function(){ cur.to = this.value; changed(); });
+  $(id("angle")).addEventListener("input", function(){ cur.angle = +this.value; changed(); });
+  $(id("dim")).addEventListener("input", function(){ cur.dim = +this.value; changed(); });
+  ["primary", "text"].forEach(function(k){
+    $(id(k) + "-picker").addEventListener("input", function(){ cur[k] = this.value; changed(); });
+    $(id(k)).addEventListener("input", function(){ if (hex.test(this.value.trim())){ cur[k] = this.value.trim(); changed(); } });
+  });
+  $(id("pick")).addEventListener("click", function(){ $(id("file")).click(); });
+  $(id("file")).addEventListener("change", function(){
+    var file = this.files && this.files[0];
+    this.value = "";
+    if (!file) return;
+    var ext = (file.name.split(".").pop() || "").toLowerCase();
+    if (["png", "jpg", "jpeg", "webp"].indexOf(ext) === -1){ flash(target === "app" ? "theme-msg" : "mt-msg", "The picture must be PNG, JPG or WEBP."); return; }
+    if (file.size > 2 * 1024 * 1024){ flash(target === "app" ? "theme-msg" : "mt-msg", "The picture must be under 2 MB."); return; }
+    var reader = new FileReader();
+    reader.onload = function(){
+      var b64 = String(reader.result).split(",")[1] || "";
+      api("POST", "/admin/wallpaper", {target: target, ext: ext, base64: b64}).then(function(res){
+        if (!res.body.ok){ flash(target === "app" ? "theme-msg" : "mt-msg", res.body.error || "Could not upload that picture."); return; }
+        cur.wallpaper = res.body.theme.wallpaper;
+        cur.style = "wallpaper";
+        changed();
+        if (editor.onUploaded) editor.onUploaded(res.body.theme);
+      });
+    };
+    reader.readAsDataURL(file);
+  });
+  var editor = {
+    get: function(){ return Object.assign({}, cur); },
+    set: function(t){ cur = Object.assign({style: "plain", from: "#0B5273", to: "#2BB3C0", angle: 135, dim: 25}, t || {}); sync(); },
+    onUploaded: null
+  };
+  sync();
+  return editor;
+}
+var appThemeEditor = makeThemeEditor($("app-theme-editor"), "app");
+var myThemeEditor = makeThemeEditor($("mt-editor"), "mine");
+
 function loadAdminTheme(){
-  var t = STATE.appTheme || STATE.adminTheme;
-  $("theme-primary").value = t.primary;
-  $("theme-primary-picker").value = t.primary;
-  $("theme-text").value = t.text;
-  $("theme-text-picker").value = t.text;
+  appThemeEditor.set(STATE.appTheme || STATE.adminTheme);
   clearFlash("theme-msg");
 }
-$("theme-primary-picker").addEventListener("input", function(){ $("theme-primary").value = this.value; });
-$("theme-primary").addEventListener("input", function(){ if (/^#[0-9a-fA-F]{6}$/.test(this.value)) $("theme-primary-picker").value = this.value; });
-$("theme-text-picker").addEventListener("input", function(){ $("theme-text").value = this.value; });
-$("theme-text").addEventListener("input", function(){ if (/^#[0-9a-fA-F]{6}$/.test(this.value)) $("theme-text-picker").value = this.value; });
+// Leaving Configuration -> Themes without saving drops the live preview.
+document.querySelectorAll('.subtab, .tab').forEach(function(b){
+  b.addEventListener("click", function(){ if (b.dataset.subtab !== "cfgtheme") applyAdminTheme(STATE.adminTheme); });
+});
+appThemeEditor.onUploaded = function(t){
+  STATE.appTheme = t;
+  if (!STATE.adminThemeIsOwn) STATE.adminTheme = t;
+  flash("theme-msg", "Picture uploaded and saved as everyone's wallpaper.", true);
+};
+myThemeEditor.onUploaded = function(t){
+  STATE.adminTheme = t; STATE.adminThemeIsOwn = true;
+  flash("mt-msg", "Picture uploaded and saved as your wallpaper.", true);
+};
 $("theme-save-btn").addEventListener("click", function(){
   clearFlash("theme-msg");
-  var payload = { admin_theme: { primary: $("theme-primary").value.trim(), text: $("theme-text").value.trim() } };
-  if (!/^#[0-9a-fA-F]{6}$/.test(payload.admin_theme.primary) || !/^#[0-9a-fA-F]{6}$/.test(payload.admin_theme.text)){
-    flash("theme-msg", "Colors must be a 6-digit hex code, like #FFEC01.");
-    return;
-  }
-  api("POST", "/admin/app-settings", payload).then(function(res){
+  var t = appThemeEditor.get();
+  api("POST", "/admin/app-settings", {admin_theme: t}).then(function(res){
     if (res.body.ok){
       flash("theme-msg", STATE.adminThemeIsOwn
-        ? "Saved. You're on your own colors (My colors), so your view is unchanged."
-        : "Saved.", true);
-      STATE.appTheme = payload.admin_theme;
-      if (!STATE.adminThemeIsOwn){
-        STATE.adminTheme = STATE.appTheme;
-        applyAdminTheme(STATE.adminTheme);
-      }
+        ? "Saved for everyone. You use your own theme (My theme), so your view is unchanged."
+        : "Saved for everyone.", true);
+      STATE.appTheme = t;
+      if (!STATE.adminThemeIsOwn) STATE.adminTheme = t;
+      applyAdminTheme(STATE.adminTheme);
       return;
     }
-    flash("theme-msg", res.body.error || "Could not save these colors.");
+    flash("theme-msg", res.body.error || "Could not save this theme.");
   });
 });
 
-/* ------------------------------------------------ my own colors ------ */
-// Each account can set the colors it sees. Saved against the account, so it
-// follows the person to any browser, and nobody else's panel changes.
-var MY_THEME_PRESETS = [
-  ["House blue", "#0B5273", "#1F2B33"],
-  ["Deep teal", "#0F6B6B", "#16262B"],
-  ["Plum", "#5B2A6B", "#241B2A"],
-  ["Graphite", "#34434D", "#1C2429"],
-  ["Forest", "#2F5D3A", "#1B2A1F"],
-  ["Burgundy", "#7A2230", "#2A1419"]
-];
-function renderMyThemePresets(){
-  var box = $("mt-presets");
-  box.innerHTML = "";
-  MY_THEME_PRESETS.forEach(function(p){
-    var b = document.createElement("button");
-    b.type = "button"; b.className = "btn-outline btn-sm"; b.textContent = p[0];
-    b.style.borderLeft = "6px solid " + p[1];
-    b.addEventListener("click", function(){
-      setMyThemeInputs({primary: p[1], text: p[2]});
-      applyAdminTheme({primary: p[1], text: p[2]});     // live preview
-    });
-    box.appendChild(b);
-  });
-}
-function setMyThemeInputs(t){
-  $("mt-primary").value = t.primary; $("mt-primary-picker").value = t.primary;
-  $("mt-text").value = t.text; $("mt-text-picker").value = t.text;
-}
+/* ------------------------------------------------ my own theme ------- */
+// Saved against the account, so it follows the person to any browser, and
+// nobody else's panel changes.
 function openMyThemeView(){
-  setMyThemeInputs(STATE.adminTheme || {primary: "#0B5273", text: "#1F2B33"});
-  renderMyThemePresets();
+  myThemeEditor.set(STATE.adminTheme || {primary: "#0B5273", text: "#1F2B33"});
   clearFlash("mt-msg");
   show("mytheme-view");
 }
@@ -4183,34 +4626,17 @@ function closeMyThemeView(){
 }
 $("mytheme-btn").addEventListener("click", openMyThemeView);
 $("mt-cancel").addEventListener("click", closeMyThemeView);
-$("mt-primary-picker").addEventListener("input", function(){ $("mt-primary").value = this.value; previewMyTheme(); });
-$("mt-text-picker").addEventListener("input", function(){ $("mt-text").value = this.value; previewMyTheme(); });
-$("mt-primary").addEventListener("input", function(){
-  if (/^#[0-9a-fA-F]{6}$/.test(this.value)){ $("mt-primary-picker").value = this.value; previewMyTheme(); }
-});
-$("mt-text").addEventListener("input", function(){
-  if (/^#[0-9a-fA-F]{6}$/.test(this.value)){ $("mt-text-picker").value = this.value; previewMyTheme(); }
-});
-function previewMyTheme(){
-  var t = {primary: $("mt-primary").value.trim(), text: $("mt-text").value.trim()};
-  if (/^#[0-9a-fA-F]{6}$/.test(t.primary) && /^#[0-9a-fA-F]{6}$/.test(t.text)) applyAdminTheme(t);
-}
 $("mt-save").addEventListener("click", function(){
   clearFlash("mt-msg");
-  var t = {primary: $("mt-primary").value.trim(), text: $("mt-text").value.trim()};
-  if (!/^#[0-9a-fA-F]{6}$/.test(t.primary) || !/^#[0-9a-fA-F]{6}$/.test(t.text)){
-    flash("mt-msg", "Colors must be a 6-digit hex code, like #0B5273.");
-    return;
-  }
-  api("POST", "/admin/account/theme", t).then(function(res){
+  api("POST", "/admin/account/theme", myThemeEditor.get()).then(function(res){
     if (res.body.ok){
       STATE.adminTheme = res.body.theme;
       STATE.adminThemeIsOwn = true;
       applyAdminTheme(STATE.adminTheme);
-      flash("mt-msg", "Saved — these are your colors now.", true);
+      flash("mt-msg", "Saved. This is your theme now.", true);
       return;
     }
-    flash("mt-msg", res.body.error || "Could not save these colors.");
+    flash("mt-msg", res.body.error || "Could not save this theme.");
   });
 });
 $("mt-reset").addEventListener("click", function(){
@@ -4219,12 +4645,12 @@ $("mt-reset").addEventListener("click", function(){
     if (res.body.ok){
       STATE.adminTheme = res.body.theme;
       STATE.adminThemeIsOwn = false;
-      setMyThemeInputs(STATE.adminTheme);
+      myThemeEditor.set(STATE.adminTheme);
       applyAdminTheme(STATE.adminTheme);
-      flash("mt-msg", "Back to the app's colors.", true);
+      flash("mt-msg", "Back to the app's theme.", true);
       return;
     }
-    flash("mt-msg", res.body.error || "Could not reset these colors.");
+    flash("mt-msg", res.body.error || "Could not reset the theme.");
   });
 });
 
@@ -4233,7 +4659,7 @@ var PERMISSION_LABELS = {
   manage_users: "Manage users & roles",
   manage_forms: "Create/delete forms, edit any form's name/port/languages",
   manage_field_keys: "Manage the Field keys catalog",
-  manage_app_settings: "Language Labels, Appearance, Time settings",
+  manage_app_settings: "Language Labels, Themes, Time settings",
   manage_global_alerts: "SMTP/Telegram alert settings",
   view_dashboard: "View dashboard (assigned forms)",
   view_submissions: "View submissions (assigned forms)",
